@@ -1,0 +1,11 @@
+bdk-wasm/
+data/*
+node_modules/
+package-lock.json
+package-lock.docs.json
+.claude
+CLAUDE.md
+.env
+dist/
+scripts/
+.rgb-wallet/

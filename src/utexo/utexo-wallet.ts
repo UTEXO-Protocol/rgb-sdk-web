@@ -42,7 +42,9 @@ export class UTEXOWallet extends UTEXOWalletCore {
    */
   override async createBackup(params: {
     password: string;
-  }): Promise<WalletBackupResponse & { layer1Bytes: Uint8Array; utexoBytes: Uint8Array }> {
+  }): Promise<
+    WalletBackupResponse & { layer1Bytes: Uint8Array; utexoBytes: Uint8Array }
+  > {
     this.ensureInitialized();
     const { password } = params;
     if (!password) {
@@ -50,15 +52,23 @@ export class UTEXOWallet extends UTEXOWalletCore {
     }
 
     await this.layer1Wallet!.createBackup({ backupPath: '', password });
-    const layer1Bytes = (this.layer1Wallet as WalletManager).getLastBackupBytes();
+    const layer1Bytes = (
+      this.layer1Wallet as WalletManager
+    ).getLastBackupBytes();
     if (!layer1Bytes) {
-      throw new ValidationError('layer1 backup failed to produce bytes', 'createBackup');
+      throw new ValidationError(
+        'layer1 backup failed to produce bytes',
+        'createBackup'
+      );
     }
 
     await this.utexoWallet!.createBackup({ backupPath: '', password });
     const utexoBytes = (this.utexoWallet as WalletManager).getLastBackupBytes();
     if (!utexoBytes) {
-      throw new ValidationError('utexo backup failed to produce bytes', 'createBackup');
+      throw new ValidationError(
+        'utexo backup failed to produce bytes',
+        'createBackup'
+      );
     }
 
     return {

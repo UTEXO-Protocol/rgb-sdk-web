@@ -3,7 +3,10 @@
  * restoreUtxoWalletFromBackup takes Uint8Array bytes, not file paths.
  * Validation errors are thrown before any WASM call, so no mock needed here.
  */
-import { getBackupStoreId, restoreUtxoWalletFromBackup } from '../src/utexo/restore';
+import {
+  getBackupStoreId,
+  restoreUtxoWalletFromBackup,
+} from '../src/utexo/restore';
 import { ValidationError } from '@utexo/rgb-sdk-core';
 
 describe('restore utilities', () => {

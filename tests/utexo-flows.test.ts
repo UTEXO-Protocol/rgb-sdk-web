@@ -104,5 +104,4 @@ describe('UTEXOWallet API', () => {
     hasMethod('signMessage');
     hasMethod('verifyMessage');
   });
-
 });

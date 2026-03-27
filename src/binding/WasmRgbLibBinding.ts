@@ -5,7 +5,12 @@
  * wallet-model.ts types and the WASM binding's JS interface.
  */
 
-import { WasmWallet, WasmInvoice, generate_keys, restore_keys } from '@utexo/rgb-lib-wasm';
+import {
+  WasmWallet,
+  WasmInvoice,
+  generate_keys,
+  restore_keys,
+} from '@utexo/rgb-lib-wasm';
 import { initWasm } from '../wasm/init';
 import {
   DEFAULT_TRANSPORT_ENDPOINTS,
@@ -71,7 +76,9 @@ function batchRecipientToWasm(r: BatchRecipient): WasmRecipient {
       ? null
       : {
           amount_sat:
-            typeof wd.amountSat === 'string' ? Number(wd.amountSat) : Number(wd.amountSat),
+            typeof wd.amountSat === 'string'
+              ? Number(wd.amountSat)
+              : Number(wd.amountSat),
           blinding: wd.blinding ?? null,
         };
 
@@ -96,7 +103,9 @@ function normalizeReceiveData(raw: unknown): InvoiceReceiveData {
   return {
     invoice: String(r.invoice ?? ''),
     recipientId: String(r.recipient_id ?? r.recipientId ?? ''),
-    expirationTimestamp: (r.expiration_timestamp ?? r.expirationTimestamp ?? null) as number | null,
+    expirationTimestamp: (r.expiration_timestamp ??
+      r.expirationTimestamp ??
+      null) as number | null,
     batchTransferIdx: Number(r.batch_transfer_idx ?? r.batchTransferIdx ?? 0),
   };
 }
@@ -106,8 +115,10 @@ function parseWasmAssignment(raw: any): Assignment {
     return { type: raw as AssignmentType };
   }
   if (typeof raw === 'object' && raw !== null) {
-    if ('Fungible' in raw) return { type: 'Fungible', amount: Number(raw.Fungible) };
-    if ('InflationRight' in raw) return { type: 'InflationRight', amount: Number(raw.InflationRight) };
+    if ('Fungible' in raw)
+      return { type: 'Fungible', amount: Number(raw.Fungible) };
+    if ('InflationRight' in raw)
+      return { type: 'InflationRight', amount: Number(raw.InflationRight) };
     if ('NonFungible' in raw) return { type: 'NonFungible' };
     if ('ReplaceRight' in raw) return { type: 'ReplaceRight' };
   }
@@ -164,12 +175,16 @@ function normalizeAssetIfa(a: Record<string, unknown>): AssetIfa {
     precision: Number(a.precision ?? 0),
     initialSupply: Number(a.initial_supply ?? a.initialSupply ?? 0),
     maxSupply: Number(a.max_supply ?? a.maxSupply ?? 0),
-    knownCirculatingSupply: Number(a.known_circulating_supply ?? a.knownCirculatingSupply ?? 0),
+    knownCirculatingSupply: Number(
+      a.known_circulating_supply ?? a.knownCirculatingSupply ?? 0
+    ),
     timestamp: Number(a.timestamp ?? 0),
     addedAt: Number(a.added_at ?? a.addedAt ?? 0),
     balance: normalizeBalanceFields(b),
     media: normalizeAssetMedia(a.media) ?? undefined,
-    rejectListUrl: (a.reject_list_url ?? a.rejectListUrl ?? undefined) as string | undefined,
+    rejectListUrl: (a.reject_list_url ?? a.rejectListUrl ?? undefined) as
+      | string
+      | undefined,
   };
 }
 
@@ -186,9 +201,13 @@ function normalizeListAssets(raw: unknown): ListAssets {
 }
 
 function normalizeTransaction(raw: Record<string, unknown>): Transaction {
-  const ct = (raw.confirmation_time ?? raw.confirmationTime) as Record<string, unknown> | null | undefined;
+  const ct = (raw.confirmation_time ?? raw.confirmationTime) as
+    | Record<string, unknown>
+    | null
+    | undefined;
   return {
-    transactionType: (raw.transaction_type ?? raw.transactionType) as Transaction['transactionType'],
+    transactionType: (raw.transaction_type ??
+      raw.transactionType) as Transaction['transactionType'],
     txid: String(raw.txid ?? ''),
     received: Number(raw.received ?? 0),
     sent: Number(raw.sent ?? 0),
@@ -203,30 +222,46 @@ function normalizeTransaction(raw: Record<string, unknown>): Transaction {
 }
 
 function normalizeTransfer(raw: Record<string, unknown>): Transfer {
-  const eps = (raw.transport_endpoints ?? raw.transportEndpoints ?? []) as Record<string, unknown>[];
+  const eps = (raw.transport_endpoints ??
+    raw.transportEndpoints ??
+    []) as Record<string, unknown>[];
   const req = raw.requested_assignment ?? raw.requestedAssignment;
 
   return {
     idx: Number(raw.idx ?? 0),
-    batchTransferIdx: Number(raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0),
+    batchTransferIdx: Number(
+      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
+    ),
     createdAt: Number(raw.created_at ?? raw.createdAt ?? 0),
     updatedAt: Number(raw.updated_at ?? raw.updatedAt ?? 0),
     status: raw.status as Transfer['status'],
     requestedAssignment: req != null ? parseWasmAssignment(req) : undefined,
-    assignments: ((raw.assignments ?? []) as unknown[]).map((a) => parseWasmAssignment(a)),
+    assignments: ((raw.assignments ?? []) as unknown[]).map((a) =>
+      parseWasmAssignment(a)
+    ),
     kind: raw.kind as Transfer['kind'],
     txid: (raw.txid ?? undefined) as string | undefined,
-    recipientId: (raw.recipient_id ?? raw.recipientId ?? undefined) as string | undefined,
-    receiveUtxo: (raw.receive_utxo ?? raw.receiveUtxo ?? undefined) as Transfer['receiveUtxo'],
-    changeUtxo: (raw.change_utxo ?? raw.changeUtxo ?? undefined) as Transfer['changeUtxo'],
+    recipientId: (raw.recipient_id ?? raw.recipientId ?? undefined) as
+      | string
+      | undefined,
+    receiveUtxo: (raw.receive_utxo ??
+      raw.receiveUtxo ??
+      undefined) as Transfer['receiveUtxo'],
+    changeUtxo: (raw.change_utxo ??
+      raw.changeUtxo ??
+      undefined) as Transfer['changeUtxo'],
     expiration: (raw.expiration ?? undefined) as number | undefined,
     transportEndpoints: eps.map((te) => ({
       endpoint: String(te.endpoint ?? ''),
       transportType: String(te.transport_type ?? te.transportType ?? ''),
       used: Boolean(te.used),
     })),
-    invoiceString: (raw.invoice_string ?? raw.invoiceString ?? undefined) as string | undefined,
-    consignmentPath: (raw.consignment_path ?? raw.consignmentPath ?? undefined) as string | undefined,
+    invoiceString: (raw.invoice_string ?? raw.invoiceString ?? undefined) as
+      | string
+      | undefined,
+    consignmentPath: (raw.consignment_path ??
+      raw.consignmentPath ??
+      undefined) as string | undefined,
   };
 }
 
@@ -370,7 +405,10 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   private async ensureOnline(): Promise<WasmOnline> {
     if (this.online) return this.online;
     try {
-      this.online = (await this.wallet.go_online(false, this.indexerUrl)) as WasmOnline;
+      this.online = (await this.wallet.go_online(
+        false,
+        this.indexerUrl
+      )) as WasmOnline;
     } catch (error) {
       throw new WalletError(
         'Failed to establish online connection',
@@ -427,7 +465,9 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       return {
         utxo: {
           outpoint: unspent.utxo.outpoint,
-          btcAmount: Number(unspent.utxo.btc_amount ?? unspent.utxo.btcAmount ?? 0),
+          btcAmount: Number(
+            unspent.utxo.btc_amount ?? unspent.utxo.btcAmount ?? 0
+          ),
           colorable: Boolean(unspent.utxo.colorable),
           exists: unspent.utxo?.exists ?? true,
         },
@@ -447,14 +487,18 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
             settled: allocation.settled,
           };
         }),
-        pendingBlinded: Number(unspent.pending_blinded ?? unspent.pendingBlinded ?? 0),
+        pendingBlinded: Number(
+          unspent.pending_blinded ?? unspent.pendingBlinded ?? 0
+        ),
       };
     });
   }
 
   // ─── UTXO creation ──────────────────────────────────────────────────────────
 
-  async createUtxosBegin(params: CreateUtxosBeginRequestModel): Promise<string> {
+  async createUtxosBegin(
+    params: CreateUtxosBeginRequestModel
+  ): Promise<string> {
     const online = await this.ensureOnline();
     return this.wallet.create_utxos_begin(
       online,
@@ -479,10 +523,13 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async sendBegin(params: SendAssetBeginRequestModel): Promise<string> {
     const wasmInvoice = new WasmInvoice(params.invoice);
-    const raw = wasmInvoice.invoiceData() as Partial<WasmInvoiceDataJson> & Record<string, unknown>;
+    const raw = wasmInvoice.invoiceData() as Partial<WasmInvoiceDataJson> &
+      Record<string, unknown>;
     wasmInvoice.free();
 
-    const assetId = (raw.asset_id ?? raw.assetId ?? params.assetId) as string | undefined;
+    const assetId = (raw.asset_id ?? raw.assetId ?? params.assetId) as
+      | string
+      | undefined;
     if (!assetId) {
       throw new ValidationError(
         'assetId is required — either encode it in the invoice or pass it as params.assetId',
@@ -492,16 +539,21 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
     const rawAssignment = raw.assignment;
     let amount: number;
-    if (typeof rawAssignment === 'object' && rawAssignment !== null && 'Fungible' in rawAssignment) {
-      const invoiceAmount = Number((rawAssignment as { Fungible: number }).Fungible);
+    if (
+      typeof rawAssignment === 'object' &&
+      rawAssignment !== null &&
+      'Fungible' in rawAssignment
+    ) {
+      const invoiceAmount = Number(
+        (rawAssignment as { Fungible: number }).Fungible
+      );
       amount = invoiceAmount > 0 ? invoiceAmount : (params.amount ?? 0);
     } else {
       amount = params.amount ?? 0;
     }
 
-    const transportEndpoints = (raw.transport_endpoints ?? raw.transportEndpoints) as
-      | string[]
-      | undefined;
+    const transportEndpoints = (raw.transport_endpoints ??
+      raw.transportEndpoints) as string[] | undefined;
 
     const witnessData: WasmRecipient['witness_data'] =
       params.witnessData != null
@@ -520,15 +572,15 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
     const online = await this.ensureOnline();
     console.log('recipient', recipient);
-    const r= this.wallet.send_begin(
+    const r = this.wallet.send_begin(
       online,
       { [assetId]: [recipient] } as WasmRecipientMap,
       params.donation ?? true,
       BigInt(Math.round(params.feeRate ?? 1)),
       params.minConfirmations ?? 1
     );
-console.log('r', r);
-    return r ;
+    console.log('r', r);
+    return r;
   }
 
   async sendBeginBatch(params: {
@@ -557,7 +609,11 @@ console.log('r', r);
 
   async sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
     const online = await this.ensureOnline();
-    const raw = await this.wallet.send_end(online, params.signedPsbt, params.skipSync ?? false);
+    const raw = await this.wallet.send_end(
+      online,
+      params.signedPsbt,
+      params.skipSync ?? false
+    );
     return normalizeBatchTxResult(raw);
   }
 
@@ -586,9 +642,8 @@ console.log('r', r);
   // ─── Receive ────────────────────────────────────────────────────────────────
 
   async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    const assignment = params.amount != null
-      ? { Fungible: params.amount }
-      : 'Any';
+    const assignment =
+      params.amount != null ? { Fungible: params.amount } : 'Any';
 
     const raw: unknown = this.wallet.blind_receive(
       params.assetId ?? null,
@@ -601,9 +656,8 @@ console.log('r', r);
   }
 
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    const assignment = params.amount != null
-      ? { Fungible: params.amount }
-      : 'Any';
+    const assignment =
+      params.amount != null ? { Fungible: params.amount } : 'Any';
 
     const raw: unknown = this.wallet.witness_receive(
       params.assetId ?? null,
@@ -617,18 +671,27 @@ console.log('r', r);
 
   async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
     const wasmInvoice = new WasmInvoice(params.invoice);
-    const raw = wasmInvoice.invoiceData() as Partial<WasmInvoiceDataJson> & Record<string, unknown>;
+    const raw = wasmInvoice.invoiceData() as Partial<WasmInvoiceDataJson> &
+      Record<string, unknown>;
     wasmInvoice.free();
     return {
       invoice: params.invoice,
       recipientId: String(raw.recipient_id ?? raw.recipientId ?? ''),
-      assetSchema: (raw.asset_schema ?? raw.assetSchema) as AssetSchema | undefined,
+      assetSchema: (raw.asset_schema ?? raw.assetSchema) as
+        | AssetSchema
+        | undefined,
       assetId: (raw.asset_id ?? raw.assetId) as string | undefined,
       network: raw.network as BitcoinNetwork,
       assignment: parseWasmAssignment(raw.assignment),
-      assignmentName: (raw.assignment_name ?? raw.assignmentName) as string | undefined,
-      expirationTimestamp: (raw.expiration_timestamp ?? raw.expirationTimestamp ?? null) as number | null,
-      transportEndpoints: (raw.transport_endpoints ?? raw.transportEndpoints ?? []) as string[],
+      assignmentName: (raw.assignment_name ?? raw.assignmentName) as
+        | string
+        | undefined,
+      expirationTimestamp: (raw.expiration_timestamp ??
+        raw.expirationTimestamp ??
+        null) as number | null,
+      transportEndpoints: (raw.transport_endpoints ??
+        raw.transportEndpoints ??
+        []) as string[],
     };
   }
 
@@ -640,16 +703,19 @@ console.log('r', r);
   }
 
   async getAssetBalance(assetId: string): Promise<AssetBalance> {
-    const balance: Record<string, unknown> = this.wallet.get_asset_balance(assetId) as Record<
-      string,
-      unknown
-    >;
+    const balance: Record<string, unknown> = this.wallet.get_asset_balance(
+      assetId
+    ) as Record<string, unknown>;
     return {
       settled: Number(balance.settled ?? 0),
       future: Number(balance.future ?? 0),
       spendable: Number(balance.spendable ?? 0),
-      offchainOutbound: Number(balance.offchain_outbound ?? balance.offchainOutbound ?? 0),
-      offchainInbound: Number(balance.offchain_inbound ?? balance.offchainInbound ?? 0),
+      offchainOutbound: Number(
+        balance.offchain_outbound ?? balance.offchainOutbound ?? 0
+      ),
+      offchainInbound: Number(
+        balance.offchain_inbound ?? balance.offchainInbound ?? 0
+      ),
     };
   }
 
@@ -703,7 +769,10 @@ console.log('r', r);
   }
 
   async listTransfers(assetId?: string): Promise<Transfer[]> {
-    const raw = this.wallet.list_transfers(assetId ?? null) as Record<string, unknown>[];
+    const raw = this.wallet.list_transfers(assetId ?? null) as Record<
+      string,
+      unknown
+    >[];
     return raw.map((t) => normalizeTransfer(t));
   }
 
@@ -731,8 +800,8 @@ console.log('r', r);
 
   async refreshWallet(): Promise<void> {
     const online = await this.ensureOnline();
-   const r = await this.wallet.refresh(online, null, [], false);
-   console.log('r', r);
+    const r = await this.wallet.refresh(online, null, [], false);
+    console.log('r', r);
   }
 
   async syncWallet(): Promise<void> {
@@ -749,7 +818,9 @@ console.log('r', r);
     try {
       return await this.wallet.get_fee_estimation(online, params.blocks);
     } catch {
-      logger.warn('WasmRgbLibBinding: fee estimation unavailable, using default 2');
+      logger.warn(
+        'WasmRgbLibBinding: fee estimation unavailable, using default 2'
+      );
       return 2 as GetFeeEstimationResponse;
     }
   }

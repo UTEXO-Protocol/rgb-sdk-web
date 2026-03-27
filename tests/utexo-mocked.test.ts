@@ -33,13 +33,23 @@ describe('restoreUtxoWalletFromBackup with mocked WasmRgbLibBinding', () => {
   });
 
   it('should call restoreFromBackupBytes for both layer1 and utexo wallets', async () => {
-    await restoreUtxoWalletFromBackup({ layer1Bytes, utexoBytes, password, mnemonic });
+    await restoreUtxoWalletFromBackup({
+      layer1Bytes,
+      utexoBytes,
+      password,
+      mnemonic,
+    });
 
     expect(mockBinding.restoreFromBackupBytes).toHaveBeenCalledTimes(2);
   });
 
   it('should pass correct bytes and password to each restore call', async () => {
-    await restoreUtxoWalletFromBackup({ layer1Bytes, utexoBytes, password, mnemonic });
+    await restoreUtxoWalletFromBackup({
+      layer1Bytes,
+      utexoBytes,
+      password,
+      mnemonic,
+    });
 
     const calls = (mockBinding.restoreFromBackupBytes as jest.Mock).mock.calls;
     const bytesArgs = calls.map((c: any[]) => c[0]);
@@ -51,16 +61,27 @@ describe('restoreUtxoWalletFromBackup with mocked WasmRgbLibBinding', () => {
   });
 
   it('should call dropWallet for both bindings after restore', async () => {
-    await restoreUtxoWalletFromBackup({ layer1Bytes, utexoBytes, password, mnemonic });
+    await restoreUtxoWalletFromBackup({
+      layer1Bytes,
+      utexoBytes,
+      password,
+      mnemonic,
+    });
 
     expect(mockBinding.dropWallet).toHaveBeenCalledTimes(2);
   });
 
   it('should use testnet networkPreset by default', async () => {
-    const { WasmRgbLibBinding } = await import('../src/binding/WasmRgbLibBinding');
+    const { WasmRgbLibBinding } =
+      await import('../src/binding/WasmRgbLibBinding');
     const createSpy = WasmRgbLibBinding.create as jest.Mock;
 
-    await restoreUtxoWalletFromBackup({ layer1Bytes, utexoBytes, password, mnemonic });
+    await restoreUtxoWalletFromBackup({
+      layer1Bytes,
+      utexoBytes,
+      password,
+      mnemonic,
+    });
 
     expect(createSpy).toHaveBeenCalledTimes(2);
     const networks = createSpy.mock.calls.map((c: any[]) => c[0].network);

@@ -370,7 +370,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     const network = String(params.network ?? 'regtest');
 
     const walletData: WasmWalletData = {
-      data_dir: ':memory:',
+      data_dir: `:memory:/${network}`,
       bitcoin_network: mapNetwork(network),
       database_type: 'Sqlite',
       max_allocations_per_utxo: 5,
@@ -378,7 +378,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       account_xpub_colored: params.xpubCol,
       mnemonic: params.mnemonic,
       master_fingerprint: params.masterFingerprint,
-      vanilla_keychain: null,
+      vanilla_keychain: 0,
       supported_schemas: ['Nia', 'Ifa'],
     };
 

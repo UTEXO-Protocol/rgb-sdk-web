@@ -18,13 +18,7 @@ import {
   detectPsbtType,
   deriveDescriptors,
 } from '@utexo/rgb-sdk-core';
-import type {
-  Network,
-  PsbtType,
-  NetworkVersions,
-  Descriptors,
-  BIP32Interface,
-} from '@utexo/rgb-sdk-core';
+import type { Network, PsbtType, BIP32Interface } from '@utexo/rgb-sdk-core';
 import type { BDKWallet, BDKPsbt, BDKNetwork, BDKSignOptions } from './types';
 import type { EstimateFeeResult } from '@utexo/rgb-sdk-core';
 

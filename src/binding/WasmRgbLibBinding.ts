@@ -571,16 +571,14 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     };
 
     const online = await this.ensureOnline();
-    console.log('recipient', recipient);
-    const r = this.wallet.send_begin(
+
+    return this.wallet.send_begin(
       online,
       { [assetId]: [recipient] } as WasmRecipientMap,
       params.donation ?? true,
       BigInt(Math.round(params.feeRate ?? 1)),
       params.minConfirmations ?? 1
     );
-    console.log('r', r);
-    return r;
   }
 
   async sendBeginBatch(params: {
@@ -800,8 +798,8 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async refreshWallet(): Promise<void> {
     const online = await this.ensureOnline();
-    const r = await this.wallet.refresh(online, null, [], false);
-    console.log('r', r);
+    const refreshed = await this.wallet.refresh(online, null, [], false);
+    return refreshed;
   }
 
   async syncWallet(): Promise<void> {

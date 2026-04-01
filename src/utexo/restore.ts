@@ -49,7 +49,11 @@ export async function restoreUtxoWalletFromVss(params: {
   const serverUrl = vssServerUrl ?? DEFAULT_VSS_SERVER_URL;
   const config =
     providedConfig ??
-    (await buildVssConfigFromMnemonic(mnemonic.trim(), serverUrl, networkPreset));
+    (await buildVssConfigFromMnemonic(
+      mnemonic.trim(),
+      serverUrl,
+      networkPreset
+    ));
 
   const presetConfig = getUtxoNetworkConfig(networkPreset);
 
@@ -90,8 +94,13 @@ export async function restoreUtxoWalletFromBackup(params: {
   mnemonic: string;
   networkPreset?: UtxoNetworkPreset;
 }): Promise<void> {
-  const { layer1Bytes, utexoBytes, password, mnemonic, networkPreset = 'testnet' } =
-    params;
+  const {
+    layer1Bytes,
+    utexoBytes,
+    password,
+    mnemonic,
+    networkPreset = 'testnet',
+  } = params;
 
   if (!layer1Bytes || !utexoBytes) {
     throw new ValidationError(

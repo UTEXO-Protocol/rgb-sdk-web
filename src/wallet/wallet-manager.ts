@@ -1,7 +1,7 @@
 import { WasmRgbLibBinding } from '../binding/WasmRgbLibBinding';
 import { WasmSigner } from '../signer/WasmSigner';
 import * as IWalletModel from '@utexo/rgb-sdk-core';
-import { ValidationError, WalletError } from '@utexo/rgb-sdk-core';
+import { ValidationError } from '@utexo/rgb-sdk-core';
 import { BaseWalletManager } from '@utexo/rgb-sdk-core';
 import type { WalletInitParams } from '@utexo/rgb-sdk-core';
 import { generateKeys } from '@utexo/rgb-sdk-core';

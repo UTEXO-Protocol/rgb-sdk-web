@@ -45,8 +45,8 @@
     "@bitcoindevkit/bdk-wallet-web": "^0.2.0",
     "@noble/hashes": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
-    "@utexo/rgb-lib-wasm": "1.0.9-test",
-    "@utexo/rgb-sdk-core": "^1.0.7-test",
+    "@utexo/rgb-lib-wasm": "1.0.0-beta.1",
+    "@utexo/rgb-sdk-core": "1.0.0-beta.1",
     "bitcoinjs-lib": "^6.1.7"
   },
   "keywords": [

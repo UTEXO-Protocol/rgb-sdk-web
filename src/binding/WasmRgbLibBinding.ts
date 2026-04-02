@@ -369,7 +369,6 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     await initWasm();
 
     const network = String(params.network ?? 'regtest');
-    console.log(params.network, mapNetwork(network));
     const walletData: WasmWalletData = {
       data_dir: `:memory:/${network}`,
       bitcoin_network: mapNetwork(network),
@@ -657,7 +656,6 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     const assignment =
       params.amount != null ? { Fungible: params.amount } : 'Any';
-    console.log(params);
     const raw: unknown = this.wallet.witness_receive(
       params.assetId || null,
       assignment,

@@ -9,9 +9,7 @@ Browser-first TypeScript SDK for the RGB protocol. All operations run locally vi
 
 Wallet state is persisted to **IndexedDB** automatically and survives page refresh. There is no `dataDir` option — the browser manages storage.
 
-For full details on security implications and recommended actions, please read **[SECURITY.md](./SECURITY.md)**.
-
-> **RGB Protocol**: This SDK uses the [`rgb-lib-wasm`](https://github.com/UTEXO-Protocol/rgb-lib-wasm) wasm binding library to interact with the RGB protocol. All operations are performed locally, providing full control over wallet data and operations.
+**RGB Protocol**: This SDK uses the [`rgb-lib-wasm`](https://github.com/UTEXO-Protocol/rgb-lib-wasm) wasm binding library to interact with the RGB protocol. All operations are performed locally, providing full control over wallet data and operations.
 
 ---
 

@@ -306,6 +306,7 @@ function mapNetwork(network: string): string {
     testnet: 'Testnet',
     testnet4: 'Testnet4',
     signet: 'Signet',
+    utexo: 'Signet',
     regtest: 'Regtest',
   };
   return map[String(network).toLowerCase()] ?? 'Regtest';
@@ -337,12 +338,12 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     this.transportEndpoint =
       params.transportEndpoint ||
       DEFAULT_TRANSPORT_ENDPOINTS[this.network] ||
-      DEFAULT_TRANSPORT_ENDPOINTS.signet;
+      DEFAULT_TRANSPORT_ENDPOINTS.utexo;
 
     this.indexerUrl =
       params.indexerUrl ||
       DEFAULT_INDEXER_URLS[this.network] ||
-      DEFAULT_INDEXER_URLS.signet;
+      DEFAULT_INDEXER_URLS.utexo;
   }
 
   /**
@@ -368,7 +369,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     await initWasm();
 
     const network = String(params.network ?? 'regtest');
-
+    console.log(params.network, mapNetwork(network));
     const walletData: WasmWalletData = {
       data_dir: `:memory:/${network}`,
       bitcoin_network: mapNetwork(network),
@@ -656,9 +657,9 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     const assignment =
       params.amount != null ? { Fungible: params.amount } : 'Any';
-
+    console.log(params);
     const raw: unknown = this.wallet.witness_receive(
-      params.assetId ?? null,
+      params.assetId || null,
       assignment,
       params.durationSeconds ?? null,
       [this.transportEndpoint],

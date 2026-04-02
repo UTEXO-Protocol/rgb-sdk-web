@@ -11,7 +11,6 @@ const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
 const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
 await wallet.initialize();
-await wallet.goOnline('');
 
 const count = await wallet.createUtxos({ num: 5, size: 1000 });
 await wallet.syncWallet();

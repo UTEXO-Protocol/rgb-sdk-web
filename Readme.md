@@ -4,6 +4,11 @@
 
 Browser-first TypeScript SDK for the RGB protocol (colored coins on Bitcoin). All operations run locally via WebAssembly — no server, no Node.js, no native binaries required.
 
+
+`UTEXOWallet` use `WasmRgbLibBinding` under the hood, which wraps `@utexo/rgb-lib-wasm`. WASM initializes automatically inside `WalletManager.create()` — no manual `initWasm()` call needed.
+
+Wallet state is persisted to **IndexedDB** automatically and survives page refresh. There is no `dataDir` option — the browser manages storage.
+
 ---
 
 ## Requirements
@@ -19,60 +24,11 @@ Browser-first TypeScript SDK for the RGB protocol (colored coins on Bitcoin). Al
 ```bash
 npm install @utexo/rgb-sdk-web
 ```
-
 ---
 
-## Architecture
+## Basic Usage
 
-Two public APIs, one for each level of abstraction:
-
-| Class | Use when |
-|-------|----------|
-| `WalletManager` | Single wallet — direct RGB operations |
-| `UTEXOWallet` | Dual-wallet (layer1 BTC + utexo RGB) — UTEXO bridge flows |
-
-Both use `WasmRgbLibBinding` under the hood, which wraps `@utexo/rgb-lib-wasm`. WASM initializes automatically inside `WalletManager.create()` — no manual `initWasm()` call needed.
-
-Wallet state is persisted to **IndexedDB** automatically and survives page refresh. There is no `dataDir` option — the browser manages storage.
-
----
-
-## Quick Start
-
-### Generate keys
-
-```typescript
-import { generateKeys } from '@utexo/rgb-sdk-web';
-
-const keys = await generateKeys('testnet');
-console.log(keys.mnemonic); // store securely — this is your wallet seed
-```
-
-### WalletManager (single wallet)
-
-```typescript
-import { WalletManager, generateKeys } from '@utexo/rgb-sdk-web';
-
-const keys = await generateKeys('testnet');
-
-// Create wallet — WASM loads automatically
-const wallet = await WalletManager.create({
-  xpubVan: keys.accountXpubVanilla,
-  xpubCol: keys.accountXpubColored,
-  masterFingerprint: keys.masterFingerprint,
-  mnemonic: keys.mnemonic,
-  network: 'testnet',
-});
-
-// Connect to indexer before any network operation
-await wallet.goOnline('');
-
-const address = await wallet.getAddress();
-const balance = await wallet.getBtcBalance();
-const assets  = await wallet.listAssets();
-```
-
-### UTEXOWallet (dual wallet)
+### UTEXOWallet 
 
 ```typescript
 import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
@@ -80,9 +36,7 @@ import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
 const keys = await generateKeys('testnet');
 
 const wallet = new UTEXOWallet(keys.mnemonic, { network: 'testnet' });
-await wallet.initialize(); // creates both layer1 and utexo WalletManager instances
-
-await wallet.goOnline('');
+await wallet.initialize(); 
 
 const address = await wallet.getAddress();
 const balance = await wallet.getBtcBalance();
@@ -209,29 +163,35 @@ const unspents     = await wallet.listUnspents();
 
 ## Backup & Restore
 
-Backups return raw `Uint8Array` bytes — no filesystem. Store them with your own mechanism (file download, cloud, etc.).
+Backups return raw `Uint8Array` bytes — no filesystem. Store them with your own mechanism (file download, vss, etc.).
 
 ### WalletManager backup
 
 ```typescript
-// Backup — returns raw bytes
+// File backup — returns raw bytes
 await wallet.createBackup({ password: 'secure-password' });
 const bytes = wallet.getLastBackupBytes(); // Uint8Array
 
-// VSS (cloud) backup
-await wallet.configureVssBackup(vssServerUrl, storeId, signingKeyHex);
+// VSS (cloud) backup — requires explicit config
+await wallet.configureVssBackup({ serverUrl, storeId, signingKey });
 await wallet.vssBackup();
 const info = await wallet.vssBackupInfo();
 ```
 
-### UTEXOWallet backup
+### UTEXOWallet backup local and VSS (cloud)
 
 ```typescript
-// Returns bytes for both layer1 and utexo wallets
+// File backup — returns bytes for both layer1 and utexo wallets
 const { layer1Bytes, utexoBytes } = await wallet.createBackup({
   password: 'secure-password',
 });
 // Download or store layer1Bytes and utexoBytes separately
+```
+or
+```typescript
+// VSS (cloud) backup — config is derived automatically from the mnemonic
+await wallet.vssBackup();
+const info = await wallet.vssBackupInfo();
 ```
 
 ### Restore
@@ -299,20 +259,22 @@ Used automatically when no custom endpoint is passed:
 
 | Network   | URL |
 |-----------|-----|
+| UTEXO     | `rpcs://rgb-proxy-utexo.utexo.com/json-rpc` |
 | Mainnet   | `rpcs://rgb-proxy-mainnet.utexo.com/json-rpc` |
 | Testnet   | `rpcs://rgb-proxy-testnet3.utexo.com/json-rpc` |
 | Testnet4  | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
-| Signet    | `rpcs://rgb-proxy-utexo.utexo.com/json-rpc` |
+| Signet    | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 | Regtest   | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 
 **Indexer (Bitcoin data)**
 
 | Network   | URL |
 |-----------|-----|
+| UTEXO     | `https://esplora-api.utexo.com` |
 | Mainnet   | `ssl://electrum.iriswallet.com:50003` |
 | Testnet   | `ssl://electrum.iriswallet.com:50013` |
 | Testnet4  | `ssl://electrum.iriswallet.com:50053` |
-| Signet    | `https://esplora-api.utexo.com` |
+| Signet    | `ssl://electrum.iriswallet.com:50033` |
 | Regtest   | `tcp://regtest.thunderstack.org:50001` |
 
 ---

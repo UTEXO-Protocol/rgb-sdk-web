@@ -1,7 +1,7 @@
 /**
  * Create a new UTEXO wallet from freshly generated keys.
  *
- * Generates a mnemonic, initializes a UTEXOWallet, connects to the indexer,
+ * Generates a mnemonic, initializes a UTEXOWallet,
  * and prints the deposit address and BTC balance.
  */
 
@@ -14,7 +14,6 @@ console.log('Mnemonic (store securely):', keys.mnemonic);
 
 const wallet = new UTEXOWallet(keys.mnemonic, { network: NETWORK });
 await wallet.initialize();
-await wallet.goOnline('');
 
 const address = await wallet.getAddress();
 console.log('Deposit address:', address);

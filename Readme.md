@@ -2,7 +2,7 @@
 
 > **Beta notice:** This package is currently in beta. Test thoroughly before using in production.
 
-Browser-first TypeScript SDK for the RGB protocol (colored coins on Bitcoin). All operations run locally via WebAssembly — no server, no Node.js, no native binaries required.
+Browser-first TypeScript SDK for the RGB protocol. All operations run locally via WebAssembly — no server, no Node.js, no native binaries required.
 
 
 `UTEXOWallet` use `WasmRgbLibBinding` under the hood, which wraps `@utexo/rgb-lib-wasm`. WASM initializes automatically inside `WalletManager.create()` — no manual `initWasm()` call needed.

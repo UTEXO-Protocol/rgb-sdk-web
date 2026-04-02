@@ -1,59 +1,21 @@
 # Security Policy
 
-## ⚠️ Important Security Disclosure
+## Security Model: `@utexo/rgb-sdk-web`
 
-Earlier versions of the RGB JavaScript SDK (`rgb-sdk`) relied on a **remote RGB Node server** and had architectural limitations that affect wallet privacy and security.
+`@utexo/rgb-sdk-web` enforces a **fully local, non-custodial security model**:
 
-If you have **ever used `rgb-sdk` with a remote RGB Node server**, you should assume that:
-
-- Your wallet **extended public keys (xpubs)** were disclosed to that server
-- Your wallet activity may be **fully observable** by that server
-- This exposure is **permanent** and **cannot be revoked**
-- Even after upgrading, past privacy leakage **cannot be undone**
-
-This was a consequence of the design of the legacy SDK and **not a vulnerability that can be patched retroactively**.
-
----
-
-## Affected Software
-
-The following packages and versions are affected:
-
-- `rgb-sdk`
-
----
-
-## Security Model: `@utexo/rgb-sdk`
-
-`@utexo/rgb-sdk` was designed to address these issues by enforcing a **fully local, non-custodial security model**:
-
-- All RGB operations are executed **locally**
+- All RGB operations are executed **locally** via WebAssembly
 - No xpubs are transmitted to any server
 - PSBTs are constructed and validated client-side
 - RGB protocol validation is enforced locally using `rgb-lib`
+- Wallet state is persisted to **IndexedDB** — never sent to a remote server
 - No trusted remote server is required
-
-This restores the intended security guarantees of the RGB protocol.
-
----
-
-## Recommended User Actions
-
-If you previously used `rgb-sdk`, we **strongly recommend**:
-
-1. **Migrating immediately** to `@utexo/rgb-sdk`
-2. Treating existing wallets as **privacy-compromised**
-3. Creating a **new wallet** if privacy is a concern
-4. Avoiding reuse of xpubs that were shared with any server
-5. Reviewing the Migration Guide carefully
-
-Migration prevents **future** data exposure but does **not** remove historical leakage.
 
 ---
 
 ## Reporting Security Issues
 
-If you discover a **new security vulnerability** in `@utexo/rgb-sdk`:
+If you discover a security vulnerability in `@utexo/rgb-sdk-web`:
 
 - Please **do not** open a public GitHub issue
 - Contact us privately with technical details
@@ -66,21 +28,13 @@ Responsible disclosures are appreciated and taken seriously.
 
 ---
 
-## Scope Clarification
+## Scope
 
-This security notice applies to:
+Security considerations for this SDK cover:
 
-- Privacy leakage
-- Key exposure
-- Transaction construction and validation trust assumptions
+- Key and mnemonic exposure
+- Privacy leakage (xpubs, transaction graphs, derivation paths)
+- PSBT construction and signing correctness
+- WASM integrity and supply chain
 
-It does **not** imply active exploitation, theft, or malicious behavior by any operator.
-
----
-
-## Final Note
-
-Wallet metadata (xpubs, derivation paths, transaction graphs) is **sensitive security information**.
-
-If privacy matters to you, the **only complete mitigation** is migration to a new wallet using a local-only SDK.
-
+Wallet metadata is **sensitive security information** — treat mnemonics, xpubs, and signing keys accordingly.

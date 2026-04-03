@@ -18,8 +18,7 @@ const walletB = new UTEXOWallet(MNEMONIC_B, { network: NETWORK });
 
 await walletA.initialize();
 await walletB.initialize();
-await walletA.goOnline('');
-await walletB.goOnline('');
+
 
 // Receiver: create invoices
 const blindInvoice = await walletB.blindReceive({ amount: AMOUNT });

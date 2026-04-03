@@ -15,7 +15,6 @@ const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
 const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
 await wallet.initialize();
-await wallet.goOnline('');
 
 await wallet.vssBackup();
 const info = await wallet.vssBackupInfo();
@@ -30,7 +29,6 @@ await restoreUtxoWalletFromVss({ mnemonic: MNEMONIC, networkPreset: NETWORK });
 
 const restoredWallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
 await restoredWallet.initialize();
-await restoredWallet.goOnline('');
 
 console.log('Restored address:', await restoredWallet.getAddress());
 await restoredWallet.dispose();

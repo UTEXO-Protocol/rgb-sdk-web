@@ -14,7 +14,6 @@ import {
 import { initWasm } from '../wasm/init';
 import {
   DEFAULT_TRANSPORT_ENDPOINTS,
-  DEFAULT_INDEXER_URLS,
   normalizeNetwork,
   ValidationError,
   WalletError,
@@ -306,10 +305,29 @@ function mapNetwork(network: string): string {
     testnet: 'Testnet',
     testnet4: 'Testnet4',
     signet: 'Signet',
+    utexo: 'Signet',
     regtest: 'Regtest',
   };
   return map[String(network).toLowerCase()] ?? 'Regtest';
 }
+
+// export const DEFAULT_TRANSPORT_ENDPOINTS: Record<Network, string> = {
+//   mainnet: 'rpcs://rgb-proxy-mainnet.utexo.com/json-rpc',
+//   testnet: 'rpcs://rgb-proxy-testnet3.utexo.com/json-rpc',
+//   testnet4: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+//   signet: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+//   utexo: 'rpcs://rgb-proxy-utexo.utexo.com/json-rpc',
+//   regtest: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+// };
+
+export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
+  mainnet: 'https://esplora-mainnet.utexo.com',
+  testnet: 'https://esplora-testnet3.utexo.com',
+  testnet4: 'https://esplora-testnet4.utexo.com',
+  signet: 'ssl://electrum.iriswallet.com:50033',
+  utexo: 'https://esplora-api.utexo.com',
+  regtest: 'tcp://regtest.thunderstack.org:50001',
+};
 
 // ─── Main class ───────────────────────────────────────────────────────────────
 
@@ -337,12 +355,12 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     this.transportEndpoint =
       params.transportEndpoint ||
       DEFAULT_TRANSPORT_ENDPOINTS[this.network] ||
-      DEFAULT_TRANSPORT_ENDPOINTS.signet;
+      DEFAULT_TRANSPORT_ENDPOINTS.utexo;
 
     this.indexerUrl =
       params.indexerUrl ||
       DEFAULT_INDEXER_URLS[this.network] ||
-      DEFAULT_INDEXER_URLS.signet;
+      DEFAULT_INDEXER_URLS.utexo;
   }
 
   /**
@@ -368,7 +386,6 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     await initWasm();
 
     const network = String(params.network ?? 'regtest');
-
     const walletData: WasmWalletData = {
       data_dir: `:memory:/${network}`,
       bitcoin_network: mapNetwork(network),
@@ -379,7 +396,8 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       mnemonic: params.mnemonic,
       master_fingerprint: params.masterFingerprint,
       vanilla_keychain: 0,
-      supported_schemas: ['Nia', 'Ifa'],
+      supported_schemas:
+        mapNetwork(network) === 'Mainnet' ? ['Nia'] : ['Nia', 'Ifa'],
     };
 
     let wallet: WasmWallet;
@@ -656,9 +674,8 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     const assignment =
       params.amount != null ? { Fungible: params.amount } : 'Any';
-
     const raw: unknown = this.wallet.witness_receive(
-      params.assetId ?? null,
+      params.assetId || null,
       assignment,
       params.durationSeconds ?? null,
       [this.transportEndpoint],

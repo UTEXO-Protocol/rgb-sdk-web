@@ -43,7 +43,6 @@ await restoreUtxoWalletFromBackup({
 
 const restoredWallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
 await restoredWallet.initialize();
-await restoredWallet.goOnline('');
 
 console.log('Restored address:', await restoredWallet.getAddress());
 await restoredWallet.dispose();

@@ -85,8 +85,8 @@ describe('restoreUtxoWalletFromBackup with mocked WasmRgbLibBinding', () => {
 
     expect(createSpy).toHaveBeenCalledTimes(2);
     const networks = createSpy.mock.calls.map((c: any[]) => c[0].network);
-    // testnet preset: layer1=testnet, utexo=signet
+    // testnet preset: layer1=testnet, utexo=utexo
     expect(networks).toContain('testnet');
-    expect(networks).toContain('signet');
+    expect(networks).toContain('utexo');
   });
 });

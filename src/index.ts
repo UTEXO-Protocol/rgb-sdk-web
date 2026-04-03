@@ -1,3 +1,5 @@
+import { DEFAULT_INDEXER_URLS } from './binding/WasmRgbLibBinding';
+
 // Main wallet exports
 export {
   createWallet,
@@ -102,7 +104,6 @@ export {
   DEFAULT_MAX_RETRIES,
   DEFAULT_LOG_LEVEL,
   DEFAULT_TRANSPORT_ENDPOINTS,
-  DEFAULT_INDEXER_URLS,
   DERIVATION_PURPOSE,
   DERIVATION_ACCOUNT,
   KEYCHAIN_RGB,
@@ -126,3 +127,5 @@ export type {
   UtxoNetworkIdMap,
   UtxoNetworkPresetConfig,
 } from '@utexo/rgb-sdk-core';
+
+export { DEFAULT_INDEXER_URLS };

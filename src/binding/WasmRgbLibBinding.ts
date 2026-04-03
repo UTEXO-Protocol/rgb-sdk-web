@@ -14,7 +14,6 @@ import {
 import { initWasm } from '../wasm/init';
 import {
   DEFAULT_TRANSPORT_ENDPOINTS,
-  DEFAULT_INDEXER_URLS,
   normalizeNetwork,
   ValidationError,
   WalletError,
@@ -312,6 +311,24 @@ function mapNetwork(network: string): string {
   return map[String(network).toLowerCase()] ?? 'Regtest';
 }
 
+// export const DEFAULT_TRANSPORT_ENDPOINTS: Record<Network, string> = {
+//   mainnet: 'rpcs://rgb-proxy-mainnet.utexo.com/json-rpc',
+//   testnet: 'rpcs://rgb-proxy-testnet3.utexo.com/json-rpc',
+//   testnet4: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+//   signet: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+//   utexo: 'rpcs://rgb-proxy-utexo.utexo.com/json-rpc',
+//   regtest: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
+// };
+
+export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
+  mainnet: 'https://esplora-mainnet.utexo.com',
+  testnet: 'https://esplora-testnet3.utexo.com',
+  testnet4: 'https://esplora-testnet4.utexo.com',
+  signet: 'ssl://electrum.iriswallet.com:50033',
+  utexo: 'https://esplora-api.utexo.com',
+  regtest: 'tcp://regtest.thunderstack.org:50001',
+};
+
 // ─── Main class ───────────────────────────────────────────────────────────────
 
 export class WasmRgbLibBinding implements IRgbLibBinding {
@@ -379,7 +396,8 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       mnemonic: params.mnemonic,
       master_fingerprint: params.masterFingerprint,
       vanilla_keychain: 0,
-      supported_schemas: ['Nia', 'Ifa'],
+      supported_schemas:
+        mapNetwork(network) === 'Mainnet' ? ['Nia'] : ['Nia', 'Ifa'],
     };
 
     let wallet: WasmWallet;

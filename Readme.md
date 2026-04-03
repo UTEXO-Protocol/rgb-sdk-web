@@ -266,7 +266,6 @@ Used automatically when no custom endpoint is passed:
 | Mainnet   | `rpcs://rgb-proxy-mainnet.utexo.com/json-rpc` |
 | Testnet   | `rpcs://rgb-proxy-testnet3.utexo.com/json-rpc` |
 | Testnet4  | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
-| Signet    | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 | Regtest   | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 
 **Indexer (Bitcoin data)**
@@ -274,10 +273,9 @@ Used automatically when no custom endpoint is passed:
 | Network   | URL |
 |-----------|-----|
 | UTEXO     | `https://esplora-api.utexo.com` |
-| Mainnet   | `ssl://electrum.iriswallet.com:50003` |
-| Testnet   | `ssl://electrum.iriswallet.com:50013` |
-| Testnet4  | `ssl://electrum.iriswallet.com:50053` |
-| Signet    | `ssl://electrum.iriswallet.com:50033` |
+| Mainnet   | `https://esplora-mainnet.utexo.com` |
+| Testnet   | `https://esplora-testnet3.utexo.com` |
+| Testnet4  | `https://esplora-testnet4.utexo.com` |
 | Regtest   | `tcp://regtest.thunderstack.org:50001` |
 
 ---

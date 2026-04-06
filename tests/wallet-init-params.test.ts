@@ -14,7 +14,10 @@ jest.mock('../src/wasm/init.ts', () => ({
 }));
 
 import { WasmRgbLibBinding } from '../src/binding/WasmRgbLibBinding';
-import { lastCreatedWalletData, mockWasmWalletInstance } from './__mocks__/rgb-lib-wasm';
+import {
+  lastCreatedWalletData,
+  mockWasmWalletInstance,
+} from './__mocks__/rgb-lib-wasm';
 
 const baseParams = {
   xpubVan:
@@ -82,7 +85,10 @@ describe('WasmRgbLibBinding — maxAllocationsPerUtxo', () => {
   });
 
   it('passes max_allocations_per_utxo: 10', async () => {
-    await WasmRgbLibBinding.create({ ...baseParams, maxAllocationsPerUtxo: 10 });
+    await WasmRgbLibBinding.create({
+      ...baseParams,
+      maxAllocationsPerUtxo: 10,
+    });
     expect(getWalletData().max_allocations_per_utxo).toBe(10);
   });
 });

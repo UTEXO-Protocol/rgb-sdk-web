@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0-beta.9
+
+### Added
+
+- `WalletInitParams.reuseAddresses` — optional `boolean` (default `false`); passed to `WasmWallet` as `reuse_addresses` to pin addresses per keychain instead of rotating automatically
+- `WalletInitParams.vanillaKeychain` — optional `number | null` (default `0`); controls the BIP32 keychain index used for the vanilla (BTC) wallet
+- `WalletInitParams.maxAllocationsPerUtxo` — optional `number` (default `5`); forwarded to `WasmWallet` as `max_allocations_per_utxo`
+- `WasmRgbLibBinding.rotateVanillaAddress()` — rotates the pinned vanilla address (`rotate_address(0)`); requires wallet created with `reuseAddresses: true`
+- `WasmRgbLibBinding.rotateColoredAddress()` — rotates the pinned colored address (`rotate_address(1)`); requires wallet created with `reuseAddresses: true`
+- `WalletManager` forwards all three new params to `WasmRgbLibBinding.create()`
+- Jest test suite (`tests/wallet-init-params.test.ts`) covering default values and forwarding of all new fields, plus `rotateVanillaAddress` / `rotateColoredAddress` behavior
+
+### Changed
+
+- `rotateAddress(keychain: number)` removed in favor of the explicit `rotateVanillaAddress()` / `rotateColoredAddress()` split, matching the Node.js rgb-lib binding API
+
 ## 1.0.0
 
 Initial release of `@utexo/rgb-sdk-web` — a browser-first rewrite of the RGB SDK.

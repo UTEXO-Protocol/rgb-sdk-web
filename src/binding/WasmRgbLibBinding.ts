@@ -398,7 +398,8 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       account_xpub_colored: params.xpubCol,
       mnemonic: params.mnemonic,
       master_fingerprint: params.masterFingerprint,
-      vanilla_keychain: params.vanillaKeychain !== undefined ? params.vanillaKeychain : 0,
+      vanilla_keychain:
+        params.vanillaKeychain !== undefined ? params.vanillaKeychain : 0,
       reuse_addresses: params.reuseAddresses ?? false,
       supported_schemas:
         mapNetwork(network) === 'Mainnet' ? ['Nia'] : ['Nia', 'Ifa'],

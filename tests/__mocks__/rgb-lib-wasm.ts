@@ -7,9 +7,11 @@ import { jest } from '@jest/globals';
 export const mockWasmWalletInstance = {
   free: jest.fn(),
   get_address: jest.fn().mockReturnValue('tb1qmock'),
-  rotate_address: jest.fn().mockImplementation((keychain: number) =>
-    keychain === 0 ? 'tb1qvanilla' : 'tb1qcolored'
-  ),
+  rotate_address: jest
+    .fn()
+    .mockImplementation((keychain: number) =>
+      keychain === 0 ? 'tb1qvanilla' : 'tb1qcolored'
+    ),
   get_btc_balance: jest.fn().mockReturnValue({
     vanilla: { settled: 0, future: 0, spendable: 0 },
     colored: { settled: 0, future: 0, spendable: 0 },

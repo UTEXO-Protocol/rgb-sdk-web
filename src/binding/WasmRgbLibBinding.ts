@@ -375,6 +375,9 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     network?: string | number;
     transportEndpoint?: string;
     indexerUrl?: string;
+    reuseAddresses?: boolean;
+    vanillaKeychain?: number | null;
+    maxAllocationsPerUtxo?: number;
   }): Promise<WasmRgbLibBinding> {
     if (!params.mnemonic) {
       throw new ValidationError(
@@ -390,12 +393,13 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       data_dir: `:memory:/${network}`,
       bitcoin_network: mapNetwork(network),
       database_type: 'Sqlite',
-      max_allocations_per_utxo: 5,
+      max_allocations_per_utxo: params.maxAllocationsPerUtxo ?? 5,
       account_xpub_vanilla: params.xpubVan,
       account_xpub_colored: params.xpubCol,
       mnemonic: params.mnemonic,
       master_fingerprint: params.masterFingerprint,
-      vanilla_keychain: 0,
+      vanilla_keychain: params.vanillaKeychain !== undefined ? params.vanillaKeychain : 0,
+      reuse_addresses: params.reuseAddresses ?? false,
       supported_schemas:
         mapNetwork(network) === 'Mainnet' ? ['Nia'] : ['Nia', 'Ifa'],
     };
@@ -472,6 +476,14 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async getAddress(): Promise<string> {
     return this.wallet.get_address();
+  }
+
+  async rotateVanillaAddress(): Promise<string> {
+    return this.wallet.rotate_address(0);
+  }
+
+  async rotateColoredAddress(): Promise<string> {
+    return this.wallet.rotate_address(1);
   }
 
   // ─── Unspents ───────────────────────────────────────────────────────────────
@@ -751,7 +763,6 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       params.precision,
       params.amounts,
       params.inflationAmounts,
-      params.replaceRightsNum,
       params.rejectListUrl ?? null
     ) as Record<string, unknown>;
     return normalizeAssetIfa(raw);

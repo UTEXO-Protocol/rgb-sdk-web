@@ -46,6 +46,9 @@ export class WalletManager extends BaseWalletManager {
       network: String(params.network ?? 'regtest'),
       transportEndpoint: params.transportEndpoint,
       indexerUrl: params.indexerUrl,
+      reuseAddresses: params.reuseAddresses,
+      vanillaKeychain: params.vanillaKeychain,
+      maxAllocationsPerUtxo: params.maxAllocationsPerUtxo,
     });
 
     return new WalletManager(params, client);

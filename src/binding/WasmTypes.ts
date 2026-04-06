@@ -74,6 +74,7 @@ export interface WalletData {
   mnemonic: string | null;
   master_fingerprint: string;
   vanilla_keychain: number | null;
+  reuse_addresses: boolean;
   supported_schemas: AssetSchema[];
 }
 

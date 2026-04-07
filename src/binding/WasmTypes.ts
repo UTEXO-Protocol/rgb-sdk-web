@@ -2,11 +2,8 @@
  * Supplemental TypeScript types for rgb-lib WASM bindings.
  *
  * The generated `rgb_lib_wasm_bindings.d.ts` uses `any` for JSON-shaped values.
- * These definitions match the default Rust build **without** the `camel_case` Cargo feature
- * (JSON field names use **snake_case**: `recipient_id`, `data_dir`, …).
- *
- * If you compile `rgb-lib-wasm` with `--features camel_case`, enable the alternate names
- * by passing `RgbLibJsonFieldStyle` (see below) or duplicate these interfaces with camelCase fields.
+ * These definitions match the build compiled with the `camel_case` Cargo feature
+ * (JSON field names use **camelCase**: `recipientId`, `dataDir`, …).
  *
  * u64 values crossing the WASM boundary may be `number` or `bigint` depending on magnitude
  * (serde_wasm_bindgen uses BigInt for large integers).
@@ -65,24 +62,25 @@ export type TransportType = 'JsonRpc';
 // ---------------------------------------------------------------------------
 
 export interface WalletData {
-  data_dir: string;
-  bitcoin_network: BitcoinNetworkName;
-  database_type: DatabaseType;
-  max_allocations_per_utxo: number;
-  account_xpub_vanilla: string;
-  account_xpub_colored: string;
+  dataDir: string;
+  bitcoinNetwork: BitcoinNetworkName;
+  databaseType: DatabaseType;
+  maxAllocationsPerUtxo: number;
+  accountXpubVanilla: string;
+  accountXpubColored: string;
   mnemonic: string | null;
-  master_fingerprint: string;
-  vanilla_keychain: number | null;
-  supported_schemas: AssetSchema[];
+  masterFingerprint: string;
+  vanillaKeychain: number | null;
+  reuseAddresses: boolean;
+  supportedSchemas: AssetSchema[];
 }
 
 export interface Keys {
   mnemonic: string;
   xpub: string;
-  account_xpub_vanilla: string;
-  account_xpub_colored: string;
-  master_fingerprint: string;
+  accountXpubVanilla: string;
+  accountXpubColored: string;
+  masterFingerprint: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,27 +89,27 @@ export interface Keys {
 
 export interface Online {
   id: number | bigint;
-  indexer_url: string;
+  indexerUrl: string;
 }
 
 export interface OperationResult {
   txid: string;
-  batch_transfer_idx: number;
+  batchTransferIdx: number;
 }
 
 export interface WitnessData {
-  amount_sat: number | bigint | string;
+  amountSat: number | bigint | string;
   blinding: number | bigint | null;
 }
 
 export interface Recipient {
-  recipient_id: string;
-  witness_data: WitnessData | null;
+  recipientId: string;
+  witnessData: WitnessData | null;
   assignment: AssignmentJson;
-  transport_endpoints: string[];
+  transportEndpoints: string[];
 }
 
-/** Map: asset_id → list of recipients (input to `send_begin`). */
+/** Map: assetId → list of recipients (input to `sendBegin`). */
 export type RecipientMap = Record<string, Recipient[]>;
 
 export interface RefreshFilter {
@@ -123,7 +121,7 @@ export interface RefreshFilter {
 export type RgbLibErrorJson = Record<string, unknown>;
 
 export interface RefreshedTransfer {
-  updated_status: TransferStatus | null;
+  updatedStatus: TransferStatus | null;
   failure: RgbLibErrorJson | null;
 }
 
@@ -146,51 +144,51 @@ export interface BtcBalance {
 }
 
 export interface Media {
-  file_path: string;
+  filePath: string;
   digest: string;
   mime: string;
 }
 
 export interface Metadata {
-  asset_schema: AssetSchema;
-  initial_supply: number | bigint;
-  max_supply: number | bigint;
-  known_circulating_supply: number | bigint;
+  assetSchema: AssetSchema;
+  initialSupply: number | bigint;
+  maxSupply: number | bigint;
+  knownCirculatingSupply: number | bigint;
   timestamp: number;
   name: string;
   precision: number;
   ticker: string | null;
   details: string | null;
-  reject_list_url: string | null;
+  rejectListUrl: string | null;
 }
 
 export interface AssetNIA {
-  asset_id: string;
+  assetId: string;
   ticker: string;
   name: string;
   details: string | null;
   precision: number;
-  issued_supply: number | bigint;
+  issuedSupply: number | bigint;
   timestamp: number;
-  added_at: number;
+  addedAt: number;
   balance: Balance;
   media: Media | null;
 }
 
 export interface AssetIFA {
-  asset_id: string;
+  assetId: string;
   ticker: string;
   name: string;
   details: string | null;
   precision: number;
-  initial_supply: number | bigint;
-  max_supply: number | bigint;
-  known_circulating_supply: number | bigint;
+  initialSupply: number | bigint;
+  maxSupply: number | bigint;
+  knownCirculatingSupply: number | bigint;
   timestamp: number;
-  added_at: number;
+  addedAt: number;
   balance: Balance;
   media: Media | null;
-  reject_list_url: string | null;
+  rejectListUrl: string | null;
 }
 
 export interface Assets {
@@ -204,20 +202,20 @@ export interface Assets {
 
 export interface ReceiveData {
   invoice: string;
-  recipient_id: string;
-  expiration_timestamp: number | null;
-  batch_transfer_idx: number;
+  recipientId: string;
+  expirationTimestamp: number | null;
+  batchTransferIdx: number;
 }
 
 export interface InvoiceData {
-  recipient_id: string;
-  asset_schema: AssetSchema | null;
-  asset_id: string | null;
+  recipientId: string;
+  assetSchema: AssetSchema | null;
+  assetId: string | null;
   assignment: AssignmentJson;
-  assignment_name: string | null;
+  assignmentName: string | null;
   network: BitcoinNetworkName;
-  expiration_timestamp: number | null;
-  transport_endpoints: string[];
+  expirationTimestamp: number | null;
+  transportEndpoints: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -235,56 +233,56 @@ export interface BlockTime {
 }
 
 export interface Transaction {
-  transaction_type: TransactionType;
+  transactionType: TransactionType;
   txid: string;
   received: number | bigint;
   sent: number | bigint;
   fee: number | bigint;
-  confirmation_time: BlockTime | null;
+  confirmationTime: BlockTime | null;
 }
 
 export interface TransferTransportEndpoint {
   endpoint: string;
-  transport_type: TransportType;
+  transportType: TransportType;
   used: boolean;
 }
 
 export interface Transfer {
   idx: number;
-  batch_transfer_idx: number;
-  created_at: number;
-  updated_at: number;
+  batchTransferIdx: number;
+  createdAt: number;
+  updatedAt: number;
   status: TransferStatus;
-  requested_assignment: AssignmentJson | null;
+  requestedAssignment: AssignmentJson | null;
   assignments: AssignmentJson[];
   kind: TransferKind;
   txid: string | null;
-  recipient_id: string | null;
-  receive_utxo: Outpoint | null;
-  change_utxo: Outpoint | null;
+  recipientId: string | null;
+  receiveUtxo: Outpoint | null;
+  changeUtxo: Outpoint | null;
   expiration: number | null;
-  transport_endpoints: TransferTransportEndpoint[];
-  invoice_string: string | null;
-  consignment_path: string | null;
+  transportEndpoints: TransferTransportEndpoint[];
+  invoiceString: string | null;
+  consignmentPath: string | null;
 }
 
 export interface RgbAllocation {
-  asset_id: string | null;
+  assetId: string | null;
   assignment: AssignmentJson;
   settled: boolean;
 }
 
 export interface Utxo {
   outpoint: Outpoint;
-  btc_amount: number | bigint;
+  btcAmount: number | bigint;
   colorable: boolean;
   exists: boolean;
 }
 
 export interface Unspent {
   utxo: Utxo;
-  rgb_allocations: RgbAllocation[];
-  pending_blinded: number;
+  rgbAllocations: RgbAllocation[];
+  pendingBlinded: number;
 }
 
 /**
@@ -298,9 +296,20 @@ export type LocalOutput = Record<string, unknown>;
 // ---------------------------------------------------------------------------
 
 export interface VssBackupInfo {
-  backup_exists: boolean;
-  server_version: number | null;
-  backup_required: boolean;
+  backupExists: boolean;
+  serverVersion: number | null;
+  backupRequired: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Consignment validation (validateConsignmentOffchain)
+// ---------------------------------------------------------------------------
+
+export interface ConsignmentValidationResult {
+  valid: boolean;
+  warnings?: string[];
+  error?: string;
+  details?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ export class UTEXOWallet extends UTEXOWalletCore {
       masterFingerprint: utexoKeys.masterFingerprint,
       network: this.networkMap.utexo,
       mnemonic: this.mnemonicOrSeed as string,
+      reuseAddresses: this.options.reuseAddresses,
     });
 
     this.layer1Wallet = await WalletManager.create({

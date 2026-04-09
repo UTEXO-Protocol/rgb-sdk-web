@@ -8,8 +8,9 @@
 import {
   WasmWallet,
   WasmInvoice,
-  generate_keys,
-  restore_keys,
+  generateKeys as wasmGenerateKeys,
+  restoreKeys as wasmRestoreKeys,
+  validateConsignmentOffchain as wasmValidateConsignmentOffchain,
 } from '@utexo/rgb-lib-wasm';
 import { initWasm } from '../wasm/init';
 import {
@@ -67,25 +68,22 @@ import type {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** rgb-lib WASM expects serde snake_case `Recipient` objects (see WasmTypes). */
+/** rgb-lib WASM expects camelCase `Recipient` objects (see WasmTypes). */
 function batchRecipientToWasm(r: BatchRecipient): WasmRecipient {
   const wd = r.witnessData;
-  const witness: WasmRecipient['witness_data'] =
+  const witness: WasmRecipient['witnessData'] =
     wd == null
       ? null
       : {
-          amount_sat:
-            typeof wd.amountSat === 'string'
-              ? Number(wd.amountSat)
-              : Number(wd.amountSat),
+          amountSat: String(wd.amountSat),
           blinding: wd.blinding ?? null,
         };
 
   return {
-    recipient_id: r.recipientId,
-    witness_data: witness,
+    recipientId: r.recipientId,
+    witnessData: witness,
     assignment: { Fungible: r.assignment.Fungible },
-    transport_endpoints: r.transportEndpoints,
+    transportEndpoints: r.transportEndpoints,
   };
 }
 
@@ -286,7 +284,7 @@ export const generateKeys = async (
   network: string = 'regtest'
 ): Promise<RgbLibGeneratedKeys> => {
   await initWasm();
-  return generate_keys(mapNetwork(network)) as RgbLibGeneratedKeys;
+  return wasmGenerateKeys(mapNetwork(network)) as RgbLibGeneratedKeys;
 };
 
 export const restoreKeys = async (
@@ -294,7 +292,27 @@ export const restoreKeys = async (
   mnemonic: string
 ): Promise<RgbLibGeneratedKeys> => {
   await initWasm();
-  return restore_keys(mapNetwork(network), mnemonic) as RgbLibGeneratedKeys;
+  return wasmRestoreKeys(mapNetwork(network), mnemonic) as RgbLibGeneratedKeys;
+};
+
+/**
+ * Validate an RGB consignment offchain (no indexer needed).
+ *
+ * Takes raw consignment bytes (strict-encoded, not base64), the witness txid,
+ * and the network. Returns the validation result object from rgb-lib.
+ */
+export const validateConsignmentOffchain = async (params: {
+  consignmentBytes: Uint8Array;
+  txid: string;
+  network?: string;
+}): Promise<unknown> => {
+  await initWasm();
+  const raw = wasmValidateConsignmentOffchain(
+    params.consignmentBytes,
+    params.txid,
+    mapNetwork(params.network ?? 'regtest')
+  );
+  return raw;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -310,15 +328,6 @@ function mapNetwork(network: string): string {
   };
   return map[String(network).toLowerCase()] ?? 'Regtest';
 }
-
-// export const DEFAULT_TRANSPORT_ENDPOINTS: Record<Network, string> = {
-//   mainnet: 'rpcs://rgb-proxy-mainnet.utexo.com/json-rpc',
-//   testnet: 'rpcs://rgb-proxy-testnet3.utexo.com/json-rpc',
-//   testnet4: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
-//   signet: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
-//   utexo: 'rpcs://rgb-proxy-utexo.utexo.com/json-rpc',
-//   regtest: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
-// };
 
 export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
   mainnet: 'https://esplora-mainnet.utexo.com',
@@ -375,6 +384,9 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     network?: string | number;
     transportEndpoint?: string;
     indexerUrl?: string;
+    reuseAddresses?: boolean;
+    vanillaKeychain?: number | null;
+    maxAllocationsPerUtxo?: number;
   }): Promise<WasmRgbLibBinding> {
     if (!params.mnemonic) {
       throw new ValidationError(
@@ -387,16 +399,18 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
     const network = String(params.network ?? 'regtest');
     const walletData: WasmWalletData = {
-      data_dir: `:memory:/${network}`,
-      bitcoin_network: mapNetwork(network),
-      database_type: 'Sqlite',
-      max_allocations_per_utxo: 5,
-      account_xpub_vanilla: params.xpubVan,
-      account_xpub_colored: params.xpubCol,
+      dataDir: `:memory:/${network}`,
+      bitcoinNetwork: mapNetwork(network),
+      databaseType: 'Sqlite',
+      maxAllocationsPerUtxo: params.maxAllocationsPerUtxo ?? 5,
+      accountXpubVanilla: params.xpubVan,
+      accountXpubColored: params.xpubCol,
       mnemonic: params.mnemonic,
-      master_fingerprint: params.masterFingerprint,
-      vanilla_keychain: 0,
-      supported_schemas:
+      masterFingerprint: params.masterFingerprint,
+      vanillaKeychain:
+        params.vanillaKeychain !== undefined ? params.vanillaKeychain : 0,
+      reuseAddresses: params.reuseAddresses ?? false,
+      supportedSchemas:
         mapNetwork(network) === 'Mainnet' ? ['Nia'] : ['Nia', 'Ifa'],
     };
 
@@ -423,7 +437,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   private async ensureOnline(): Promise<WasmOnline> {
     if (this.online) return this.online;
     try {
-      this.online = (await this.wallet.go_online(
+      this.online = (await this.wallet.goOnline(
         false,
         this.indexerUrl
       )) as WasmOnline;
@@ -440,7 +454,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   /** IRgbLibBinding: fire-and-forget online connection. */
   getOnline(): void {
     this.ensureOnline().catch((e) =>
-      logger.warn('WasmRgbLibBinding: go_online failed:', e)
+      logger.warn('WasmRgbLibBinding: goOnline failed:', e)
     );
   }
 
@@ -459,25 +473,33 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }
 
   registerWallet(): { address: string; btcBalance: BtcBalance } {
-    const address = this.wallet.get_address();
-    const btcBalance = this.wallet.get_btc_balance() as BtcBalance;
+    const address = this.wallet.getAddress();
+    const btcBalance = this.wallet.getBtcBalance() as BtcBalance;
     return { address, btcBalance };
   }
 
   // ─── Balance & address ──────────────────────────────────────────────────────
 
   async getBtcBalance(): Promise<BtcBalance> {
-    return this.wallet.get_btc_balance() as BtcBalance;
+    return this.wallet.getBtcBalance() as BtcBalance;
   }
 
   async getAddress(): Promise<string> {
-    return this.wallet.get_address();
+    return this.wallet.getAddress();
+  }
+
+  async rotateVanillaAddress(): Promise<string> {
+    return this.wallet.rotateAddress(1);
+  }
+
+  async rotateColoredAddress(): Promise<string> {
+    return this.wallet.rotateAddress(0);
   }
 
   // ─── Unspents ───────────────────────────────────────────────────────────────
 
   async listUnspents(): Promise<Unspent[]> {
-    const raw: any[] = this.wallet.list_unspents(false) as any[];
+    const raw: any[] = this.wallet.listUnspents(false) as any[];
     return raw.map((unspent) => {
       const rgbAllocs = unspent.rgb_allocations ?? unspent.rgbAllocations ?? [];
       return {
@@ -518,7 +540,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     params: CreateUtxosBeginRequestModel
   ): Promise<string> {
     const online = await this.ensureOnline();
-    return this.wallet.create_utxos_begin(
+    return this.wallet.createUtxosBegin(
       online,
       params.upTo ?? false,
       params.num ?? undefined,
@@ -530,7 +552,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async createUtxosEnd(params: CreateUtxosEndRequestModel): Promise<number> {
     const online = await this.ensureOnline();
-    return this.wallet.create_utxos_end(
+    return this.wallet.createUtxosEnd(
       online,
       params.signedPsbt,
       params.skipSync ?? false
@@ -573,26 +595,28 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     const transportEndpoints = (raw.transport_endpoints ??
       raw.transportEndpoints) as string[] | undefined;
 
-    const witnessData: WasmRecipient['witness_data'] =
+    const witnessData: WasmRecipient['witnessData'] =
       params.witnessData != null
         ? {
-            amount_sat: String(params.witnessData.amountSat),
+            amountSat: String(params.witnessData.amountSat),
             blinding: params.witnessData.blinding ?? null,
           }
         : null;
 
     const recipient: WasmRecipient = {
-      recipient_id: String(raw.recipient_id ?? raw.recipientId ?? ''),
-      witness_data: witnessData,
+      recipientId: String(raw.recipient_id ?? raw.recipientId ?? ''),
+      witnessData,
       assignment: { Fungible: amount },
-      transport_endpoints: transportEndpoints ?? [],
+      transportEndpoints: transportEndpoints ?? [],
     };
+
+    const recipientMap = { [assetId]: [recipient] } as WasmRecipientMap;
 
     const online = await this.ensureOnline();
 
-    return this.wallet.send_begin(
+    return this.wallet.sendBegin(
       online,
-      { [assetId]: [recipient] } as WasmRecipientMap,
+      recipientMap,
       params.donation ?? true,
       BigInt(Math.round(params.feeRate ?? 1)),
       params.minConfirmations ?? 1
@@ -614,7 +638,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
       );
     }
 
-    return this.wallet.send_begin(
+    return this.wallet.sendBegin(
       online,
       sdkRecipientMapToWasm(params.recipientMap),
       params.donation ?? true,
@@ -625,7 +649,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
     const online = await this.ensureOnline();
-    const raw = await this.wallet.send_end(
+    const raw = await this.wallet.sendEnd(
       online,
       params.signedPsbt,
       params.skipSync ?? false
@@ -637,7 +661,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async sendBtcBegin(params: SendBtcBeginRequestModel): Promise<string> {
     const online = await this.ensureOnline();
-    return this.wallet.send_btc_begin(
+    return this.wallet.sendBtcBegin(
       online,
       params.address,
       BigInt(Math.round(params.amount)),
@@ -648,7 +672,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async sendBtcEnd(params: SendBtcEndRequestModel): Promise<string> {
     const online = await this.ensureOnline();
-    return this.wallet.send_btc_end(
+    return this.wallet.sendBtcEnd(
       online,
       params.signedPsbt,
       params.skipSync ?? false
@@ -661,7 +685,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     const assignment =
       params.amount != null ? { Fungible: params.amount } : 'Any';
 
-    const raw: unknown = this.wallet.blind_receive(
+    const raw: unknown = this.wallet.blindReceive(
       params.assetId ?? null,
       assignment,
       params.durationSeconds ?? null,
@@ -674,7 +698,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     const assignment =
       params.amount != null ? { Fungible: params.amount } : 'Any';
-    const raw: unknown = this.wallet.witness_receive(
+    const raw: unknown = this.wallet.witnessReceive(
       params.assetId || null,
       assignment,
       params.durationSeconds ?? null,
@@ -713,12 +737,12 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   // ─── Assets ─────────────────────────────────────────────────────────────────
 
   async listAssets(): Promise<ListAssets> {
-    const raw = this.wallet.list_assets([]);
+    const raw = this.wallet.listAssets([]);
     return normalizeListAssets(raw);
   }
 
   async getAssetBalance(assetId: string): Promise<AssetBalance> {
-    const balance: Record<string, unknown> = this.wallet.get_asset_balance(
+    const balance: Record<string, unknown> = this.wallet.getAssetBalance(
       assetId
     ) as Record<string, unknown>;
     return {
@@ -735,7 +759,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }
 
   async issueAssetNia(params: IssueAssetNiaRequestModel): Promise<AssetNIA> {
-    const raw = this.wallet.issue_asset_nia(
+    const raw = this.wallet.issueAssetNia(
       params.ticker,
       params.name,
       params.precision,
@@ -745,13 +769,12 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }
 
   async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
-    const raw = this.wallet.issue_asset_ifa(
+    const raw = this.wallet.issueAssetIfa(
       params.ticker,
       params.name,
       params.precision,
       params.amounts,
       params.inflationAmounts,
-      params.replaceRightsNum,
       params.rejectListUrl ?? null
     ) as Record<string, unknown>;
     return normalizeAssetIfa(raw);
@@ -761,7 +784,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async inflateBegin(params: InflateAssetIfaRequestModel): Promise<string> {
     const online = await this.ensureOnline();
-    return this.wallet.inflate_begin(
+    return this.wallet.inflateBegin(
       online,
       params.assetId,
       params.inflationAmounts,
@@ -772,19 +795,19 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async inflateEnd(params: InflateEndRequestModel): Promise<OperationResult> {
     const online = await this.ensureOnline();
-    const raw = await this.wallet.inflate_end(online, params.signedPsbt);
+    const raw = await this.wallet.inflateEnd(online, params.signedPsbt);
     return normalizeBatchTxResult(raw);
   }
 
   // ─── Transfers & transactions ────────────────────────────────────────────────
 
   async listTransactions(): Promise<Transaction[]> {
-    const raw = this.wallet.list_transactions() as Record<string, unknown>[];
+    const raw = this.wallet.listTransactions() as Record<string, unknown>[];
     return raw.map((t) => normalizeTransaction(t));
   }
 
   async listTransfers(assetId?: string): Promise<Transfer[]> {
-    const raw = this.wallet.list_transfers(assetId ?? null) as Record<
+    const raw = this.wallet.listTransfers(assetId ?? null) as Record<
       string,
       unknown
     >[];
@@ -793,7 +816,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async failTransfers(params: FailTransfersRequest): Promise<boolean> {
     const online = await this.ensureOnline();
-    return this.wallet.fail_transfers(
+    return this.wallet.failTransfers(
       online,
       params.batchTransferIdx ?? null,
       params.noAssetOnly ?? false,
@@ -805,7 +828,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
     batchTransferIdx?: number;
     noAssetOnly?: boolean;
   }): boolean {
-    return this.wallet.delete_transfers(
+    return this.wallet.deleteTransfers(
       params.batchTransferIdx ?? null,
       params.noAssetOnly ?? false
     );
@@ -815,8 +838,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
 
   async refreshWallet(): Promise<void> {
     const online = await this.ensureOnline();
-    const refreshed = await this.wallet.refresh(online, null, [], false);
-    return refreshed;
+    await this.wallet.refresh(online, null, [], false);
   }
 
   async syncWallet(): Promise<void> {
@@ -831,7 +853,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }): Promise<GetFeeEstimationResponse> {
     const online = await this.ensureOnline();
     try {
-      return await this.wallet.get_fee_estimation(online, params.blocks);
+      return await this.wallet.getFeeEstimation(online, params.blocks);
     } catch {
       logger.warn(
         'WasmRgbLibBinding: fee estimation unavailable, using default 2'
@@ -871,13 +893,13 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
    * WASM-specific: restore wallet state from raw backup bytes.
    */
   restoreFromBackupBytes(bytes: Uint8Array, password: string): void {
-    this.wallet.restore_backup(bytes, password);
+    this.wallet.restoreBackup(bytes, password);
   }
 
   // ─── VSS backup ─────────────────────────────────────────────────────────────
 
   configureVssBackup(config: VssBackupConfig): void {
-    this.wallet.configure_vss_backup(
+    this.wallet.configureVssBackup(
       config.serverUrl,
       config.storeId,
       config.signingKey
@@ -885,17 +907,16 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }
 
   disableVssAutoBackup(): void {
-    this.wallet.disable_vss_backup();
+    this.wallet.disableVssBackup();
   }
 
   async vssBackup(_config: VssBackupConfig): Promise<number> {
-    // Config must already be set via configureVssBackup before calling.
-    const version = await this.wallet.vss_backup();
+    const version = await this.wallet.vssBackup();
     return Number(version);
   }
 
   async vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {
-    const info: any = await this.wallet.vss_backup_info();
+    const info: any = await this.wallet.vssBackupInfo();
     return {
       backupExists: Boolean(info.backup_exists ?? info.backupExists),
       serverVersion: info.server_version ?? info.serverVersion ?? null,
@@ -904,7 +925,7 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
   }
 
   async vssRestoreBackup(): Promise<void> {
-    await this.wallet.vss_restore_backup();
+    await this.wallet.vssRestoreBackup();
   }
 
   // ─── PSBT signing (built-in) ─────────────────────────────────────────────────
@@ -914,10 +935,10 @@ export class WasmRgbLibBinding implements IRgbLibBinding {
    * Called by WasmSigner.signPsbtWithMnemonic (Phase 3).
    */
   signPsbt(unsignedPsbt: string): string {
-    return this.wallet.sign_psbt(unsignedPsbt);
+    return this.wallet.signPsbt(unsignedPsbt);
   }
 
   finalizePsbt(signedPsbt: string): string {
-    return this.wallet.finalize_psbt(signedPsbt);
+    return this.wallet.finalizePsbt(signedPsbt);
   }
 }

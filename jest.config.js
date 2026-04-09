@@ -33,6 +33,7 @@ export default {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@noble/hashes/sha2$': '<rootDir>/node_modules/@noble/hashes/sha2.js',
+    '^@utexo/rgb-lib-wasm$': '<rootDir>/tests/__mocks__/rgb-lib-wasm.ts',
   },
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
   testTimeout: 30000, // Increased timeout for crypto operations

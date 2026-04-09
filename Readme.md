@@ -39,10 +39,15 @@ import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
 const keys = await generateKeys('testnet');
 
 const wallet = new UTEXOWallet(keys.mnemonic, { network: 'testnet' });
-await wallet.initialize(); 
+await wallet.initialize();
 
 const address = await wallet.getAddress();
 const balance = await wallet.getBtcBalance();
+
+// Optional: enable address reuse — getAddress() returns the same address on every call
+// instead of advancing the derivation index. Default: false.
+const reuseWallet = new UTEXOWallet(keys.mnemonic, { network: 'testnet', reuseAddresses: true });
+await reuseWallet.initialize();
 ```
 
 ---
@@ -79,7 +84,6 @@ const ifa = await wallet.issueAssetIfa({
   name: 'My IFA',
   amounts: [500],
   inflationAmounts: [1000],
-  replaceRightsNum: 1,
   precision: 0,
   rejectListUrl: null,
 });
@@ -144,6 +148,21 @@ const unsignedPsbt = await wallet.sendBtcBegin({
 const signedPsbt = await wallet.signPsbt(unsignedPsbt);
 const txid = await wallet.sendBtcEnd({ signedPsbt });
 ```
+
+### Address Reuse and Rotation
+
+By default, each call to `getAddress()` advances the derivation index so a fresh receive address is returned. Pass `reuseAddresses: true` to `WalletManager.create()` to keep returning the same address — useful for testing or scenarios where address rotation is handled externally.
+
+The address can be rotated manually at any time:
+
+```typescript
+// Advance to the next vanilla (BTC) receive address
+const newVanilla = await wallet.rotateVanillaAddress();
+
+// Advance to the next colored (RGB) receive address
+const newColored = await wallet.rotateColoredAddress();
+```
+
 
 ### Decode an RGB Invoice
 
@@ -222,6 +241,22 @@ await restoreUtxoWalletFromVss({
 
 ---
 
+## Consignment Validation
+
+```typescript
+import { validateConsignmentOffchain } from '@utexo/rgb-sdk-web';
+
+// Validate a consignment before the witness tx is broadcast (no indexer needed)
+const result = await validateConsignmentOffchain({
+  consignmentBytes: new Uint8Array(/* strict-encoded bytes */),
+  txid: 'the-witness-txid',
+  network: 'testnet',
+});
+console.log(result); // { valid: boolean, warnings?, error?, details? }
+```
+
+---
+
 ## Key Utilities
 
 ```typescript
@@ -284,10 +319,12 @@ Used automatically when no custom endpoint is passed:
 
 | Method | Description |
 |--------|-------------|
-| `WalletManager.create(params)` | Async factory — loads WASM, creates wallet |
+| `WalletManager.create(params)` | Async factory — loads WASM, creates wallet. Pass `reuseAddresses: true` to disable address rotation |
 | `goOnline(indexerUrl?)` | Connect to indexer (required before network ops) |
 | `registerWallet()` | Get initial address + BTC balance snapshot |
 | `getAddress()` | New Bitcoin deposit address |
+| `rotateVanillaAddress()` | Rotate to next vanilla (BTC) receive address |
+| `rotateColoredAddress()` | Rotate to next colored (RGB) receive address |
 | `getBtcBalance()` | BTC balance (`vanilla` + `colored`) |
 | `getXpub()` | Vanilla and colored xpubs |
 | `getNetwork()` | Current network name |
@@ -337,10 +374,11 @@ Used automatically when no custom endpoint is passed:
 
 ## TypeScript
 
-All public types are exported. The raw WASM JSON shapes (snake_case) are available under the `WasmJson` namespace:
+All public types are exported. The raw WASM JSON shapes are available under the `WasmJson` namespace. Fields use **camelCase** (the SDK is compiled with the `camel_case` Cargo feature):
 
 ```typescript
 import type { WasmJson } from '@utexo/rgb-sdk-web';
 
-type RawRecipient = WasmJson.Recipient;  // { recipient_id, assignment, ... }
+type RawRecipient = WasmJson.Recipient;  // { recipientId, witnessData, assignment, transportEndpoints }
+type RawInvoice   = WasmJson.InvoiceData; // { recipientId, assetId, assignment, transportEndpoints, ... }
 ```

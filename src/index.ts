@@ -51,6 +51,9 @@ export type {
 } from './crypto/signer';
 export type { GeneratedKeys, AccountXpubs } from '@utexo/rgb-sdk-core';
 
+// Consignment validation
+export { validateConsignmentOffchain } from './binding/WasmRgbLibBinding';
+
 // Function exports
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
 export {

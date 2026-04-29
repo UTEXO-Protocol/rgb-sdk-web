@@ -335,7 +335,7 @@ export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
   testnet4: 'https://esplora-testnet4.utexo.com',
   signet: 'ssl://electrum.iriswallet.com:50033',
   utexo: 'https://esplora-api.utexo.com',
-  regtest: 'tcp://regtest.thunderstack.org:50001',
+  regtest: 'http://127.0.0.1:3002',
 };
 
 // ─── Main class ───────────────────────────────────────────────────────────────

@@ -31,6 +31,29 @@ export type {
 
 // WASM initializer — call once before using any wallet APIs
 export { initWasm } from './wasm/init';
+// RLN WASM initializer — call once before using any RLN APIs
+export { initRlnWasm } from './wasm/initRln';
+
+// RLN binding (low-level)
+export { RlnWasmBinding } from './binding/RlnWasmBinding';
+export type { RlnBindingCreateParams } from './binding/RlnWasmBinding';
+
+// RLN network defaults
+export { DEFAULT_RLN_URLS, getRlnUrls } from './binding/RlnDefaults';
+export type { RlnNetworkUrls } from './binding/RlnDefaults';
+
+// RLN wallet manager
+export { RlnWalletManager, createRlnWalletManager } from './wallet/rln-wallet-manager';
+export type { RlnWalletInitParams } from './wallet/rln-wallet-manager';
+
+// RLN Lightning node binding
+export { RlnNodeBinding } from './lightning/RlnNodeBinding';
+
+// RLN unified wallet (RGB + Lightning)
+export { RlnUTEXOWallet } from './utexo/rln-utexo-wallet';
+
+// RLN interface types (re-exported from core for convenience)
+export type { IRlnWalletBinding, IRlnNodeBinding, IRlnSdkBinding } from '@utexo/rgb-sdk-core';
 
 /** rgb-lib WASM serde JSON shapes (snake_case). Use `WasmJson.Recipient`, etc. */
 export type * as WasmJson from './binding/WasmTypes';

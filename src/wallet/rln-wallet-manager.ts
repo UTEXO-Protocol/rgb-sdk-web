@@ -8,7 +8,7 @@
 import { BaseWalletManager, deriveKeysFromMnemonic } from '@utexo/rgb-sdk-core';
 import { ValidationError } from '@utexo/rgb-sdk-core';
 import type { WalletInitParams, SendAssetBeginRequestModel, SendResult, SendBtcBeginRequestModel } from '@utexo/rgb-sdk-core';
-import type { IRlnNodeBinding, SendRgbFromGroupsRequest, SendRgbFromGroupsResult } from '@utexo/rgb-sdk-core';
+import type { IRlnNodeBinding, SendRgbFromGroupsRequest, SendRgbFromGroupsResult } from '../rln';
 import { RlnWasmBinding } from '../binding/RlnWasmBinding';
 import type { RlnBindingCreateParams } from '../binding/RlnWasmBinding';
 import { RlnSigner } from '../signer/RlnSigner';

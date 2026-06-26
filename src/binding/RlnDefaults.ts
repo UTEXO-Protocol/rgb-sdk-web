@@ -25,3 +25,13 @@ export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
 export function getRlnUrls(network: string): RlnNetworkUrls | undefined {
   return (DEFAULT_RLN_URLS as Record<string, RlnNetworkUrls>)[network];
 }
+
+/** Default Esplora/Electrum indexer URLs per network (used by goOnline). */
+export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
+  mainnet: 'https://esplora-mainnet.utexo.com',
+  testnet: 'https://esplora-testnet3.utexo.com',
+  testnet4: 'https://esplora-testnet4.utexo.com',
+  signet: 'ssl://electrum.iriswallet.com:50033',
+  utexo: 'https://esplora-api.utexo.com',
+  regtest: 'http://127.0.0.1:3002',
+};

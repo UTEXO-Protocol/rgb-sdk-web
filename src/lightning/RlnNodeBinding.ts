@@ -1,13 +1,13 @@
 /**
- * RlnNodeBinding — IRlnNodeBinding implementation using RlnWasmSdkNodeHandle.
+ * RlnNodeBinding — IRlnNodeBinding implementation using RlnWasmNode.
  *
  * All methods delegate to nodeHandle.*Json() / *Value() and normalize output
  * to the canonical rln-model.ts types.
  */
 
-import type { RlnWasmSdkNodeHandle } from 'rln-wasm-sdk';
-import type { IRlnNodeBinding } from '@utexo/rgb-sdk-core';
+import type { RlnWasmNode } from 'rln-wasm-sdk';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
+import type { IRlnNodeBinding } from '../rln';
 import type {
   IssueAssetNiaRequest,
   IssueAssetCfaRequest,
@@ -30,7 +30,7 @@ import type {
   HodlInvoiceResult,
   PaymentStatusUpdate,
   ListRuntimeEventsResult,
-} from '@utexo/rgb-sdk-core';
+} from '../rln';
 import type {
   RlnRawAssetNia,
   RlnRawAssetCfa,
@@ -148,9 +148,9 @@ function normalizeNetworkInfo(raw: RlnRawNetworkInfo): LightningNetworkInfo {
 // ─── Main class ───────────────────────────────────────────────────────────────
 
 export class RlnNodeBinding implements IRlnNodeBinding {
-  private readonly nodeHandle: RlnWasmSdkNodeHandle;
+  private readonly nodeHandle: RlnWasmNode;
 
-  constructor(nodeHandle: RlnWasmSdkNodeHandle) {
+  constructor(nodeHandle: RlnWasmNode) {
     this.nodeHandle = nodeHandle;
   }
 

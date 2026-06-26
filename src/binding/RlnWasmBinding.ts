@@ -2,22 +2,24 @@
  * RlnWasmBinding — browser WASM implementation of IRlnSdkBinding.
  *
  * Uses rln-wasm-sdk exclusively (no rgb-lib-wasm dependency).
- * A single RlnWasmWallet handles all wallet operations; a RlnWasmSdkNodeHandle
- * (with wallet attached) handles Lightning + asset issuance.
+ * A single RlnWasmWallet handles all wallet operations; a RlnWasmNode
+ * (with wallet attached) handles Lightning + asset issuance. The direct node
+ * object is used (not RlnWasmSdkNodeHandle) because HODL-invoice and
+ * fail-pending-payment operations are only exposed on RlnWasmNode.
  */
 
 import {
   RlnWasmSdk,
   RlnWasmWallet,
-  RlnWasmSdkNodeHandle,
+  RlnWasmNode,
   RlnWasmInvoice,
   rgbRestoreKeysValue,
 } from 'rln-wasm-sdk';
 import { initRlnWasm } from '../wasm/initRln';
 import { ValidationError, WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
-import { DEFAULT_INDEXER_URLS } from './WasmRgbLibBinding';
-import type { IRlnSdkBinding } from '@utexo/rgb-sdk-core';
-import type { IRlnNodeBinding } from '@utexo/rgb-sdk-core';
+import { DEFAULT_INDEXER_URLS } from './RlnDefaults';
+import type { IRlnSdkBinding } from '../rln';
+import type { IRlnNodeBinding } from '../rln';
 import type {
   BtcBalance,
   Unspent,
@@ -60,7 +62,7 @@ import type {
   SwapMakerInitParams,
   SwapMakerInitResult,
   SwapInfo,
-} from '@utexo/rgb-sdk-core';
+} from '../rln';
 import type {
   RlnWalletData,
   RlnOnline,
@@ -306,7 +308,7 @@ function sdkRecipientMapToRln(map: RecipientMap) {
 export class RlnWasmBinding implements IRlnSdkBinding {
   private readonly sdk: RlnWasmSdk;
   private readonly wallet: RlnWasmWallet;
-  private nodeHandle: RlnWasmSdkNodeHandle | null;
+  private nodeHandle: RlnWasmNode | null;
   private rlnNode: IRlnNodeBinding | null;
   private online: RlnOnline | null = null;
   private lastBackupBytes: Uint8Array | null = null;
@@ -315,7 +317,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   private constructor(
     sdk: RlnWasmSdk,
     wallet: RlnWasmWallet,
-    nodeHandle: RlnWasmSdkNodeHandle | null,
+    nodeHandle: RlnWasmNode | null,
     rlnNode: IRlnNodeBinding | null,
     defaultIndexerUrl: string
   ) {
@@ -386,15 +388,15 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     console.log('[RLN] createWallet start, data_dir:', walletData.data_dir);
 
     // Create node handle BEFORE wallet (matches official RLN init sequence).
-    let nodeHandle: RlnWasmSdkNodeHandle | null = null;
+    let nodeHandle: RlnWasmNode | null = null;
     let rlnNode: IRlnNodeBinding | null = null;
 
     const proxyUrl = params.proxyUrl ?? params.transportEndpoint;
     if (proxyUrl) {
       const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
       nodeHandle = params.nodeRuntimeId
-        ? sdk.createNodeHandleWithRuntimeId(proxyUrl, params.nodeRuntimeId)
-        : sdk.createNodeHandle(proxyUrl);
+        ? sdk.newNodeWithRuntimeId(proxyUrl, params.nodeRuntimeId)
+        : sdk.newNode(proxyUrl);
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
 

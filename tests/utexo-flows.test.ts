@@ -145,4 +145,14 @@ describe('UTEXOWallet API', () => {
       'cancelHodlInvoice',
     ].forEach(hasMethod);
   });
+
+  describe('APay + LSP', () => {
+    [
+      'apayNew',
+      'apayNewWithAddress',
+      'listPaymentsRaw',
+      'createLsp',
+      'getLspConfig',
+    ].forEach(hasMethod);
+  });
 });

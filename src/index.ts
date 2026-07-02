@@ -47,12 +47,32 @@ export { RlnNodeBinding } from './lightning/RlnNodeBinding';
 export type { IRlnWalletBinding, IRlnNodeBinding, IRlnSdkBinding } from './rln';
 export type * from './types/rln-model';
 
+// ── LSP (utexo-lsp) — APay, Lightning Address, RGB↔LN bridge flows ────────────
+export { UtexoLsp } from './lsp/UtexoLsp';
+export type {
+  WaitOptions,
+  ReceiveAssetOptions,
+  ReceiveAssetResult,
+  SendAssetOptions,
+  SendAssetResult,
+  PayAddressOptions,
+  LightningAddressInfo,
+  ClaimResult,
+} from './lsp/UtexoLsp';
+export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
+export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
+export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+export { peerUri, normalizeReceiveStatus } from './lsp/lsp-types';
+export type * from './lsp/lsp-types';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 export * from './types/rgb-model';
 export type {
   TransferStatus,
   BridgeTransferStatus,
   OnchainSendStatus,
+  VssBackupConfig,
+  VssBackupInfo,
 } from '@utexo/rgb-sdk-core';
 export type {
   Network,

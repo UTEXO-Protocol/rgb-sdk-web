@@ -33,6 +33,10 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   dataDir?: string;
   /** Asset schemas to support (default: ['Nia', 'Ifa']) */
   supportedSchemas?: string[];
+  /** utexo-lsp HTTP base URL — enables `UTEXOWallet.createLsp()` auto-discovery. */
+  lspBaseUrl?: string;
+  /** Bearer token for utexo-lsp APay/internal routes. */
+  lspBearerToken?: string;
 }
 
 export class RlnWalletManager extends BaseWalletManager {
@@ -97,9 +101,28 @@ export class RlnWalletManager extends BaseWalletManager {
     await this.rlnBinding.connect(indexerUrl, skipConsistencyCheck);
   }
 
+  // Override BaseWalletManager: it calls binding.syncWallet()/refreshWallet()
+  // WITHOUT awaiting (the IRgbLibBinding signature is `void`). The RLN binding's
+  // sync/refresh hold a wasm RefCell borrow across an await, so they MUST be
+  // awaited or a following wallet op panics ("RefCell already borrowed").
+  async syncWallet(): Promise<void> {
+    await this.rlnBinding.syncWallet();
+  }
+
+  async refreshWallet(): Promise<void> {
+    await this.rlnBinding.refreshWallet();
+  }
+
   /** Returns the Lightning node binding, or null if no proxyUrl was configured. */
   getLightningNode(): IRlnNodeBinding | null {
     return this.rlnBinding.getLightningNode();
+  }
+
+  /** Attach the wallet to the LN node (otherwise lazy on first node use).
+   *  Call after on-chain wallet setup (funding/createUtxos) to avoid a
+   *  "RefCell already borrowed" panic from the node runtime. */
+  attachLightningNode(): void {
+    this.rlnBinding.attachLightningNode();
   }
 
   /** Returns the node's public key string, or null if no Lightning node is configured. */

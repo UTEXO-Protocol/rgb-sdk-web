@@ -225,6 +225,12 @@ export interface RlnRawChannel {
   is_active?: boolean;
   isActive?: boolean;
   ready?: boolean;
+  is_usable?: boolean;
+  isUsable?: boolean;
+  outbound_balance_msat?: number | bigint;
+  outboundBalanceMsat?: number | bigint;
+  inbound_balance_msat?: number | bigint;
+  inboundBalanceMsat?: number | bigint;
   asset_id?: string | null;
   assetId?: string | null;
   asset_local_amount?: number | bigint | null;

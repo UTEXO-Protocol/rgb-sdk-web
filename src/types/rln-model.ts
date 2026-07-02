@@ -34,6 +34,12 @@ export interface LightningChannel {
   remoteBalanceMsat: number;
   isPublic: boolean;
   isActive: boolean;
+  /** Channel is usable for routing (ready + peer connected). */
+  isUsable?: boolean;
+  /** Spendable outbound liquidity (our side). Falls back to localBalanceMsat. */
+  outboundBalanceMsat?: number;
+  /** Inbound liquidity (peer side). Falls back to remoteBalanceMsat. */
+  inboundBalanceMsat?: number;
   assetId?: string;
   assetLocalAmount?: number;
 }
@@ -165,6 +171,29 @@ export interface SendRgbFromGroupsResult {
 export interface RlnSdkInitParams {
   password: string;
   mnemonic?: string;
+}
+
+// ─── Async payments (APay) — node-side ────────────────────────────────────────
+
+export interface ApayHashEntry {
+  hashIndex: number;
+  paymentHash: string;
+}
+
+/** Response of node.apayNew / apayNewWithAddress (async_order.new acknowledgement). */
+export interface ApayNewResponse {
+  requestId: string;
+  hostNodeId: string;
+  protocolVersion: number;
+  orderId: string;
+  status: string;
+  acceptedThroughIndex: number;
+  nextIndexExpected: number;
+  unusedHashes: number;
+  refillBatchSize: number;
+  firstHashIndex: number;
+  lastHashIndex: number;
+  hashes: ApayHashEntry[];
 }
 
 // ─── Swaps ────────────────────────────────────────────────────────────────────

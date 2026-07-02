@@ -19,6 +19,7 @@ import type {
   ListRuntimeEventsResult,
   IssueAssetNiaRequest,
   IssueAssetCfaRequest,
+  ApayNewResponse,
 } from '../types/rln-model';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 
@@ -44,6 +45,8 @@ export interface IRlnNodeBinding {
   sendPayment(params: SendPaymentParams): Promise<SendPaymentResult>;
   keysend(params: KeysendParams): Promise<SendPaymentResult>;
   listPayments(): Promise<LightningPayment[]>;
+  /** Raw (un-normalized) payment records — includes fields like payment preimage. */
+  listPaymentsRaw(): Promise<unknown[]>;
   getPayment(paymentHash: string): Promise<LightningPayment | null>;
   invoiceStatus(invoice: string): Promise<InvoiceStatus>;
   failPendingPayments(): Promise<void>;
@@ -77,4 +80,14 @@ export interface IRlnNodeBinding {
 
   // ── Messaging ─────────────────────────────────────────────────────────────
   signMessage(message: string): Promise<string>;
+
+  // ── Async payments (APay) ─────────────────────────────────────────────────
+  /** Register a fresh batch of payment hashes with the invoice-host / LSP peer. */
+  apayNew(hostNodeId: string): Promise<ApayNewResponse>;
+  /** Like apayNew, but also attests a username@domain Lightning Address. */
+  apayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<ApayNewResponse>;
 }

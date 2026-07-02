@@ -30,6 +30,8 @@ import type {
   HodlInvoiceResult,
   PaymentStatusUpdate,
   ListRuntimeEventsResult,
+  ApayNewResponse,
+  ApayHashEntry,
 } from '../rln';
 import type {
   RlnRawAssetNia,
@@ -92,6 +94,13 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
     remoteBalanceMsat: Number(raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0),
     isPublic: Boolean(raw.is_public ?? raw.isPublic ?? raw.public),
     isActive: Boolean(raw.is_active ?? raw.isActive ?? raw.ready),
+    isUsable: Boolean(raw.is_usable ?? raw.isUsable ?? raw.is_active ?? raw.isActive ?? raw.ready),
+    outboundBalanceMsat: Number(
+      raw.outbound_balance_msat ?? raw.outboundBalanceMsat ?? raw.local_balance_msat ?? raw.localBalanceMsat ?? 0
+    ),
+    inboundBalanceMsat: Number(
+      raw.inbound_balance_msat ?? raw.inboundBalanceMsat ?? raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0
+    ),
     assetId: (raw.asset_id ?? raw.assetId ?? undefined) as string | undefined,
     assetLocalAmount: raw.asset_local_amount != null
       ? Number(raw.asset_local_amount ?? raw.assetLocalAmount)
@@ -142,6 +151,32 @@ function normalizeNetworkInfo(raw: RlnRawNetworkInfo): LightningNetworkInfo {
   return {
     network: String(raw.network ?? ''),
     blockHeight: Number(raw.block_height ?? raw.blockHeight ?? 0),
+  };
+}
+
+/** node.apayNewValue returns snake_case keys (serde) — normalize to ApayNewResponse. */
+function normalizeApayResponse(raw: unknown): ApayNewResponse {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const pick = (camel: string, snake: string): unknown => r[camel] ?? r[snake];
+  const hashes = (pick('hashes', 'hashes') ?? []) as Array<Record<string, unknown>>;
+  return {
+    requestId: String(pick('requestId', 'request_id') ?? ''),
+    hostNodeId: String(pick('hostNodeId', 'host_node_id') ?? ''),
+    protocolVersion: Number(pick('protocolVersion', 'protocol_version') ?? 0),
+    orderId: String(pick('orderId', 'order_id') ?? ''),
+    status: String(r.status ?? ''),
+    acceptedThroughIndex: Number(pick('acceptedThroughIndex', 'accepted_through_index') ?? 0),
+    nextIndexExpected: Number(pick('nextIndexExpected', 'next_index_expected') ?? 0),
+    unusedHashes: Number(pick('unusedHashes', 'unused_hashes') ?? 0),
+    refillBatchSize: Number(pick('refillBatchSize', 'refill_batch_size') ?? 0),
+    firstHashIndex: Number(pick('firstHashIndex', 'first_hash_index') ?? 0),
+    lastHashIndex: Number(pick('lastHashIndex', 'last_hash_index') ?? 0),
+    hashes: hashes.map(
+      (h): ApayHashEntry => ({
+        hashIndex: Number(h.hashIndex ?? h.hash_index ?? 0),
+        paymentHash: String(h.paymentHash ?? h.payment_hash ?? ''),
+      })
+    ),
   };
 }
 
@@ -245,6 +280,10 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   async listPayments(): Promise<LightningPayment[]> {
     const raw = parseJson<RlnRawPayment[]>(this.nodeHandle.listPaymentsJson());
     return raw.map(normalizePayment);
+  }
+
+  async listPaymentsRaw(): Promise<unknown[]> {
+    return parseJson<unknown[]>(this.nodeHandle.listPaymentsJson());
   }
 
   async getPayment(paymentHash: string): Promise<LightningPayment | null> {
@@ -393,5 +432,21 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   async signMessage(message: string): Promise<string> {
     const raw = parseJson<{ signature?: string }>(this.nodeHandle.signMessageJson(message));
     return String(raw.signature ?? '');
+  }
+
+  // ── Async payments (APay) ────────────────────────────────────────────────────
+
+  async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
+    return normalizeApayResponse(await this.nodeHandle.apayNewValue(hostNodeId));
+  }
+
+  async apayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<ApayNewResponse> {
+    return normalizeApayResponse(
+      await this.nodeHandle.apayNewWithAddressValue(hostNodeId, username, domain)
+    );
   }
 }

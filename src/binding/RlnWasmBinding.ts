@@ -311,6 +311,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   private nodeHandle: RlnWasmNode | null;
   private rlnNode: IRlnNodeBinding | null;
   private online: RlnOnline | null = null;
+  private nodeAttached = false;
   private lastBackupBytes: Uint8Array | null = null;
   private readonly defaultIndexerUrl: string;
 
@@ -394,25 +395,49 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     const proxyUrl = params.proxyUrl ?? params.transportEndpoint;
     if (proxyUrl) {
       const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
-      nodeHandle = params.nodeRuntimeId
-        ? sdk.newNodeWithRuntimeId(proxyUrl, params.nodeRuntimeId)
-        : sdk.newNode(proxyUrl);
+      // Use the STANDALONE node constructor (static newWithNodeRuntimeId), not
+      // sdk.newNode(): the latter binds the node to the SDK facade and
+      // auto-attaches the SDK default wallet, which then conflicts (shared
+      // RefCell) with our standalone RlnWasmWallet. The official examples always
+      // build the node this way. A stable runtimeId (master fingerprint) keeps
+      // the node identity + persisted runtime state stable across reloads.
+      const runtimeId = params.nodeRuntimeId ?? keys.master_fingerprint;
+      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(proxyUrl, runtimeId);
+      // Enable virtual channels v0 ON THE NODE (the SDK-default flag does not
+      // propagate to a standalone node). Required to accept the LSP's virtual
+      // channels (trusted_no_broadcast, dust_limit_satoshis=1); without it LDK
+      // rejects the open with "dust_limit_satoshis (1) is less than the
+      // implementation limit (354)".
+      if (params.enableVirtualChannels ?? true) {
+        try {
+          nodeHandle.setEnableVirtualChannelsV0(true);
+        } catch (e) {
+          logger.warn('RlnWasmBinding: setEnableVirtualChannelsV0 failed', e);
+        }
+      }
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
 
     let wallet: RlnWasmWallet;
     try {
-      wallet = await sdk.createWallet(JSON.stringify(walletData));
+      // Use the STANDALONE wallet (static RlnWasmWallet.create), not
+      // sdk.createWallet(): the latter returns an SDK-managed handle whose ops
+      // route through the SDK facade and re-borrow the same RefCell the node's
+      // ldk-over-websocket runtime holds → "RefCell already borrowed" panic on
+      // any wallet call (getBtcBalanceValue, etc). The official example uses the
+      // standalone wallet for exactly this reason.
+      wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
       console.log('[RLN] createWallet ok');
     } catch (e) {
       console.error('[RLN] createWallet failed:', String(e));
       throw e;
     }
 
-    if (nodeHandle) {
-      nodeHandle.attachWallet(wallet);
-      console.log('[RLN] wallet attached', nodeHandle.nodeInfoValue());
-    }
+    // NOTE: the wallet is attached to the node in connect(), AFTER goOnline().
+    // Attaching here (while the node's ldk-over-websocket runtime is already
+    // running) and then calling wallet.goOnlineValue() re-enters a shared
+    // RefCell and panics ("RefCell already borrowed", sdk_facade.rs). The
+    // official example always goes online first, then attaches.
 
     const normalizedNet = normalizeNetwork(params.network);
     const defaultIndexerUrl =
@@ -448,7 +473,50 @@ export class RlnWasmBinding implements IRlnSdkBinding {
    *  entry for the wallet's network (same behaviour as WasmRgbLibBinding). */
   async connect(indexerUrl?: string, skipConsistencyCheck = false): Promise<void> {
     const url = indexerUrl || this.defaultIndexerUrl;
+    console.log('[RLN] goOnline start', { url, skipConsistencyCheck });
     this.online = await this.wallet.goOnlineValue(skipConsistencyCheck, url);
+    console.log('[RLN] goOnline ok');
+    // NOTE: the wallet is NOT attached to the node here. Once attached, the
+    // node's running ldk-over-websocket runtime borrows the shared wallet
+    // RefCell on its ticks; a concurrent foreground wallet op (getBtcBalance
+    // during funding, etc.) then panics with "RefCell already borrowed". Attach
+    // is deferred until the LN node is actually used (ensureNodeAttached), which
+    // is after on-chain wallet setup. Likewise chain sync is opt-in
+    // (startNodeChainSync), never auto-started.
+  }
+
+  /**
+   * Attach the wallet to the LN node on first use. Deferred from connect() so
+   * that on-chain wallet operations (funding, createUtxos) run while the node
+   * does not yet share the wallet's RefCell. Idempotent.
+   */
+  private ensureNodeAttached(): void {
+    if (this.nodeHandle && !this.nodeAttached) {
+      this.nodeHandle.attachWallet(this.wallet);
+      this.nodeAttached = true;
+      console.log('[RLN] wallet attached to node', this.nodeHandle.nodeInfoValue());
+    }
+  }
+
+  /** Explicitly attach the wallet to the LN node (otherwise lazy on first use). */
+  attachLightningNode(): void {
+    this.ensureNodeAttached();
+  }
+
+  /**
+   * Start the node's background chain-sync loop (drives LN channel funding
+   * confirmations). Call this only once on-chain wallet setup (funding,
+   * createUtxos) is done — running it concurrently with wallet operations
+   * panics the wasm ("RefCell already borrowed").
+   */
+  startNodeChainSync(indexerUrl?: string, pollIntervalMs = 3_600_000): void {
+    if (!this.nodeHandle) return;
+    const url = indexerUrl || this.defaultIndexerUrl;
+    try {
+      this.nodeHandle.chainSyncStartValue(url, pollIntervalMs);
+    } catch (e) {
+      logger.warn('RlnWasmBinding: chainSyncStart failed', e);
+    }
   }
 
   private requireOnline(): RlnOnline {
@@ -519,6 +587,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
         'issueAssetNia'
       );
     }
+    this.ensureNodeAttached();
     const raw = this.nodeHandle.issueAssetNiaValue({
       ticker: params.ticker,
       name: params.name,
@@ -535,6 +604,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
         'issueAssetIfa'
       );
     }
+    this.ensureNodeAttached();
     // IFA → CFA mapping (RLN uses CFA schema for fungible assets with inflation)
     const raw = this.nodeHandle.issueAssetCfaValue({
       name: params.name,
@@ -681,6 +751,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
     if (this.nodeHandle) {
+      this.ensureNodeAttached();
       const raw = parseJson<Record<string, unknown>>(
         this.nodeHandle.decodeRgbInvoiceJson(params.invoice)
       );
@@ -714,18 +785,28 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     );
   }
 
-  refreshWallet(): void {
+  // NOTE: these MUST await the underlying wallet call. The wasm wallet holds a
+  // RefCell borrow across the await inside syncOnline/refreshJson; if we fire
+  // them without awaiting (fire-and-forget) and a subsequent wallet op
+  // (getBtcBalance, etc.) runs before they settle, the wasm panics with
+  // "RefCell already borrowed". (The IRgbLibBinding signature is `void`, but a
+  // Promise-returning impl is structurally compatible and lets callers await.)
+  async refreshWallet(): Promise<void> {
     if (!this.online) return;
-    this.wallet.refreshJson(this.online, null, null, false).catch((e) => {
+    try {
+      await this.wallet.refreshJson(this.online, null, null, false);
+    } catch (e) {
       logger.warn('RlnWasmBinding.refreshWallet error', e);
-    });
+    }
   }
 
-  syncWallet(): void {
+  async syncWallet(): Promise<void> {
     if (!this.online) return;
-    this.wallet.syncOnline(this.online).catch((e) => {
+    try {
+      await this.wallet.syncOnline(this.online);
+    } catch (e) {
       logger.warn('RlnWasmBinding.syncWallet error', e);
-    });
+    }
   }
 
   // ── Fee & Backup ──────────────────────────────────────────────────────────
@@ -839,6 +920,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   getLightningNode(): IRlnNodeBinding | null {
+    // Lazily attach the wallet to the node the first time the LN node is
+    // accessed (after on-chain wallet setup), avoiding the RefCell conflict.
+    this.ensureNodeAttached();
     return this.rlnNode;
   }
 

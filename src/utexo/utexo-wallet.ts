@@ -63,6 +63,9 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import { RlnWalletManager } from '../wallet/rln-wallet-manager';
 import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
+import { UtexoLsp } from '../lsp/UtexoLsp';
+import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
+import type { LspPeer } from '../lsp/lsp-types';
 import type {
   IRlnNodeBinding,
   IssueAssetCfaRequest,
@@ -81,6 +84,7 @@ import type {
   SendPaymentResult,
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
+  ApayNewResponse,
 } from '../rln';
 
 export type { RlnWalletInitParams as UTEXOWalletCreateParams };
@@ -119,14 +123,26 @@ function mapPaymentStatus(
 
 export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   private readonly manager: RlnWalletManager;
+  private readonly lspBaseUrl: string | null;
+  private readonly lspBearerToken: string | null;
 
-  private constructor(manager: RlnWalletManager) {
+  private constructor(
+    manager: RlnWalletManager,
+    lspBaseUrl: string | null,
+    lspBearerToken: string | null
+  ) {
     this.manager = manager;
+    this.lspBaseUrl = lspBaseUrl;
+    this.lspBearerToken = lspBearerToken;
   }
 
   static async create(params: RlnWalletInitParams): Promise<UTEXOWallet> {
     const manager = await RlnWalletManager.create(params);
-    return new UTEXOWallet(manager);
+    return new UTEXOWallet(
+      manager,
+      params.lspBaseUrl ?? null,
+      params.lspBearerToken ?? null
+    );
   }
 
   // ── IWalletManager — Lifecycle ─────────────────────────────────────────────
@@ -504,6 +520,13 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.manager.getLightningNode();
   }
 
+  /** Attach the wallet to the LN node. Call after on-chain setup (funding /
+   *  createUtxos) and before Lightning operations; otherwise it attaches lazily
+   *  on first node use. Avoids a "RefCell already borrowed" wasm panic. */
+  attachLightningNode(): void {
+    this.manager.attachLightningNode();
+  }
+
   /** The node's public key, or null if no Lightning node is configured. */
   getNodePubkey(): string | null {
     return this.manager.getNodePubkey();
@@ -588,6 +611,64 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
     return this.requireNode().cancelHodlInvoice(paymentHash);
+  }
+
+  // ── Async payments (APay) ──────────────────────────────────────────────────
+
+  /** Register a fresh batch of payment hashes with the invoice-host / LSP peer. */
+  apayNew(hostNodeId: string): Promise<ApayNewResponse> {
+    return this.requireNode().apayNew(hostNodeId);
+  }
+
+  /** Like apayNew, but also attests a username@domain Lightning Address. */
+  apayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<ApayNewResponse> {
+    return this.requireNode().apayNewWithAddress(hostNodeId, username, domain);
+  }
+
+  /** Raw payment records (incl. preimage) — used by LSP HODL-claim flows. */
+  listPaymentsRaw(): Promise<unknown[]> {
+    return this.requireNode().listPaymentsRaw();
+  }
+
+  // ── LSP (utexo-lsp composed flows) ─────────────────────────────────────────
+
+  /** The lspBaseUrl / bearer token this wallet was created with. */
+  getLspConfig(): { baseUrl: string | null; bearerToken: string | null } {
+    return { baseUrl: this.lspBaseUrl, bearerToken: this.lspBearerToken };
+  }
+
+  /**
+   * Build a {@link UtexoLsp} for composed LSP flows (receive/send asset, pay
+   * address, APay Lightning Address). With an explicit `peer`, uses it directly;
+   * otherwise auto-discovers the peer from the configured `lspBaseUrl` via
+   * `GET /get_info`.
+   */
+  async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
+    if (peer) return new UtexoLsp(this, peer);
+
+    const baseUrl = this.lspBaseUrl;
+    if (!baseUrl) {
+      throw new Error(
+        'createLsp: no peer provided and no lspBaseUrl configured. Pass lspBaseUrl ' +
+          'to UTEXOWallet.create(), or call createLsp(peer).'
+      );
+    }
+    const http = new UtexoLSPClient({
+      baseUrl,
+      bearerToken: this.lspBearerToken ?? undefined,
+    });
+    const info = await http.getInfo();
+    return new UtexoLsp(this, {
+      baseUrl,
+      peerPubkey: info.pubkey,
+      peerHost: new URL(baseUrl).hostname,
+      peerPort,
+      bearerToken: this.lspBearerToken ?? undefined,
+    });
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

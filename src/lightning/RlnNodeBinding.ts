@@ -515,7 +515,12 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   async nodeInfo(): Promise<LightningNodeInfo> {
     const raw = parseJson<RlnRawNodeInfo>(this.nodeHandle.nodeInfoJson());
-    return normalizeNodeInfo(raw);
+    const info = normalizeNodeInfo(raw);
+    // wasm nodeInfoJson carries runtime/channel counters but no pubkey — fill
+    // it from the dedicated nodePubkeyJson getter so consumers relying on
+    // getNodeInfo().pubkey (enableLightningAddress, refillHashPool) work.
+    if (!info.pubkey) info.pubkey = this.nodePubkey();
+    return info;
   }
 
   async networkInfo(): Promise<LightningNetworkInfo> {
@@ -578,8 +583,18 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     username: string,
     domain: string
   ): Promise<ApayNewResponse> {
-    return normalizeApayResponse(
-      await this.nodeHandle.apayNewWithAddressValue(hostNodeId, username, domain)
+    // TEMP debug logging — remove after APay wasm verification.
+    console.debug('[rgb-sdk-web][apay:tmp] apayNewWithAddress →', {
+      hostNodeId,
+      username,
+      domain,
+    });
+    const raw = await this.nodeHandle.apayNewWithAddressValue(
+      hostNodeId,
+      username,
+      domain
     );
+    console.debug('[rgb-sdk-web][apay:tmp] apayNewWithAddress ← raw', raw);
+    return normalizeApayResponse(raw);
   }
 }

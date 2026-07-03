@@ -145,11 +145,14 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     }
   }
 
+  // The LNURL callback the LSP advertises is its own public URL. Strip it to
+  // path+query so request() rebases it onto this client's baseUrl exactly once
+  // — that keeps it on the same proxy path as every other call, and works for
+  // both absolute baseUrls and relative prefixes like "/lsp" (Vite dev proxy).
   private rewriteCallbackUrl(callbackUrl: string): string {
     try {
-      const base = new URL(this.config.baseUrl);
       const cb = new URL(callbackUrl);
-      return base.origin + cb.pathname + cb.search + cb.hash;
+      return cb.pathname + cb.search + cb.hash;
     } catch {
       return callbackUrl;
     }

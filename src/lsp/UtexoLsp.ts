@@ -281,15 +281,48 @@ export class UtexoLsp {
 
     let invoice: string | undefined;
 
-    try {
-      const cb = await this.http.resolveAddress(
-        username,
-        opts.amtMsat,
-        opts.asset?.assetId,
-        opts.asset?.assetAmount
+    // TEMP debug logging — remove after APay wasm verification.
+    console.debug('[rgb-sdk-web][apay:tmp] payAddress →', {
+      username,
+      domain,
+      amtMsat: opts.amtMsat,
+      asset: opts.asset,
+    });
+    // LNURL resolution is an idempotent GET; a freshly (re)started LSP can 404
+    // for a beat while its cron provisions the address account. Retry before
+    // falling back.
+    let resolveErr: unknown;
+    for (let attempt = 1; attempt <= 3 && !invoice; attempt++) {
+      try {
+        const cb = await this.http.resolveAddress(
+          username,
+          opts.amtMsat,
+          opts.asset?.assetId,
+          opts.asset?.assetAmount
+        );
+        invoice = cb.pr;
+        console.debug('[rgb-sdk-web][apay:tmp] resolveAddress (LSP http) ← pr =', invoice);
+      } catch (err) {
+        resolveErr = err;
+        console.debug(
+          `[rgb-sdk-web][apay:tmp] resolveAddress attempt ${attempt}/3 failed:`,
+          err
+        );
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    if (!invoice) {
+      // The https:// LNURL fallback can never work for local/dev domains — it
+      // would only mask the real error.
+      if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(domain)) {
+        throw resolveErr instanceof Error
+          ? resolveErr
+          : new Error(String(resolveErr));
+      }
+      console.debug(
+        '[rgb-sdk-web][apay:tmp] resolveAddress failed, falling back to https LNURL:',
+        resolveErr
       );
-      invoice = cb.pr;
-    } catch {
       const meta = (await fetch(
         `https://${domain}/.well-known/lnurlp/${encodeURIComponent(username)}`
       ).then((r) => r.json())) as { callback: string };
@@ -310,6 +343,8 @@ export class UtexoLsp {
     const sendResult = await this.wallet.payLightningInvoice({
       lnInvoice: invoice,
     });
+    // TEMP debug logging — remove after APay wasm verification.
+    console.debug('[rgb-sdk-web][apay:tmp] payAddress ← sendResult =', sendResult);
     return { invoice, sendResult };
   }
 
@@ -323,15 +358,20 @@ export class UtexoLsp {
   async enableLightningAddress(): Promise<LightningAddressInfo> {
     const nodeInfo = await this.wallet.getNodeInfo();
     const pubkey = String(nodeInfo?.pubkey ?? '');
+    // TEMP debug logging — remove after APay wasm verification.
+    console.debug('[rgb-sdk-web][apay:tmp] enableLightningAddress: own pubkey =', pubkey);
     if (!pubkey) throw new Error('enableLightningAddress: wallet not unlocked');
 
     const lspInfo = await this.http.getInfo();
+    console.debug('[rgb-sdk-web][apay:tmp] LSP get_info pubkey =', lspInfo.pubkey);
     const addr = await this.resolveLightningAddress(pubkey);
+    console.debug('[rgb-sdk-web][apay:tmp] resolved address =', addr);
     const pool = await this.wallet.apayNewWithAddress(
       lspInfo.pubkey,
       addr.username,
       addr.domain
     );
+    console.debug('[rgb-sdk-web][apay:tmp] apay pool =', pool);
 
     return {
       username: addr.username,
@@ -354,8 +394,17 @@ export class UtexoLsp {
       try {
         const addr = await this.http.getLightningAddressByPubkey(pubkey);
         if (addr?.username && addr?.domain) return addr;
+        // TEMP debug logging — remove after APay wasm verification.
+        console.debug(
+          `[rgb-sdk-web][apay:tmp] resolveLightningAddress attempt ${i + 1}/${attempts}: incomplete`,
+          addr
+        );
       } catch (e) {
         lastErr = e;
+        console.debug(
+          `[rgb-sdk-web][apay:tmp] resolveLightningAddress attempt ${i + 1}/${attempts} failed:`,
+          e
+        );
       }
       await new Promise((r) => setTimeout(r, delayMs));
     }

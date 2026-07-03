@@ -2,7 +2,9 @@
 
 **Component:** `rln-wasm-sdk` (`rgb-lightning-node/bindings/wasm-sdk`) → consumed by `@utexo/rgb-sdk-web`
 **Priority:** High — blocks the LSP/APay flow in the browser (`/lsp-apay`)
-**Status:** root cause identified; fix NOT implemented
+**Status:** **FIXED (2026-07-02)** — implemented in `bindings/wasm-sdk` + a companion fix in
+`rgb-sdk-web`; see [Implemented fix](#implemented-fix-2026-07-02) at the bottom. The analysis
+below is kept as-is for reference.
 
 ---
 
@@ -146,7 +148,7 @@ enabling manual accept and tailoring the config to each LSP proposal.
 
 ---
 
-## What needs to be done (the fix)
+## What needs to be done (the fix — as originally proposed; now implemented, see bottom)
 
 In `bindings/wasm-sdk/src/ldk_live_backend.rs`, bring the config/logic in line with the native node:
 
@@ -184,5 +186,100 @@ rust-lightning does not need to be touched.
 
 ---
 
-*Related document: [LSP_VIRTUAL_CHANNEL_ACCEPT_BUG.md](./LSP_VIRTUAL_CHANNEL_ACCEPT_BUG.md)*
-*Ukrainian version: [LSP_ACCEPT_PROBLEM.md](./LSP_ACCEPT_PROBLEM.md)*
+---
+
+## Implemented fix (2026-07-02)
+
+All changes live in `rgb-lightning-node/bindings/wasm-sdk` (the native node, uniffi
+bindings, and the pinned rust-lightning fork are untouched, as predicted — every needed
+primitive already existed in rev `3313e10d`), plus one companion fix in `rgb-sdk-web`.
+
+### 1. UserConfig — `ldk_live_backend.rs` (the two missing lines)
+
+```rust
+user_config.channel_handshake_limits.force_announced_channel_preference = false;
+user_config.manually_accept_inbound_channels = true;
+```
+
+Mirrors native `src/ldk.rs:4119/4124`. The first accepts announced ("public") regular
+opens; the second routes every inbound open through `Event::OpenChannelRequest`.
+
+### 2. `Event::OpenChannelRequest` handler — `ldk_live_backend.rs` (`handle_ldk_event_sync`)
+
+Ported from native `src/ldk.rs:2436-2520`:
+
+- **virtual channels enabled AND the proposed `channel_type` has `scid_privacy`** (the
+  LSP's `trusted_no_broadcast` opens negotiate it via `negotiate_scid_privacy:
+  is_virtual_open` in native `routes.rs:4188`; the fork advertises `scid_privacy_optional`
+  unconditionally, so the wasm peer qualifies) →
+  `accept_inbound_channel_from_trusted_peer_0conf(…, ChannelFundingType::Virtual)` —
+  this flips `is_virtual=true`, so the dust floor is `VIRTUAL_DUST_LIMIT_SATOSHIS = 1`
+  and the LSP's dust=1 open passes.
+- **anything else** → stock `accept_inbound_channel(…)`.
+
+**Deliberate divergence from native:** native force-closes non-scid-privacy inbound opens
+when virtual channels are enabled; the wasm handler instead falls back to plain accept,
+because the wasm node must keep accepting ordinary private channels for the existing
+native→wasm interop flows (`run_multihop_flow`, `run_e2e_full_flow`). Native's
+`virtual_peer_pubkeys` trust list is not ported; semantics match native with an *empty*
+list (trust any peer) — acceptable for the regtest demo SDK, add a trust list later if
+needed.
+
+### 3. Flag plumbing — `ldk_live_backend.rs` + `ln_node.rs`
+
+`setEnableVirtualChannelsV0` previously only flipped a `RefCell` inside `RlnWasmNode`
+that the LDK backend never read (the old comment in `RlnWasmBinding.ts` claiming it
+enabled accepting LSP virtual channels was wrong). Now a per-runtime-key registry
+(`VIRTUAL_CHANNELS_V0_REGISTRY`, same thread-local pattern as the RGB wallet registry)
+is written from `RlnWasmNode::setEnableVirtualChannelsV0` **and** on node construction
+(restored flag), and read by the backend's `OpenChannelRequest` handler.
+
+### 4. Channel-view enrichment — `list_live_channels` / reconcile
+
+Needed so the accepted channel is *visible correctly*, not just open:
+
+- `asset_id` / `asset_local_amount` are now read from the RGB kv store
+  (`read_rgb_channel_info`; `contract_id.to_string()` is the canonical asset id) for
+  every live channel. Previously they came only from the local outbound-open cache, so
+  inbound/LSP-opened channels listed with `asset_id: null` and
+  `UtexoLsp.waitForChannel(assetId)` could never match.
+- `outbound_balance_msat` / `inbound_balance_msat` are now exposed from live
+  `ChannelDetails` (`outbound/inbound_capacity_msat`). Previously absent, which made
+  `UtexoLsp.waitForOutboundLiquidity` always read 0.
+- Structs extended (`LdkRuntimeOpenChannelResultData`, `LdkRuntimeChannelStateData`,
+  `RlnWasmNodeChannelData`) with `#[serde(default)]` — old persisted snapshots load fine.
+  The runtime reconcile prefers live values and falls back to cached ones.
+
+### 5. Companion fix in `rgb-sdk-web` — drive the RGB funding work queue
+
+Found during verification: with accept working, the inbound channel stalled after
+`Event::RgbFundingValidationRequired`. That event only *queues*
+`PendingRgbFundingWork::ValidateFunding`; the wasm node has no background executor, and
+the only driver is an explicit `driveRgbFundingWork()` call — which the wasm-interop
+examples make in their wait loops, but `rgb-sdk-web` never did. Fix:
+`RlnNodeBinding` now best-effort `await`s `driveRgbFundingWork()` on its polling read
+paths — `listChannels`, `invoiceStatus`, `getPayment`, `listPayments(_Raw)` — so both
+channel waits (`waitForChannel`) and payment/settlement waits
+(`awaitReceiveSettlement`, `getLightningSendRequest` polling) double as the drive beat.
+The same queue also flushes pending RGB transaction fascia (commitment/HTLC coloring),
+which is what moves in-flight RGB payments out of `Pending`. Failed items are re-queued
+internally and retried on the next poll.
+
+### Rebuild
+
+```bash
+cd rgb-lightning-node/bindings/wasm-sdk
+CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang \
+AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar \
+wasm-pack build --target web
+cd ../../../rgb-sdk-web && npm run build   # pkg is symlinked into node_modules
+```
+
+### Verification
+
+**VERIFIED END-TO-END (2026-07-02)** — `rgb-sdk-web-demo` "Regtest two-window flow":
+LSP virtual channel open accepted + usable on both browser wallets, RGB top-up via
+`lightning_receive` (faucet → LSP → sender) settled, and a 1-RGB / 3000-sat payment
+sender → LSP → recipient **Settled** with correct channel RGB deltas. Note the fix
+chain required beyond accept: companion SDK fixes for the scaffold-vs-live API split
+and chain-sync ticking (see `WASM_LIVE_INVOICE_STATUS_GAP.md`).

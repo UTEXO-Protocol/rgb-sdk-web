@@ -404,10 +404,12 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       const runtimeId = params.nodeRuntimeId ?? keys.master_fingerprint;
       nodeHandle = RlnWasmNode.newWithNodeRuntimeId(proxyUrl, runtimeId);
       // Enable virtual channels v0 ON THE NODE (the SDK-default flag does not
-      // propagate to a standalone node). Required to accept the LSP's virtual
-      // channels (trusted_no_broadcast, dust_limit_satoshis=1); without it LDK
-      // rejects the open with "dust_limit_satoshis (1) is less than the
-      // implementation limit (354)".
+      // propagate to a standalone node). Gates both outbound virtual opens and
+      // the inbound accept path: the wasm backend's OpenChannelRequest handler
+      // accepts the LSP's trusted virtual channels (trusted_no_broadcast,
+      // dust_limit_satoshis=1) via accept_inbound_channel_from_trusted_peer_0conf
+      // only when this flag is set; without it LDK's stock accept rejects them
+      // with "dust_limit_satoshis (1) is less than the implementation limit (354)".
       if (params.enableVirtualChannels ?? true) {
         try {
           nodeHandle.setEnableVirtualChannelsV0(true);
@@ -494,6 +496,18 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     if (this.nodeHandle && !this.nodeAttached) {
       this.nodeHandle.attachWallet(this.wallet);
       this.nodeAttached = true;
+      // Start a DORMANT chain-sync session (huge interval — the background loop
+      // must stay idle or it collides with foreground wallet ops on the shared
+      // RefCell). Explicit chainSyncTickValue() calls in RlnNodeBinding's drive
+      // path keep the LDK best-block fresh; without an active session the node's
+      // height freezes at attach time and, once the regtest chain advances, peers
+      // reject our HTLCs (expiry_too_soon → temporary channel failure). Matches
+      // the wasm-interop reference pattern.
+      try {
+        this.nodeHandle.chainSyncStartValue(this.defaultIndexerUrl, 3_600_000);
+      } catch (e) {
+        logger.warn('RlnWasmBinding: chainSyncStart on attach failed', e);
+      }
       console.log('[RLN] wallet attached to node', this.nodeHandle.nodeInfoValue());
     }
   }

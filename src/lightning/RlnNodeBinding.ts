@@ -108,16 +108,46 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
   };
 }
 
+/** Fold wasm payment statuses (lowercase live-ledger values like "succeeded",
+ *  "claimable" — or scaffold strings) into the LightningPaymentStatus union. */
+function foldPaymentStatus(raw: unknown): LightningPaymentStatus {
+  const s = String(raw ?? '').toLowerCase();
+  if (s === 'succeeded' || s === 'settled' || s === 'paid') return 'Succeeded';
+  if (s === 'failed' || s === 'expired') return 'Failed';
+  return 'Pending'; // pending / claimable / claiming / unknown
+}
+
 function normalizePayment(raw: RlnRawPayment): LightningPayment {
   return {
     paymentHash: String(raw.payment_hash ?? raw.paymentHash ?? ''),
     amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
-    status: (raw.status ?? 'Pending') as LightningPaymentStatus,
+    status: foldPaymentStatus(raw.status),
     assetId: (raw.asset_id ?? raw.assetId ?? undefined) as string | undefined,
     assetAmount: raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
     invoice: (raw.invoice ?? undefined) as string | undefined,
     inbound: Boolean(raw.inbound),
   };
+}
+
+/** Shape of the wasm live event-stream payment record (livePaymentValue). */
+type LiveRawPayment = {
+  payment_hash?: string;
+  status?: string;
+  amt_msat?: number;
+  asset_id?: string | null;
+  asset_amount?: number | null;
+  inbound?: boolean;
+  preimage?: string | null;
+  expires_at?: number | null;
+};
+
+/** Fold a wasm status string into the InvoiceStatus union. */
+function foldInvoiceStatus(raw: unknown, expiresAt?: number | null): InvoiceStatus {
+  const s = String(raw ?? '').toLowerCase();
+  if (s === 'succeeded' || s === 'settled' || s === 'paid') return 'Paid';
+  if (s === 'expired' || s === 'failed') return 'Expired';
+  if (expiresAt && Date.now() / 1000 > expiresAt) return 'Expired';
+  return 'Pending';
 }
 
 function normalizeInvoice(raw: RlnRawInvoice): LightningInvoice {
@@ -234,7 +264,36 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     }
   }
 
+  /**
+   * Drive the node's queued RGB work: funding-consignment validation for
+   * inbound/LSP-opened colored channels, funding PSBT completion for outbound
+   * ones, and pending RGB transaction fascia for in-flight HTLCs (commitment /
+   * HTLC coloring). The wasm node has no background executor — the interop
+   * reference flows call driveRgbFundingWork() inside their wait loops — so the
+   * SDK's polling read paths (listChannels, invoiceStatus, getPayment) double
+   * as the drive beat. Without it an inbound RGB channel stalls at
+   * RgbFundingValidationRequired and RGB payments stay Pending forever.
+   */
+  private async driveRgbWorkBestEffort(): Promise<void> {
+    try {
+      // Refresh the LDK best-block from the indexer and flush pending peer
+      // frames (the interop reference drives this in every wait loop). A stale
+      // height makes peers reject our HTLCs with expiry_too_soon. Requires the
+      // dormant chain-sync session started on wallet attach; errors are benign.
+      await this.nodeHandle.chainSyncTickValue();
+    } catch {
+      /* no active sync session yet, or transient indexer error */
+    }
+    try {
+      await this.nodeHandle.driveRgbFundingWork();
+    } catch {
+      // Transient (indexer catch-up, proxy hiccup); the work item is re-queued
+      // internally and retried on the next poll.
+    }
+  }
+
   async listChannels(): Promise<LightningChannel[]> {
+    await this.driveRgbWorkBestEffort();
     const raw = parseJson<RlnRawChannel[]>(this.nodeHandle.listChannelsJson());
     return raw.map(normalizeChannel);
   }
@@ -242,32 +301,60 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   // ── Payments ───────────────────────────────────────────────────────────────
 
   async createLnInvoice(params: CreateLnInvoiceParams): Promise<LightningInvoice> {
-    const raw = parseJson<RlnRawInvoice>(
-      this.nodeHandle.createLnInvoiceJson(
+    // Use the LIVE ChannelManager invoice API (createLnInvoiceLiveJson — same as the
+    // wasm-interop e2e reference), NOT the scaffold createLnInvoiceJson builder. The
+    // live invoice (a) registers the payment secret/preimage with the ChannelManager
+    // so the inbound HTLC auto-claims, and (b) embeds private-channel route hints —
+    // required for multi-hop payments routed through the LSP. The scaffold invoice
+    // has neither, so an LSP-routed payment finds no route and sticks at Pending.
+    const raw = parseJson<{ invoice?: string }>(
+      this.nodeHandle.createLnInvoiceLiveJson(
         params.amtMsat ?? null,
         params.expirySec,
         params.assetId ?? null,
         params.assetAmount ?? null
       )
     );
-    return normalizeInvoice(raw);
+    const invoice = String(raw.invoice ?? '');
+    const decoded = await this.decodeLnInvoice(invoice).catch(() => null);
+    return {
+      invoice,
+      paymentHash: decoded?.paymentHash ?? '',
+      expirySeconds: decoded?.expirySeconds || params.expirySec,
+      amtMsat: decoded?.amtMsat ?? (params.amtMsat != null ? BigInt(params.amtMsat) : undefined),
+      assetId: params.assetId ?? undefined,
+      assetAmount: params.assetAmount != null ? BigInt(params.assetAmount) : undefined,
+    };
   }
 
   async sendPayment(params: SendPaymentParams): Promise<SendPaymentResult> {
-    const raw = parseJson<RlnRawPayment>(
-      this.nodeHandle.sendPaymentJson(
+    // sendPaymentLiveJson, NOT sendPaymentJson: the scaffold path only *records* a
+    // parity-model payment and never constructs an HTLC — nothing reaches the wire
+    // (verified: zero HTLC traffic at the LSP). The live path routes a real HTLC
+    // via the ChannelManager, same as the wasm-interop reference flows.
+    const raw = parseJson<{ payment_hash?: string; status?: string }>(
+      this.nodeHandle.sendPaymentLiveJson(
         params.invoice,
         params.amtMsat ?? null,
         params.assetId ?? null,
         params.assetAmount ?? null
       )
     );
-    return normalizePayment(raw);
+    return normalizePayment({
+      payment_hash: raw.payment_hash,
+      status: raw.status,
+      amt_msat: params.amtMsat ?? undefined,
+      asset_id: params.assetId ?? undefined,
+      asset_amount: params.assetAmount ?? undefined,
+      invoice: params.invoice,
+      inbound: false,
+    } as RlnRawPayment);
   }
 
   async keysend(params: KeysendParams): Promise<SendPaymentResult> {
+    // keysendLiveJson for the same reason as sendPayment above.
     const raw = parseJson<RlnRawPayment>(
-      this.nodeHandle.keysendJson(
+      this.nodeHandle.keysendLiveJson(
         params.destPubkey,
         params.amtMsat,
         params.assetId ?? null,
@@ -277,27 +364,73 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     return normalizePayment(raw);
   }
 
-  async listPayments(): Promise<LightningPayment[]> {
-    const raw = parseJson<RlnRawPayment[]>(this.nodeHandle.listPaymentsJson());
-    return raw.map(normalizePayment);
-  }
-
-  async listPaymentsRaw(): Promise<unknown[]> {
-    return parseJson<unknown[]>(this.nodeHandle.listPaymentsJson());
-  }
-
-  async getPayment(paymentHash: string): Promise<LightningPayment | null> {
+  /**
+   * The wasm node keeps two payment ledgers that don't see each other (see
+   * WASM_LIVE_INVOICE_STATUS_GAP.md): scaffold maps (read by getPaymentJson /
+   * invoiceStatusJson / listPaymentsJson) and the live event-stream ledger fed by
+   * real LDK events (read by livePaymentValue / livePaymentsValue). Live-API
+   * invoices (createLnInvoiceLiveJson) and real HTLC sends exist only in the
+   * latter — the intended consumption pattern per the wasm-interop reference
+   * flows — so the read paths below consult the live ledger too.
+   */
+  private livePayment(paymentHash: string): LiveRawPayment | null {
     try {
-      const raw = parseJson<RlnRawPayment>(this.nodeHandle.getPaymentJson(paymentHash));
-      return normalizePayment(raw);
+      const v = this.nodeHandle.livePaymentValue(paymentHash) as LiveRawPayment | null;
+      return v && typeof v === 'object' ? v : null;
     } catch {
       return null;
     }
   }
 
+  private mergedRawPayments(): RlnRawPayment[] {
+    const scaffold = parseJson<RlnRawPayment[]>(this.nodeHandle.listPaymentsJson());
+    const seen = new Set(scaffold.map((p) => String(p.payment_hash ?? p.paymentHash ?? '')));
+    try {
+      const live = (this.nodeHandle.livePaymentsValue() as RlnRawPayment[] | null) ?? [];
+      for (const p of live) {
+        const hash = String(p.payment_hash ?? '');
+        if (hash && !seen.has(hash)) scaffold.push(p);
+      }
+    } catch {
+      // live ledger unavailable (runtime not started yet) — scaffold list stands
+    }
+    return scaffold;
+  }
+
+  async listPayments(): Promise<LightningPayment[]> {
+    await this.driveRgbWorkBestEffort();
+    return this.mergedRawPayments().map(normalizePayment);
+  }
+
+  async listPaymentsRaw(): Promise<unknown[]> {
+    await this.driveRgbWorkBestEffort();
+    return this.mergedRawPayments();
+  }
+
+  async getPayment(paymentHash: string): Promise<LightningPayment | null> {
+    await this.driveRgbWorkBestEffort();
+    try {
+      const raw = parseJson<RlnRawPayment>(this.nodeHandle.getPaymentJson(paymentHash));
+      return normalizePayment(raw);
+    } catch {
+      const live = this.livePayment(paymentHash);
+      return live ? normalizePayment(live as RlnRawPayment) : null;
+    }
+  }
+
   async invoiceStatus(invoice: string): Promise<InvoiceStatus> {
+    await this.driveRgbWorkBestEffort();
+    // Live-API invoices resolve via payment hash in the live ledger; the scaffold
+    // invoiceStatusJson errors "unknown LN invoice" for them.
+    try {
+      const { paymentHash } = await this.decodeLnInvoice(invoice);
+      const live = paymentHash ? this.livePayment(paymentHash) : null;
+      if (live) return foldInvoiceStatus(live.status, live.expires_at);
+    } catch {
+      // fall through to the scaffold reader
+    }
     const raw = parseJson<{ status?: string }>(this.nodeHandle.invoiceStatusJson(invoice));
-    return (raw.status ?? 'Pending') as InvoiceStatus;
+    return foldInvoiceStatus(raw.status);
   }
 
   async failPendingPayments(): Promise<void> {

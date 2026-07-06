@@ -16,7 +16,7 @@ import {
   rgbRestoreKeysValue,
 } from 'rln-wasm-sdk';
 import { initRlnWasm } from '../wasm/initRln';
-import { ValidationError, WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
+import { WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
 import { DEFAULT_INDEXER_URLS } from './RlnDefaults';
 import type { IRlnSdkBinding } from '../rln';
 import type { IRlnNodeBinding } from '../rln';
@@ -189,7 +189,8 @@ function parseAssignment(raw: unknown): Assignment {
   if (typeof raw === 'string') return { type: raw as AssignmentType };
   if (raw && typeof raw === 'object') {
     const o = raw as Record<string, unknown>;
-    if ('Fungible' in o) return { type: 'Fungible', amount: Number(o.Fungible) };
+    if ('Fungible' in o)
+      return { type: 'Fungible', amount: Number(o.Fungible) };
     if ('InflationRight' in o)
       return { type: 'InflationRight', amount: Number(o.InflationRight) };
     if ('NonFungible' in o) return { type: 'NonFungible' };
@@ -199,11 +200,15 @@ function parseAssignment(raw: unknown): Assignment {
 }
 
 function normalizeTransfer(raw: RlnRawTransfer): Transfer {
-  const eps = (raw.transport_endpoints ?? raw.transportEndpoints ?? []) as RlnRawTransportEndpoint[];
+  const eps = (raw.transport_endpoints ??
+    raw.transportEndpoints ??
+    []) as RlnRawTransportEndpoint[];
   const req = raw.requested_assignment ?? raw.requestedAssignment;
   return {
     idx: Number(raw.idx ?? 0),
-    batchTransferIdx: Number(raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0),
+    batchTransferIdx: Number(
+      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
+    ),
     createdAt: Number(raw.created_at ?? raw.createdAt ?? 0),
     updatedAt: Number(raw.updated_at ?? raw.updatedAt ?? 0),
     status: (raw.status ?? 'WaitingCounterparty') as Transfer['status'],
@@ -211,16 +216,24 @@ function normalizeTransfer(raw: RlnRawTransfer): Transfer {
     assignments: ((raw.assignments ?? []) as unknown[]).map(parseAssignment),
     kind: (raw.kind ?? 'Send') as Transfer['kind'],
     txid: (raw.txid ?? undefined) as string | undefined,
-    recipientId: (raw.recipient_id ?? raw.recipientId ?? undefined) as string | undefined,
-    receiveUtxo: (raw.receive_utxo ?? raw.receiveUtxo ?? undefined) as Transfer['receiveUtxo'],
-    changeUtxo: (raw.change_utxo ?? raw.changeUtxo ?? undefined) as Transfer['changeUtxo'],
+    recipientId: (raw.recipient_id ?? raw.recipientId ?? undefined) as
+      | string
+      | undefined,
+    receiveUtxo: (raw.receive_utxo ??
+      raw.receiveUtxo ??
+      undefined) as Transfer['receiveUtxo'],
+    changeUtxo: (raw.change_utxo ??
+      raw.changeUtxo ??
+      undefined) as Transfer['changeUtxo'],
     expiration: (raw.expiration ?? undefined) as number | undefined,
     transportEndpoints: eps.map((te) => ({
       endpoint: String(te.endpoint ?? ''),
       transportType: String(te.transport_type ?? te.transportType ?? ''),
       used: Boolean(te.used),
     })),
-    invoiceString: (raw.invoice_string ?? raw.invoiceString ?? undefined) as string | undefined,
+    invoiceString: (raw.invoice_string ?? raw.invoiceString ?? undefined) as
+      | string
+      | undefined,
     consignmentPath: undefined,
   };
 }
@@ -228,7 +241,8 @@ function normalizeTransfer(raw: RlnRawTransfer): Transfer {
 function normalizeTransaction(raw: RlnRawTransaction): Transaction {
   const ct = raw.confirmation_time ?? raw.confirmationTime;
   return {
-    transactionType: (raw.transaction_type ?? raw.transactionType) as Transaction['transactionType'],
+    transactionType: (raw.transaction_type ??
+      raw.transactionType) as Transaction['transactionType'],
     txid: String(raw.txid ?? ''),
     received: Number(raw.received ?? 0),
     sent: Number(raw.sent ?? 0),
@@ -239,12 +253,20 @@ function normalizeTransaction(raw: RlnRawTransaction): Transaction {
   };
 }
 
-function normalizeReceiveData(raw: RlnRawInvoiceReceiveData): InvoiceReceiveData {
+function normalizeReceiveData(
+  raw: RlnRawInvoiceReceiveData
+): InvoiceReceiveData {
   return {
-    invoice: String(raw.invoice ?? raw.invoice_string ?? raw.invoiceString ?? ''),
+    invoice: String(
+      raw.invoice ?? raw.invoice_string ?? raw.invoiceString ?? ''
+    ),
     recipientId: String(raw.recipient_id ?? raw.recipientId ?? ''),
-    expirationTimestamp: (raw.expiration_timestamp ?? raw.expirationTimestamp ?? null) as number | null,
-    batchTransferIdx: Number(raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0),
+    expirationTimestamp: (raw.expiration_timestamp ??
+      raw.expirationTimestamp ??
+      null) as number | null,
+    batchTransferIdx: Number(
+      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
+    ),
   };
 }
 
@@ -271,7 +293,9 @@ function normalizeUnspent(raw: RlnRawUnspent): Unspent {
 function normalizeSendResult(raw: RlnRawSendResult): SendResult {
   return {
     txid: String(raw.txid ?? ''),
-    batchTransferIdx: Number(raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0),
+    batchTransferIdx: Number(
+      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
+    ),
   };
 }
 
@@ -279,7 +303,10 @@ function parseJson<T>(jsonStr: string): T {
   try {
     return JSON.parse(jsonStr) as T;
   } catch (e) {
-    throw new WalletError(`Failed to parse RLN response JSON: ${e}`, 'parseJson');
+    throw new WalletError(
+      `Failed to parse RLN response JSON: ${e}`,
+      'parseJson'
+    );
   }
 }
 
@@ -288,7 +315,10 @@ function sdkRecipientToRln(r: BatchRecipient) {
     recipient_id: r.recipientId,
     witness_data:
       r.witnessData != null
-        ? { amount_sat: r.witnessData.amountSat, blinding: r.witnessData.blinding ?? null }
+        ? {
+            amount_sat: r.witnessData.amountSat,
+            blinding: r.witnessData.blinding ?? null,
+          }
         : null,
     assignment: { Fungible: r.assignment.Fungible },
     transport_endpoints: r.transportEndpoints,
@@ -314,19 +344,22 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   private nodeAttached = false;
   private lastBackupBytes: Uint8Array | null = null;
   private readonly defaultIndexerUrl: string;
+  private readonly configuredTransportEndpoint: string | null;
 
   private constructor(
     sdk: RlnWasmSdk,
     wallet: RlnWasmWallet,
     nodeHandle: RlnWasmNode | null,
     rlnNode: IRlnNodeBinding | null,
-    defaultIndexerUrl: string
+    defaultIndexerUrl: string,
+    transportEndpoint: string | null
   ) {
     this.sdk = sdk;
     this.wallet = wallet;
     this.nodeHandle = nodeHandle;
     this.rlnNode = rlnNode;
     this.defaultIndexerUrl = defaultIndexerUrl;
+    this.configuredTransportEndpoint = transportEndpoint;
   }
 
   static async create(params: RlnBindingCreateParams): Promise<RlnWasmBinding> {
@@ -352,10 +385,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     } catch (e) {
       const msg = String(e);
       console.error('[RLN] initValue failed:', msg);
-      if (msg.includes('already initialized with different password') || msg.includes('already initialized with different mnemonic')) {
+      if (
+        msg.includes('already initialized with different password') ||
+        msg.includes('already initialized with different mnemonic')
+      ) {
         throw new Error(
           'RLN WASM SDK is already initialized with a different wallet in this browser tab. ' +
-          'Only one RLN wallet can exist per tab. Remove the existing RLN wallet first, then reload the page before creating a new one.'
+            'Only one RLN wallet can exist per tab. Remove the existing RLN wallet first, then reload the page before creating a new one.'
         );
       }
       throw e;
@@ -374,7 +410,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     };
 
     const walletData: RlnWalletData = {
-      data_dir: params.dataDir ?? `/rln_${keys.master_fingerprint}_${networkStr.toLowerCase()}`,
+      data_dir:
+        params.dataDir ??
+        `/rln_${keys.master_fingerprint}_${networkStr.toLowerCase()}`,
       bitcoin_network: networkStr,
       database_type: 'Sqlite',
       max_allocations_per_utxo: params.maxAllocationsPerUtxo ?? 5,
@@ -435,17 +473,26 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       throw e;
     }
 
-    // NOTE: the wallet is attached to the node in connect(), AFTER goOnline().
-    // Attaching here (while the node's ldk-over-websocket runtime is already
-    // running) and then calling wallet.goOnlineValue() re-enters a shared
-    // RefCell and panics ("RefCell already borrowed", sdk_facade.rs). The
-    // official example always goes online first, then attaches.
+    // NOTE: the wallet must NOT be attached to the node here. goOnlineValue
+    // holds a borrow_mut() on the wallet's shared RefCell across its await
+    // (sdk_facade.rs); once attached, the node's ldk-over-websocket runtime
+    // borrows that same RefCell on its ticks → "RefCell already borrowed"
+    // panic. goOnline itself is safe anywhere BEFORE attach (connect() may run
+    // during create() via the indexerUrl param); attach is deferred to first
+    // LN use (ensureNodeAttached).
 
     const normalizedNet = normalizeNetwork(params.network);
     const defaultIndexerUrl =
       DEFAULT_INDEXER_URLS[normalizedNet] ?? DEFAULT_INDEXER_URLS.utexo;
 
-    return new RlnWasmBinding(sdk, wallet, nodeHandle, rlnNode, defaultIndexerUrl);
+    return new RlnWasmBinding(
+      sdk,
+      wallet,
+      nodeHandle,
+      rlnNode,
+      defaultIndexerUrl,
+      params.transportEndpoint ?? null
+    );
   }
 
   // ── Lifecycle (IRgbLibBinding) ─────────────────────────────────────────────
@@ -470,11 +517,31 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     return { address, btcBalance };
   }
 
+  /** Whether goOnlineValue has succeeded (wallet connected to an indexer). */
+  isOnline(): boolean {
+    return this.online !== null;
+  }
+
   /** Connect wallet to indexer — must be called before any network operation.
    *  If indexerUrl is omitted or empty, falls back to the DEFAULT_INDEXER_URLS
    *  entry for the wallet's network (same behaviour as WasmRgbLibBinding). */
-  async connect(indexerUrl?: string, skipConsistencyCheck = false): Promise<void> {
+  async connect(
+    indexerUrl?: string,
+    skipConsistencyCheck = false
+  ): Promise<void> {
     const url = indexerUrl || this.defaultIndexerUrl;
+    if (this.online) {
+      // Idempotent: create({ indexerUrl }) auto-connects, so app code that
+      // still calls goOnline() afterwards must not re-enter goOnlineValue
+      // (rgb-lib rejects a second go_online, and the wallet may already be
+      // attached to the LN node by then — see ensureNodeAttached).
+      if (indexerUrl && indexerUrl !== this.online.indexer_url) {
+        logger.warn(
+          `RlnWasmBinding.connect: already online via ${this.online.indexer_url}; ignoring ${indexerUrl}`
+        );
+      }
+      return;
+    }
     console.log('[RLN] goOnline start', { url, skipConsistencyCheck });
     this.online = await this.wallet.goOnlineValue(skipConsistencyCheck, url);
     console.log('[RLN] goOnline ok');
@@ -508,7 +575,10 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       } catch (e) {
         logger.warn('RlnWasmBinding: chainSyncStart on attach failed', e);
       }
-      console.log('[RLN] wallet attached to node', this.nodeHandle.nodeInfoValue());
+      console.log(
+        '[RLN] wallet attached to node',
+        this.nodeHandle.nodeInfoValue()
+      );
     }
   }
 
@@ -535,7 +605,10 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   private requireOnline(): RlnOnline {
     if (!this.online) {
-      throw new WalletError('Wallet is not online. Call goOnline() first.', 'requireOnline');
+      throw new WalletError(
+        'Wallet is not online. Call goOnline() first.',
+        'requireOnline'
+      );
     }
     return this.online;
   }
@@ -565,7 +638,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     return raw.map(normalizeUnspent);
   }
 
-  async createUtxosBegin(params: CreateUtxosBeginRequestModel): Promise<string> {
+  async createUtxosBegin(
+    params: CreateUtxosBeginRequestModel
+  ): Promise<string> {
     const online = this.requireOnline();
     return await this.wallet.createUtxosBegin(
       online,
@@ -579,7 +654,11 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   async createUtxosEnd(params: CreateUtxosEndRequestModel): Promise<number> {
     const online = this.requireOnline();
-    return await this.wallet.createUtxosEnd(online, params.signedPsbt, params.skipSync ?? false);
+    return await this.wallet.createUtxosEnd(
+      online,
+      params.signedPsbt,
+      params.skipSync ?? false
+    );
   }
 
   // ── Assets ────────────────────────────────────────────────────────────────
@@ -669,19 +748,30 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     // RLN wallet.sendBegin takes a recipient map, not an invoice string.
     // Decode the RGB invoice to build the map.
     const invoiceObj = new RlnWasmInvoice(params.invoice);
-    const invoiceData = invoiceObj.invoiceDataValue() as Record<string, unknown>;
-    const recipientId = String(invoiceData.recipient_id ?? invoiceData.recipientId ?? '');
-    const assetId = String(invoiceData.asset_id ?? invoiceData.assetId ?? params.assetId ?? '');
+    const invoiceData = invoiceObj.invoiceDataValue() as Record<
+      string,
+      unknown
+    >;
+    const recipientId = String(
+      invoiceData.recipient_id ?? invoiceData.recipientId ?? ''
+    );
+    const assetId = String(
+      invoiceData.asset_id ?? invoiceData.assetId ?? params.assetId ?? ''
+    );
     const endpoints = (invoiceData.transport_endpoints ??
-      invoiceData.transportEndpoints ??
-      [this._transportEndpoint()]) as string[];
+      invoiceData.transportEndpoints ?? [
+        this._transportEndpoint(),
+      ]) as string[];
     const amount = params.amount ?? 0;
     const recipientMap = {
       [assetId]: [
         {
           recipient_id: recipientId,
           witness_data: params.witnessData
-            ? { amount_sat: params.witnessData.amountSat, blinding: params.witnessData.blinding ?? null }
+            ? {
+                amount_sat: params.witnessData.amountSat,
+                blinding: params.witnessData.blinding ?? null,
+              }
             : null,
           assignment: { Fungible: amount },
           transport_endpoints: endpoints,
@@ -716,7 +806,11 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   async sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
     const online = this.requireOnline();
     const raw = parseJson<RlnRawSendResult>(
-      await this.wallet.sendEndJson(online, params.signedPsbt, params.skipSync ?? false)
+      await this.wallet.sendEndJson(
+        online,
+        params.signedPsbt,
+        params.skipSync ?? false
+      )
     );
     return normalizeSendResult(raw);
   }
@@ -734,13 +828,18 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   async sendBtcEnd(params: SendBtcEndRequestModel): Promise<string> {
     const online = this.requireOnline();
-    return await this.wallet.sendBtcEnd(online, params.signedPsbt, params.skipSync ?? false);
+    return await this.wallet.sendBtcEnd(
+      online,
+      params.signedPsbt,
+      params.skipSync ?? false
+    );
   }
 
   // ── Receiving ─────────────────────────────────────────────────────────────
 
   async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    const assignment = params.amount != null ? { Fungible: params.amount } : { Fungible: 0 };
+    const assignment =
+      params.amount != null ? { Fungible: params.amount } : { Fungible: 0 };
     const raw = this.wallet.blindReceiveValue(
       params.assetId ?? null,
       assignment,
@@ -752,7 +851,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    const assignment = params.amount != null ? { Fungible: params.amount } : { Fungible: 0 };
+    const assignment =
+      params.amount != null ? { Fungible: params.amount } : { Fungible: 0 };
     const raw = this.wallet.witnessReceiveValue(
       params.assetId ?? null,
       assignment,
@@ -780,12 +880,16 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   // ── Transactions & Transfers ───────────────────────────────────────────────
 
   async listTransactions(): Promise<Transaction[]> {
-    const raw = parseJson<RlnRawTransaction[]>(this.wallet.listTransactionsJson());
+    const raw = parseJson<RlnRawTransaction[]>(
+      this.wallet.listTransactionsJson()
+    );
     return raw.map(normalizeTransaction);
   }
 
   async listTransfers(assetId?: string): Promise<Transfer[]> {
-    const raw = parseJson<RlnRawTransfer[]>(this.wallet.listTransfersJson(assetId ?? null));
+    const raw = parseJson<RlnRawTransfer[]>(
+      this.wallet.listTransfersJson(assetId ?? null)
+    );
     return raw.map(normalizeTransfer);
   }
 
@@ -825,13 +929,18 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   // ── Fee & Backup ──────────────────────────────────────────────────────────
 
-  async getFeeEstimation(params: { blocks: number }): Promise<GetFeeEstimationResponse> {
+  async getFeeEstimation(params: {
+    blocks: number;
+  }): Promise<GetFeeEstimationResponse> {
     const online = this.requireOnline();
     const fee = await this.wallet.getFeeEstimation(online, params.blocks);
     return fee as GetFeeEstimationResponse;
   }
 
-  async createBackup(params: { backupPath: string; password: string }): Promise<WalletBackupResponse> {
+  async createBackup(params: {
+    backupPath: string;
+    password: string;
+  }): Promise<WalletBackupResponse> {
     const bytes = this.wallet.backup(params.password);
     this.lastBackupBytes = bytes;
     return { message: 'Backup created successfully', backupPath: ':memory:' };
@@ -848,7 +957,11 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   // ── VSS ───────────────────────────────────────────────────────────────────
 
   configureVssBackup(config: VssBackupConfig): void {
-    this.wallet.configureVssBackup(config.serverUrl, config.storeId, config.signingKey);
+    this.wallet.configureVssBackup(
+      config.serverUrl,
+      config.storeId,
+      config.signingKey
+    );
   }
 
   disableVssAutoBackup(): void {
@@ -856,14 +969,18 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async vssBackup(_config: VssBackupConfig): Promise<number> {
-    const raw = parseJson<{ version?: number }>(await this.wallet.vssBackupJson());
+    const raw = parseJson<{ version?: number }>(
+      await this.wallet.vssBackupJson()
+    );
     return raw.version ?? 0;
   }
 
   async vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {
-    const raw = parseJson<{ backup_exists?: boolean; server_version?: number; backup_required?: boolean }>(
-      await this.wallet.vssBackupInfoJson()
-    );
+    const raw = parseJson<{
+      backup_exists?: boolean;
+      server_version?: number;
+      backup_required?: boolean;
+    }>(await this.wallet.vssBackupInfoJson());
     return {
       backupExists: Boolean(raw.backup_exists),
       serverVersion: raw.server_version ?? null,
@@ -873,7 +990,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   // ── IRlnWalletBinding extras ───────────────────────────────────────────────
 
-  async sendRgbFromGroups(params: SendRgbFromGroupsRequest): Promise<SendRgbFromGroupsResult> {
+  async sendRgbFromGroups(
+    params: SendRgbFromGroupsRequest
+  ): Promise<SendRgbFromGroupsResult> {
     const raw = parseJson<{ txid?: string }>(
       await this.wallet.sendRgbFromGroupsJson(params.groups)
     );
@@ -919,14 +1038,16 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async getSwap(swapString: string): Promise<SwapInfo> {
-    const raw = parseJson<{ status?: string }>(await this.sdk.getSwapJson(swapString));
+    const raw = parseJson<{ status?: string }>(
+      await this.sdk.getSwapJson(swapString)
+    );
     return { swapString, status: raw.status ?? '' };
   }
 
   async listSwaps(): Promise<SwapInfo[]> {
-    const raw = parseJson<Array<{ swap_string?: string; swapString?: string; status?: string }>>(
-      await this.sdk.listSwapsJson()
-    );
+    const raw = parseJson<
+      Array<{ swap_string?: string; swapString?: string; status?: string }>
+    >(await this.sdk.listSwapsJson());
     return raw.map((s) => ({
       swapString: s.swap_string ?? s.swapString ?? '',
       status: s.status ?? '',
@@ -943,7 +1064,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private _transportEndpoint(): string {
-    // Default transport endpoint — callers can override via InvoiceRequest
-    return 'rpc://localhost:3000/json-rpc';
+    // The endpoint configured at create() (also registered SDK-wide via
+    // setDefaultRgbProxyTransport); localhost is a dev-only last resort.
+    return this.configuredTransportEndpoint ?? 'rpc://localhost:3000/json-rpc';
   }
 }

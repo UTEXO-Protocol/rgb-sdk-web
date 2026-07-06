@@ -6,11 +6,21 @@
  */
 
 import { BaseWalletManager, deriveKeysFromMnemonic } from '@utexo/rgb-sdk-core';
-import { ValidationError } from '@utexo/rgb-sdk-core';
-import type { WalletInitParams, SendAssetBeginRequestModel, SendResult, SendBtcBeginRequestModel } from '@utexo/rgb-sdk-core';
-import type { IRlnNodeBinding, SendRgbFromGroupsRequest, SendRgbFromGroupsResult } from '../rln';
+import { ValidationError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
+import type {
+  WalletInitParams,
+  SendAssetBeginRequestModel,
+  SendResult,
+  SendBtcBeginRequestModel,
+} from '@utexo/rgb-sdk-core';
+import type {
+  IRlnNodeBinding,
+  SendRgbFromGroupsRequest,
+  SendRgbFromGroupsResult,
+} from '../rln';
 import { RlnWasmBinding } from '../binding/RlnWasmBinding';
 import type { RlnBindingCreateParams } from '../binding/RlnWasmBinding';
+import { DEFAULT_INDEXER_URLS, getRlnUrls } from '../binding/RlnDefaults';
 import { RlnSigner } from '../signer/RlnSigner';
 
 export interface RlnWalletInitParams extends Partial<WalletInitParams> {
@@ -21,14 +31,24 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   /** Bitcoin network (default: 'regtest') */
   network?: string;
   /** WebSocket proxy URL for the Lightning node — enables createNodeHandle.
-   *  If omitted, falls back to transportEndpoint for backwards compatibility. */
+   *  Defaults to the network's DEFAULT_RLN_URLS entry (regtest/utexo); on
+   *  networks without a default, omitting it means no Lightning node. */
   proxyUrl?: string;
   /** RGB proxy transport endpoint (HTTP) — used for setDefaultRgbProxyTransport
-   *  and RGB consignment delivery. When neither proxyUrl nor transportEndpoint
-   *  is set, no Lightning node is created. */
+   *  and RGB consignment delivery. Defaults to the network's DEFAULT_RLN_URLS
+   *  entry (regtest/utexo). */
   transportEndpoint?: string;
   /** Stable runtime ID for persistent node state across page reloads */
   nodeRuntimeId?: string;
+  /** Indexer URL for goOnline. Defaults per network (DEFAULT_RLN_URLS →
+   *  DEFAULT_INDEXER_URLS). create() always attempts to go online with the
+   *  resolved URL (mirrors the RN SDK's unlock UX); if the indexer is
+   *  unreachable the wallet is returned OFFLINE with a warning logged — call
+   *  goOnline() to retry before network operations. */
+  indexerUrl?: string;
+  /** Skip the indexer consistency check when auto-connecting (recommended on
+   *  regtest, where the full check can hang on a fresh esplora wallet). */
+  skipConsistencyCheck?: boolean;
   /** Local directory for wallet DB (default: auto-generated in-memory path) */
   dataDir?: string;
   /** Asset schemas to support (default: ['Nia', 'Ifa']) */
@@ -63,10 +83,28 @@ export class RlnWalletManager extends BaseWalletManager {
 
     const network = String(params.network ?? 'regtest');
 
+    // Network-dependent URL defaults: explicit param → DEFAULT_RLN_URLS →
+    // DEFAULT_INDEXER_URLS (indexer only; proxy/transport stay unset on
+    // networks without an RLN default, meaning no Lightning node).
+    const urls = getRlnUrls(network);
+    const proxyUrl = params.proxyUrl ?? urls?.proxyUrl;
+    const transportEndpoint =
+      params.transportEndpoint ?? urls?.transportEndpoint;
+    const indexerUrl =
+      params.indexerUrl ??
+      urls?.indexerUrl ??
+      DEFAULT_INDEXER_URLS[normalizeNetwork(network)] ??
+      DEFAULT_INDEXER_URLS.utexo;
+
     // Derive xpubs so BaseWalletManager gets the required account keys
-    const keys = params.xpubVan && params.xpubCol && params.masterFingerprint
-      ? { accountXpubVanilla: params.xpubVan, accountXpubColored: params.xpubCol, masterFingerprint: params.masterFingerprint }
-      : await deriveKeysFromMnemonic(network, params.mnemonic);
+    const keys =
+      params.xpubVan && params.xpubCol && params.masterFingerprint
+        ? {
+            accountXpubVanilla: params.xpubVan,
+            accountXpubColored: params.xpubCol,
+            masterFingerprint: params.masterFingerprint,
+          }
+        : await deriveKeysFromMnemonic(network, params.mnemonic);
 
     const bindingParams: RlnBindingCreateParams = {
       mnemonic: params.mnemonic,
@@ -75,8 +113,8 @@ export class RlnWalletManager extends BaseWalletManager {
       dataDir: params.dataDir,
       maxAllocationsPerUtxo: params.maxAllocationsPerUtxo,
       vanillaKeychain: params.vanillaKeychain,
-      proxyUrl: params.proxyUrl,
-      transportEndpoint: params.transportEndpoint,
+      proxyUrl,
+      transportEndpoint,
       nodeRuntimeId: params.nodeRuntimeId,
       supportedSchemas: params.supportedSchemas,
     };
@@ -90,15 +128,39 @@ export class RlnWalletManager extends BaseWalletManager {
     };
 
     const binding = await RlnWasmBinding.create(bindingParams);
-    return new RlnWalletManager(fullParams, binding);
+    const manager = new RlnWalletManager(fullParams, binding);
+
+    // Auto-online (RN-style UX: no separate goOnline call). Safe at this
+    // point: the wallet is not yet attached to the LN node, so goOnlineValue's
+    // held RefCell borrow cannot collide with node runtime ticks (attach is
+    // deferred to first LN use). Non-fatal by design — an unreachable indexer
+    // must not break wallet creation/restore; goOnline() retries.
+    try {
+      await manager.goOnline(indexerUrl, params.skipConsistencyCheck ?? false);
+    } catch (e) {
+      logger.warn(
+        `RlnWalletManager.create: auto goOnline failed (wallet stays offline; call goOnline() to retry). indexer=${indexerUrl}`,
+        e
+      );
+    }
+    return manager;
   }
 
   async initialize(): Promise<void> {
     // No-op — wallet is ready after RlnWasmBinding.create()
   }
 
-  async goOnline(indexerUrl?: string, skipConsistencyCheck = false): Promise<void> {
+  async goOnline(
+    indexerUrl?: string,
+    skipConsistencyCheck = false
+  ): Promise<void> {
     await this.rlnBinding.connect(indexerUrl, skipConsistencyCheck);
+  }
+
+  /** Whether the wallet is connected to an indexer (create() auto-connects;
+   *  false means the auto-connect failed — call goOnline() to retry). */
+  isOnline(): boolean {
+    return this.rlnBinding.isOnline();
   }
 
   // Override BaseWalletManager: it calls binding.syncWallet()/refreshWallet()
@@ -161,7 +223,9 @@ export class RlnWalletManager extends BaseWalletManager {
   }
 
   /** Send RGB assets via group-based routing. */
-  async sendRgbFromGroups(params: SendRgbFromGroupsRequest): Promise<SendRgbFromGroupsResult> {
+  async sendRgbFromGroups(
+    params: SendRgbFromGroupsRequest
+  ): Promise<SendRgbFromGroupsResult> {
     return this.rlnBinding.sendRgbFromGroups(params);
   }
 }

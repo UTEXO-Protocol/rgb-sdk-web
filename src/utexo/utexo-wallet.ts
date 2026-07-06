@@ -8,7 +8,10 @@
  * (`onchainSend`, `payLightningInvoice`, `createLightningInvoice`, …).
  *
  * Web-specific approaches are preserved:
- *  - async factory `UTEXOWallet.create({ mnemonic, password, ... })` + `goOnline()`
+ *  - async factory `UTEXOWallet.create({ mnemonic, password, indexerUrl, ... })`
+ *    — with `indexerUrl` the wallet comes up online in one call (RN-style
+ *    unlock UX); without it, call `goOnline(indexerUrl)` before network ops.
+ *    `goOnline()` is idempotent, so legacy create-then-goOnline code still works.
  *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `send` / `onchainSend`
  *    stay atomic without an injected signer.
  *
@@ -151,8 +154,16 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.manager.initialize();
   }
 
+  /** Bring the wallet online. create() already auto-connects (using
+   *  `indexerUrl` or the network default), so this is a no-op when online —
+   *  only needed to retry after a failed auto-connect (see isOnline()). */
   goOnline(indexerUrl: string, skipConsistencyCheck?: boolean): Promise<void> {
     return this.manager.goOnline(indexerUrl, skipConsistencyCheck);
+  }
+
+  /** Whether the wallet is connected to an indexer. */
+  isOnline(): boolean {
+    return this.manager.isOnline();
   }
 
   getXpub(): { xpubVan: string; xpubCol: string } {
@@ -458,20 +469,23 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IUTEXOProtocol — Onchain ───────────────────────────────────────────────
 
+  /**
+   * Single receive entry point — RLN `rgb_invoice` parity: one call, receive
+   * mode selected via `witness` (default true, like RN). Returns the full
+   * receive data (invoice + recipientId + expiration), not just the invoice.
+   */
   async onchainReceive(
     params: OnchainReceiveRequestModel & { witness?: boolean }
-  ): Promise<OnchainReceiveResponse> {
+  ): Promise<OnchainReceiveResponse & InvoiceReceiveData> {
     const req: InvoiceRequest = {
-      assetId: params.assetId,
-      amount: params.amount,
+      assetId: params.assetId || undefined,
+      amount: params.amount || undefined,
       durationSeconds: params.durationSeconds,
       minConfirmations: params.minConfirmations,
     };
-    const data =
-      params.witness === false
-        ? await this.manager.blindReceive(req)
-        : await this.manager.witnessReceive(req);
-    return { invoice: data.invoice };
+    return params.witness === false
+      ? this.manager.blindReceive(req)
+      : this.manager.witnessReceive(req);
   }
 
   onchainSendBegin(params: OnchainSendRequestModel): Promise<string> {

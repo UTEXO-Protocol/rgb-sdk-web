@@ -37,8 +37,11 @@ export interface RlnWalletData {
 
 // ─── Online reference (opaque JS object from goOnlineValue) ──────────────────
 
-/** Opaque object returned by wallet.goOnlineValue() — pass back to every network call. */
-export type RlnOnline = object;
+/** Returned by wallet.goOnlineValue() (wasm WasmOnlineData) — pass back to every network call. */
+export interface RlnOnline {
+  id: string;
+  indexer_url: string;
+}
 
 // ─── Balances ─────────────────────────────────────────────────────────────────
 
@@ -290,7 +293,10 @@ export interface RlnRawNetworkInfo {
 
 export interface RlnRawRecipient {
   recipient_id: string;
-  witness_data: null | { amount_sat: string | number; blinding?: number | null };
+  witness_data: null | {
+    amount_sat: string | number;
+    blinding?: number | null;
+  };
   assignment: { Fungible: number | bigint };
   transport_endpoints: string[];
 }

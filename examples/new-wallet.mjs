@@ -1,19 +1,25 @@
 /**
  * Create a new UTEXO wallet from freshly generated keys.
  *
- * Generates a mnemonic, initializes a UTEXOWallet,
- * and prints the deposit address and BTC balance.
+ * Generates a mnemonic, creates a UTEXOWallet (loads the WASM and
+ * auto-connects to the indexer), and prints the deposit address and
+ * BTC balance.
  */
 
 import { generateKeys, UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 
 const keys = await generateKeys(NETWORK);
 console.log('Mnemonic (store securely):', keys.mnemonic);
 
-const wallet = new UTEXOWallet(keys.mnemonic, { network: NETWORK });
-await wallet.initialize();
+// indexerUrl / transportEndpoint / proxyUrl default per network when omitted.
+const wallet = await UTEXOWallet.create({
+  mnemonic: keys.mnemonic,
+  password: 'my-secure-password',
+  network: NETWORK,
+});
+console.log('online:', wallet.isOnline());
 
 const address = await wallet.getAddress();
 console.log('Deposit address:', address);

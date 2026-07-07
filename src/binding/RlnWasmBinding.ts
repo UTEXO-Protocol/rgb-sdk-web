@@ -313,11 +313,17 @@ function parseJson<T>(jsonStr: string): T {
 function sdkRecipientToRln(r: BatchRecipient) {
   return {
     recipient_id: r.recipientId,
+    // amount_sat / blinding use rgb-lib's from_str_or_number deserializer,
+    // which rejects the integer form serde_wasm_bindgen produces for whole
+    // JS numbers — pass them as strings.
     witness_data:
       r.witnessData != null
         ? {
-            amount_sat: r.witnessData.amountSat,
-            blinding: r.witnessData.blinding ?? null,
+            amount_sat: String(r.witnessData.amountSat),
+            blinding:
+              r.witnessData.blinding != null
+                ? String(r.witnessData.blinding)
+                : null,
           }
         : null,
     assignment: { Fungible: r.assignment.Fungible },
@@ -767,10 +773,16 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       [assetId]: [
         {
           recipient_id: recipientId,
+          // amount_sat / blinding use rgb-lib's from_str_or_number
+          // deserializer — pass as strings (whole JS numbers arrive as
+          // rejected serde integers otherwise).
           witness_data: params.witnessData
             ? {
-                amount_sat: params.witnessData.amountSat,
-                blinding: params.witnessData.blinding ?? null,
+                amount_sat: String(params.witnessData.amountSat),
+                blinding:
+                  params.witnessData.blinding != null
+                    ? String(params.witnessData.blinding)
+                    : null,
               }
             : null,
           assignment: { Fungible: amount },
@@ -911,11 +923,12 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   // Promise-returning impl is structurally compatible and lets callers await.)
   async refreshWallet(): Promise<void> {
     if (!this.online) return;
-    try {
-      await this.wallet.refreshJson(this.online, null, null, false);
-    } catch (e) {
-      logger.warn('RlnWasmBinding.refreshWallet error', e);
-    }
+    // filter must be an array — the wasm deserializes Vec<RefreshFilter>
+    // and rejects null with "Invalid filter"; [] = refresh all transfers.
+    // Use refreshValue, not refreshJson: the result is keyed by integer
+    // batch_transfer_idx, which refreshJson's JSON conversion rejects
+    // ("expected a string key"). The result is discarded anyway.
+    await this.wallet.refreshValue(this.online, null, [], false);
   }
 
   async syncWallet(): Promise<void> {
@@ -1066,6 +1079,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   private _transportEndpoint(): string {
     // The endpoint configured at create() (also registered SDK-wide via
     // setDefaultRgbProxyTransport); localhost is a dev-only last resort.
-    return this.configuredTransportEndpoint ?? 'rpc://localhost:3000/json-rpc';
+    // rgb-lib transport endpoints must use the rpc:// / rpcs:// scheme
+    // (RgbTransport::JsonRpc) — configured values are http(s) URLs
+    // (DEFAULT_RLN_URLS), so normalize the scheme here.
+    const ep = this.configuredTransportEndpoint;
+    if (!ep) return 'rpc://localhost:3000/json-rpc';
+    return ep
+      .replace(/^https:\/\//i, 'rpcs://')
+      .replace(/^http:\/\//i, 'rpc://');
   }
 }

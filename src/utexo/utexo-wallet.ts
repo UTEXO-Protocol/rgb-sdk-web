@@ -3,17 +3,18 @@
  *
  * Backed entirely by the RLN WASM SDK (RGB on-chain + native Lightning). The
  * public surface mirrors `@utexo/rgb-sdk-rn`'s UTEXOWallet so app code ports
- * across web ↔ React Native with minimal change: it implements the same
- * `IWalletManager` + `IUTEXOProtocol` contracts and uses the same method names
- * (`onchainSend`, `payLightningInvoice`, `createLightningInvoice`, …).
+ * across web ↔ React Native with minimal change: it implements `IUTEXOProtocol`
+ * plus `IWalletManager` minus the plain RGB send trio — RGB sends are exposed
+ * only under the RN-parity names (`onchainSend`, `onchainSendBegin`,
+ * `onchainSendEnd`), avoiding duplicate send entry points.
  *
  * Web-specific approaches are preserved:
  *  - async factory `UTEXOWallet.create({ mnemonic, password, indexerUrl, ... })`
  *    — with `indexerUrl` the wallet comes up online in one call (RN-style
  *    unlock UX); without it, call `goOnline(indexerUrl)` before network ops.
  *    `goOnline()` is idempotent, so legacy create-then-goOnline code still works.
- *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `send` / `onchainSend`
- *    stay atomic without an injected signer.
+ *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `onchainSend` /
+ *    `payLightningInvoice` stay atomic without an injected signer.
  *
  * Lower-level building blocks (`RlnWalletManager`, `RlnWasmBinding`,
  * `RlnNodeBinding`) remain available for advanced use.
@@ -40,7 +41,6 @@ import type {
   OperationResult,
   SendAssetBeginRequestModel,
   SendAssetEndRequestModel,
-  SendResult,
   SendBtcBeginRequestModel,
   SendBtcEndRequestModel,
   CreateUtxosBeginRequestModel,
@@ -59,7 +59,6 @@ import type {
   ListLightningPaymentsResponse,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
-  OnchainSendRequestModel,
   OnchainSendResponse,
   OnchainSendStatus,
   TransferStatus,
@@ -124,7 +123,17 @@ function mapPaymentStatus(
 
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
 
-export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
+/**
+ * IWalletManager minus the plain RGB send trio — UTEXOWallet exposes only the
+ * RN-parity `onchainSend`/`onchainSendBegin`/`onchainSendEnd` names for RGB
+ * sends (same manager implementation underneath, full param model).
+ */
+type IWalletManagerBase = Omit<
+  IWalletManager,
+  'send' | 'sendBegin' | 'sendEnd'
+>;
+
+export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   private readonly manager: RlnWalletManager;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;
@@ -254,24 +263,6 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     mnemonic?: string
   ): Promise<OperationResult> {
     return this.manager.inflate(params, mnemonic);
-  }
-
-  // ── IWalletManager — Sending Assets ────────────────────────────────────────
-
-  sendBegin(params: SendAssetBeginRequestModel): Promise<string> {
-    return this.manager.sendBegin(params);
-  }
-
-  sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
-    return this.manager.sendEnd(params);
-  }
-
-  /** Atomic RGB send (begin → BDK sign with stored/provided mnemonic → end). */
-  send(
-    invoiceTransfer: SendAssetBeginRequestModel,
-    mnemonic?: string
-  ): Promise<SendResult> {
-    return this.manager.send(invoiceTransfer, mnemonic);
   }
 
   // ── IWalletManager — Sending BTC ───────────────────────────────────────────
@@ -488,8 +479,13 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       : this.manager.witnessReceive(req);
   }
 
-  onchainSendBegin(params: OnchainSendRequestModel): Promise<string> {
-    return this.manager.sendBegin(this.toSendAssetParams(params));
+  /**
+   * The canonical RGB send family (RN-parity names). Takes the full send
+   * model — feeRate, donation, minConfirmations and witnessData all pass
+   * through (witnessData is required when paying a witness/`wvout` invoice).
+   */
+  onchainSendBegin(params: SendAssetBeginRequestModel): Promise<string> {
+    return this.manager.sendBegin(params);
   }
 
   onchainSendEnd(
@@ -498,17 +494,19 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.manager.sendEnd(params);
   }
 
+  /** Atomic RGB send (begin → BDK sign with the stored mnemonic → end). */
   onchainSend(
-    params: OnchainSendRequestModel,
+    params: SendAssetBeginRequestModel,
     mnemonic?: string
   ): Promise<OnchainSendResponse> {
-    return this.manager.send(this.toSendAssetParams(params), mnemonic);
+    return this.manager.send(params, mnemonic);
   }
 
   getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
     throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
 
+  /** Alias of listTransfers() — same data, same filtering (RN-parity name). */
   listOnchainTransfers(asset_id?: string): Promise<Transfer[]> {
     return this.manager.listTransfers(asset_id);
   }
@@ -696,15 +694,5 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       );
     }
     return node;
-  }
-
-  private toSendAssetParams(
-    params: OnchainSendRequestModel
-  ): SendAssetBeginRequestModel {
-    return {
-      invoice: params.invoice,
-      assetId: params.assetId,
-      amount: params.amount,
-    };
   }
 }

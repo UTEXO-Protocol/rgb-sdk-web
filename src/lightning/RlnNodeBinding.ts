@@ -90,13 +90,19 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
     channelId: String(raw.channel_id ?? raw.channelId ?? ''),
     peerPubkey: String(raw.peer_pubkey ?? raw.peerPubkey ?? ''),
     capacitySat: Number(raw.capacity_sat ?? raw.capacitySat ?? 0),
-    localBalanceMsat: Number(raw.local_balance_msat ?? raw.localBalanceMsat ?? 0),
+    // The current wasm channel view (RlnWasmNodeChannelData) has no
+    // local/remote balance fields — only outbound_msat (spendable outbound).
+    // Fall back to it so balances don't read 0 forever
+    // (waitForOutboundLiquidity polls outboundBalanceMsat).
+    localBalanceMsat: Number(
+      raw.local_balance_msat ?? raw.localBalanceMsat ?? raw.outbound_msat ?? 0
+    ),
     remoteBalanceMsat: Number(raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0),
     isPublic: Boolean(raw.is_public ?? raw.isPublic ?? raw.public),
     isActive: Boolean(raw.is_active ?? raw.isActive ?? raw.ready),
     isUsable: Boolean(raw.is_usable ?? raw.isUsable ?? raw.is_active ?? raw.isActive ?? raw.ready),
     outboundBalanceMsat: Number(
-      raw.outbound_balance_msat ?? raw.outboundBalanceMsat ?? raw.local_balance_msat ?? raw.localBalanceMsat ?? 0
+      raw.outbound_msat ?? raw.outbound_balance_msat ?? raw.outboundBalanceMsat ?? raw.local_balance_msat ?? raw.localBalanceMsat ?? 0
     ),
     inboundBalanceMsat: Number(
       raw.inbound_balance_msat ?? raw.inboundBalanceMsat ?? raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0

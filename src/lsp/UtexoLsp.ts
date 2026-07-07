@@ -13,7 +13,11 @@ import {
   type ReceiveSettlementOutcome,
   normalizeReceiveStatus,
 } from './lsp-types';
-import { LspChannelTimeoutError, LspSettlementError } from './LspErrors';
+import {
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+} from './LspErrors';
 
 // ── Shared wait options ───────────────────────────────────────────────────────
 
@@ -224,13 +228,16 @@ export class UtexoLsp {
 
   // ── 5. Outbound liquidity wait ────────────────────────────────────────────────
 
+  /** @throws LspLiquidityTimeoutError when `timeoutMs` elapses first. */
   async waitForOutboundLiquidity(
     minMsat: number,
     opts: WaitOptions = {}
   ): Promise<void> {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_CHANNEL_TIMEOUT_MS;
     const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const deadline = Date.now() + timeoutMs;
+    const started = Date.now();
+    const deadline = started + timeoutMs;
+    let lastOutbound = 0;
 
     while (Date.now() < deadline) {
       this.checkAbort(opts.signal);
@@ -244,6 +251,7 @@ export class UtexoLsp {
       const outbound = Number(
         lspChan?.outboundBalanceMsat ?? lspChan?.localBalanceMsat ?? 0
       );
+      lastOutbound = outbound;
 
       opts.onProgress?.(`outbound: ${outbound} msat (need ${minMsat})`);
 
@@ -251,6 +259,12 @@ export class UtexoLsp {
 
       await this.sleep(pollIntervalMs, opts.signal);
     }
+
+    throw new LspLiquidityTimeoutError(
+      minMsat,
+      lastOutbound,
+      Date.now() - started
+    );
   }
 
   // ── 6. Send RGB via LSP (POST /onchain_send) ──────────────────────────────────

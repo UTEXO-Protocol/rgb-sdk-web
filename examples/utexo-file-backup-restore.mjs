@@ -1,48 +1,47 @@
 /**
  * File backup and restore using Uint8Array bytes.
  *
- * Backup: createBackup() returns { layer1Bytes, utexoBytes } as Uint8Array.
- *         Store them however suits your app (file download, cloud upload, etc.).
- * Restore: pass the bytes back to restoreUtxoWalletFromBackup() — state is
- *          written to IndexedDB. Then initialize a new UTEXOWallet normally.
+ * Backup: createBackup() then getLastBackupBytes() — a single encrypted blob.
+ *         Store it however suits your app (file download, cloud upload, etc.).
+ * Restore: restoreFromBackupBytes(bytes, password) — updates the active
+ *          wallet's in-memory state.
  *
  * Example: trigger a file download in the browser
- *   const blob = new Blob([layer1Bytes], { type: 'application/octet-stream' });
+ *   const blob = new Blob([bytes], { type: 'application/octet-stream' });
  *   const url = URL.createObjectURL(blob);
- *   const a = document.createElement('a'); a.href = url; a.download = 'layer1.backup'; a.click();
+ *   const a = document.createElement('a'); a.href = url; a.download = 'wallet.backup'; a.click();
  */
 
-import { UTEXOWallet, restoreUtxoWalletFromBackup } from '@utexo/rgb-sdk-web';
+import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
-const PASSWORD = 'secure-password';
+const PASSWORD = 'my-secure-password';
+const BACKUP_PASSWORD = 'backup-password';
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 
-const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await wallet.initialize();
+const wallet = await UTEXOWallet.create({
+  mnemonic: MNEMONIC,
+  password: PASSWORD,
+  network: NETWORK,
+});
 
-const { layer1Bytes, utexoBytes } = await wallet.createBackup({ password: PASSWORD });
-console.log('layer1 backup bytes:', layer1Bytes.byteLength);
-console.log('utexo backup bytes:', utexoBytes.byteLength);
-// → store or download layer1Bytes and utexoBytes
-
-await wallet.dispose();
+await wallet.createBackup({ backupPath: '', password: BACKUP_PASSWORD });
+const bytes = wallet.getLastBackupBytes(); // Uint8Array | null
+console.log('backup bytes:', bytes?.byteLength);
+// → store or download `bytes`
 
 // ── Restore ───────────────────────────────────────────────────────────────────
 // Provide the bytes retrieved from your storage / file input.
 
-await restoreUtxoWalletFromBackup({
-  layer1Bytes,
-  utexoBytes,
-  password: PASSWORD,
+const restoredWallet = await UTEXOWallet.create({
   mnemonic: MNEMONIC,
-  networkPreset: NETWORK,
+  password: PASSWORD,
+  network: NETWORK,
 });
-
-const restoredWallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await restoredWallet.initialize();
+restoredWallet.restoreFromBackupBytes(bytes, BACKUP_PASSWORD);
 
 console.log('Restored address:', await restoredWallet.getAddress());
 await restoredWallet.dispose();
+await wallet.dispose();

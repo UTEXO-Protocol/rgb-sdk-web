@@ -60,7 +60,11 @@ export type {
   ClaimResult,
 } from './lsp/UtexoLsp';
 export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
-export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
+export {
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+} from './lsp/LspErrors';
 export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
 export { peerUri, normalizeReceiveStatus } from './lsp/lsp-types';
 export type * from './lsp/lsp-types';

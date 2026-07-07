@@ -232,6 +232,11 @@ export interface RlnRawChannel {
   isUsable?: boolean;
   outbound_balance_msat?: number | bigint;
   outboundBalanceMsat?: number | bigint;
+  /** Spendable outbound BTC capacity — emitted by the runtime-state channel
+   *  view (RlnWasmNodeChannelData) since rgb-lightning-node 4339f94. */
+  outbound_msat?: number | bigint;
+  /** Largest single outbound HTLC currently sendable. */
+  next_outbound_htlc_limit_msat?: number | bigint;
   inbound_balance_msat?: number | bigint;
   inboundBalanceMsat?: number | bigint;
   asset_id?: string | null;

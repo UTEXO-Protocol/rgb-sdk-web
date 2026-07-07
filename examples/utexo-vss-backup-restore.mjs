@@ -1,34 +1,38 @@
 /**
- * VSS (cloud) backup and restore.
+ * VSS (cloud) backup.
  *
- * Backup: initialize wallet, call vssBackup() — state is uploaded to the VSS server.
- * Restore: call restoreUtxoWalletFromVss() — state is written to IndexedDB.
- *          Then initialize a new UTEXOWallet normally; it picks up the restored state.
+ * The VSS config needs a serverUrl, a storeId and a signing key — derive the
+ * signing key from the wallet mnemonic with deriveVssSigningKeyFromMnemonic().
+ * configureVssBackup() enables auto-backup; vssBackup() triggers one manually.
  */
 
-import { UTEXOWallet, restoreUtxoWalletFromVss } from '@utexo/rgb-sdk-web';
+import {
+  UTEXOWallet,
+  deriveVssSigningKeyFromMnemonic,
+  DEFAULT_VSS_SERVER_URL,
+} from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-// ── Backup ────────────────────────────────────────────────────────────────────
+const wallet = await UTEXOWallet.create({
+  mnemonic: MNEMONIC,
+  password: 'my-secure-password',
+  network: NETWORK,
+});
 
-const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await wallet.initialize();
+const config = {
+  serverUrl: DEFAULT_VSS_SERVER_URL,
+  storeId: 'my-store',
+  signingKey: deriveVssSigningKeyFromMnemonic(MNEMONIC),
+};
 
-await wallet.vssBackup();
-const info = await wallet.vssBackupInfo();
+// Enable auto-backup, then trigger one manually and inspect it
+await wallet.configureVssBackup(config);
+const version = await wallet.vssBackup(config);
+console.log('VSS backup version:', version);
+
+const info = await wallet.vssBackupInfo(config);
 console.log('VSS backup info:', info);
 
 await wallet.dispose();
-
-// ── Restore ───────────────────────────────────────────────────────────────────
-// Restores state from VSS into IndexedDB. Run this on a fresh page / new device.
-
-await restoreUtxoWalletFromVss({ mnemonic: MNEMONIC, networkPreset: NETWORK });
-
-const restoredWallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await restoredWallet.initialize();
-
-console.log('Restored address:', await restoredWallet.getAddress());
-await restoredWallet.dispose();

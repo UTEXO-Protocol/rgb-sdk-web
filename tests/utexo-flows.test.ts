@@ -56,15 +56,11 @@ describe('UTEXOWallet API', () => {
   });
 
   describe('sending', () => {
-    [
-      'sendBegin',
-      'sendEnd',
-      'send',
-      'sendBtcBegin',
-      'sendBtcEnd',
-      'sendBtc',
-      'sendRgbFromGroups',
-    ].forEach(hasMethod);
+    // RGB sends are exposed only under the RN-parity onchainSend* names
+    // (see "IUTEXOProtocol — onchain" below).
+    ['sendBtcBegin', 'sendBtcEnd', 'sendBtc', 'sendRgbFromGroups'].forEach(
+      hasMethod
+    );
   });
 
   describe('receiving', () => {

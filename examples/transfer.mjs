@@ -7,41 +7,50 @@
 
 import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 const MNEMONIC_A = 'sender twelve word mnemonic phrase here ...';
 const MNEMONIC_B = 'receiver twelve word mnemonic phrase here ...';
+const PASSWORD = 'my-secure-password';
 const ASSET_ID = 'rgb:...';
 const AMOUNT = 50;
 
-const walletA = new UTEXOWallet(MNEMONIC_A, { network: NETWORK });
-const walletB = new UTEXOWallet(MNEMONIC_B, { network: NETWORK });
-
-await walletA.initialize();
-await walletB.initialize();
-
-
-// Receiver: create invoices
-const blindInvoice = await walletB.blindReceive({ amount: AMOUNT });
-const witnessInvoice = await walletB.witnessReceive({ amount: AMOUNT });
-console.log('Blind invoice:', blindInvoice.invoice);
-console.log('Witness invoice:', witnessInvoice.invoice);
-
-// Sender: send to blind invoice
-await walletA.send({
-  invoice: blindInvoice.invoice,
-  assetId: ASSET_ID,
-  amount: AMOUNT,
+const walletA = await UTEXOWallet.create({
+  mnemonic: MNEMONIC_A,
+  password: PASSWORD,
+  network: NETWORK,
 });
-console.log('Blind send done');
+const walletB = await UTEXOWallet.create({
+  mnemonic: MNEMONIC_B,
+  password: PASSWORD,
+  network: NETWORK,
+});
 
-// Sender: send to witness invoice (include BTC output amount)
-await walletA.send({
+// Receiver: create invoices — onchainReceive is witness by default,
+// pass witness: false for a blinded invoice.
+const witnessInvoice = await walletB.onchainReceive({ amount: AMOUNT });
+const blindInvoice = await walletB.onchainReceive({ amount: AMOUNT, witness: false });
+console.log('Witness invoice:', witnessInvoice.invoice);
+console.log('Blind invoice:', blindInvoice.invoice);
+
+// Sender: send to the witness invoice (witnessData is required — it sets the
+// BTC amount on the witness output)
+await walletA.onchainSend({
   invoice: witnessInvoice.invoice,
   assetId: ASSET_ID,
   amount: AMOUNT,
+  feeRate: 2,
   witnessData: { amountSat: 1000 },
 });
 console.log('Witness send done');
+
+// Sender: send to the blind invoice (no witnessData)
+await walletA.onchainSend({
+  invoice: blindInvoice.invoice,
+  assetId: ASSET_ID,
+  amount: AMOUNT,
+  feeRate: 2,
+});
+console.log('Blind send done');
 
 // Refresh both wallets to pick up the transfers
 await walletA.refreshWallet();

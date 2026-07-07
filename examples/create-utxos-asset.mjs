@@ -6,14 +6,17 @@
 
 import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await wallet.initialize();
+const wallet = await UTEXOWallet.create({
+  mnemonic: MNEMONIC,
+  password: 'my-secure-password',
+  network: NETWORK,
+});
 
-const count = await wallet.createUtxos({ num: 5, size: 1000 });
 await wallet.syncWallet();
+const count = await wallet.createUtxos({ upTo: true, num: 4, feeRate: 2 });
 console.log(`Created ${count} UTXOs`);
 
 const asset = await wallet.issueAssetNia({

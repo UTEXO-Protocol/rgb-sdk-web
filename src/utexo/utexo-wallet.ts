@@ -69,6 +69,7 @@ import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
 import { UtexoLsp } from '../lsp/UtexoLsp';
 import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
 import type { LspPeer } from '../lsp/lsp-types';
+import { resolveLspBaseUrl } from '../binding/RlnDefaults';
 import type {
   IRlnNodeBinding,
   IssueAssetCfaRequest,
@@ -690,13 +691,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
     if (peer) return new UtexoLsp(this, peer);
 
-    const baseUrl = this.lspBaseUrl;
-    if (!baseUrl) {
-      throw new Error(
-        'createLsp: no peer provided and no lspBaseUrl configured. Pass lspBaseUrl ' +
-          'to UTEXOWallet.create(), or call createLsp(peer).'
-      );
-    }
+    const baseUrl = resolveLspBaseUrl(this.getNetwork(), this.lspBaseUrl);
     const http = new UtexoLSPClient({
       baseUrl,
       bearerToken: this.lspBearerToken ?? undefined,

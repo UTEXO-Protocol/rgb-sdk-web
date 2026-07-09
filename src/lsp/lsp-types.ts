@@ -1,9 +1,3 @@
-// LSP + async-payment public types.
-//
-// Ported from @utexo/rgb-sdk-rn (src/lsp/lsp-types.ts) — pure types + helpers,
-// no platform imports. APay node-level types (ApayNewResponse / ApayHashEntry)
-// live in ../types/rln-model and are re-exported here for convenience.
-
 export type { ApayHashEntry, ApayNewResponse } from '../types/rln-model';
 
 // ── LSP client config ─────────────────────────────────────────────────────────

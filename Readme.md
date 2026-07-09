@@ -124,9 +124,9 @@ await wallet.init();
 |-------|------|-------------|
 | `mnemonic` | `string` | BIP39 mnemonic — required |
 | `password` | `string` | RLN SDK password — required (init/unlock of the local wallet state) |
-| `network` | `string?` | Bitcoin network (`'regtest'`, `'utexo'`, `'signet'`, `'testnet'`, `'mainnet'`, …). Default `'regtest'` |
+| `network` | `string?` | Bitcoin network (`'regtest'`, `'utexo'`, `'testnet'`, `'mainnet'`, …). Default `'regtest'` |
 | `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `create()` always attempts to connect; failure is non-fatal (wallet returned offline) |
-| `transportEndpoint` | `string?` | RGB proxy (HTTP) for consignment delivery. Defaults per network (regtest/utexo) |
+| `transportEndpoint` | `string?` | RGB proxy for consignment delivery. Defaults per network (regtest/utexo) |
 | `proxyUrl` | `string?` | WebSocket LN gateway URL — enables the embedded Lightning node. Defaults per network (regtest/utexo); on networks without a default, omitting it means no Lightning |
 | `nodeRuntimeId` | `string?` | Stable runtime ID so node state persists across page reloads |
 | `skipConsistencyCheck` | `boolean?` | Skip the indexer consistency check on connect (recommended on regtest) |
@@ -429,7 +429,7 @@ Used automatically when the corresponding create param is omitted.
 | Network | LN gateway (`proxyUrl`) | RGB transport (`transportEndpoint`) | Indexer (`indexerUrl`) |
 |---------|------------------------|-------------------------------------|------------------------|
 | regtest | `ws://127.0.0.1:3001` | `http://127.0.0.1:3001/rgb/json-rpc` | `http://127.0.0.1:3002` |
-| utexo   | `wss://rln-proxy-utexo.utexo.com/rgb/json-rpc` | `https://rln-proxy-utexo.utexo.com/rgb/json-rpc` | `https://esplora-api.utexo.com` |
+| utexo   | `wss://rln-proxy-utexo.utexo.com/rgb/json-rpc` | `rpcs://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
 
 **Indexer-only defaults** (`DEFAULT_INDEXER_URLS`) for the other networks:
 
@@ -438,7 +438,6 @@ Used automatically when the corresponding create param is omitted.
 | mainnet  | `https://esplora-mainnet.utexo.com` |
 | testnet  | `https://esplora-testnet3.utexo.com` |
 | testnet4 | `https://esplora-testnet4.utexo.com` |
-| signet   | `ssl://electrum.iriswallet.com:50033` |
 
 On networks without a `proxyUrl` default, pass one explicitly to enable the Lightning node; without it the wallet is on-chain RGB only.
 

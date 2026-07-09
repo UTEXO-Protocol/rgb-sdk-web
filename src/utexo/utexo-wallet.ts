@@ -204,54 +204,66 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.isOnline();
   }
 
+  /** Wallet extended public keys: `{ xpubVan, xpubCol }`. */
   getXpub(): { xpubVan: string; xpubCol: string } {
     return this.manager.getXpub();
   }
 
+  /** The configured Bitcoin network. */
   getNetwork(): Network {
     return this.manager.getNetwork();
   }
 
+  /** Release the WASM wallet/node handles. Check with {@link isDisposed}. */
   dispose(): Promise<void> {
     return this.manager.dispose();
   }
 
+  /** Whether {@link dispose} has been called. */
   isDisposed(): boolean {
     return this.manager.isDisposed();
   }
 
   // ── IWalletManager — Balance & Address ─────────────────────────────────────
 
+  /** BTC balance (vanilla + colored). */
   getBtcBalance(): Promise<BtcBalance> {
     return this.manager.getBtcBalance();
   }
 
+  /** Current on-chain deposit address. */
   getAddress(): Promise<string> {
     return this.manager.getAddress();
   }
 
+  /** Advance to the next vanilla (BTC) receive address. */
   rotateVanillaAddress(): Promise<string> {
     return this.manager.rotateVanillaAddress();
   }
 
+  /** Advance to the next colored (RGB) receive address. */
   rotateColoredAddress(): Promise<string> {
     return this.manager.rotateColoredAddress();
   }
 
   // ── IWalletManager — UTXO Management ───────────────────────────────────────
 
+  /** List unspent UTXOs with their RGB allocations. */
   listUnspents(): Promise<Unspent[]> {
     return this.manager.listUnspents();
   }
 
+  /** Begin creating UTXOs — returns an unsigned PSBT for external signing. */
   createUtxosBegin(params: CreateUtxosBeginRequestModel): Promise<string> {
     return this.manager.createUtxosBegin(params);
   }
 
+  /** Finish creating UTXOs from a signed PSBT — returns the number created. */
   createUtxosEnd(params: CreateUtxosEndRequestModel): Promise<number> {
     return this.manager.createUtxosEnd(params);
   }
 
+  /** Create UTXOs atomically (begin → sign → end) — returns the number created. */
   createUtxos(params: {
     upTo?: boolean;
     num?: number;
@@ -263,30 +275,37 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IWalletManager — Asset Operations ──────────────────────────────────────
 
+  /** List all RGB assets held by the wallet. */
   listAssets(): Promise<ListAssets> {
     return this.manager.listAssets();
   }
 
+  /** Balance for a single asset. */
   getAssetBalance(asset_id: string): Promise<AssetBalance> {
     return this.manager.getAssetBalance(asset_id);
   }
 
+  /** Issue a Non-Inflatable Asset (NIA). */
   issueAssetNia(params: IssueAssetNiaRequestModel): Promise<AssetNIA> {
     return this.manager.issueAssetNia(params);
   }
 
+  /** Issue an Inflatable Fungible Asset (IFA). Requires the Lightning node. */
   issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<any> {
     return this.manager.issueAssetIfa(params);
   }
 
+  /** Begin inflating an IFA asset — returns an unsigned PSBT for external signing. */
   inflateBegin(params: InflateAssetIfaRequestModel): Promise<string> {
     return this.manager.inflateBegin(params);
   }
 
+  /** Finish inflating an IFA asset from a signed PSBT. */
   inflateEnd(params: InflateEndRequestModel): Promise<OperationResult> {
     return this.manager.inflateEnd(params);
   }
 
+  /** Inflate an IFA asset atomically (begin → sign with the stored mnemonic → end). */
   inflate(
     params: InflateAssetIfaRequestModel,
     mnemonic?: string
@@ -296,84 +315,102 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IWalletManager — Sending BTC ───────────────────────────────────────────
 
+  /** Begin an on-chain BTC send — returns an unsigned PSBT for external signing. */
   sendBtcBegin(params: SendBtcBeginRequestModel): Promise<string> {
     return this.manager.sendBtcBegin(params);
   }
 
+  /** Finish an on-chain BTC send from a signed PSBT — returns the txid. */
   sendBtcEnd(params: SendBtcEndRequestModel): Promise<string> {
     return this.manager.sendBtcEnd(params);
   }
 
+  /** Atomic on-chain BTC send (begin → sign with the stored mnemonic → end) — returns the txid. */
   sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
     return this.manager.sendBtc(params);
   }
 
   // ── IWalletManager — Receiving Assets ──────────────────────────────────────
 
+  /** Create a blinded-UTXO RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     return this.manager.blindReceive(params);
   }
 
+  /** Create a witness RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     return this.manager.witnessReceive(params);
   }
 
+  /** Decode an RGB invoice into its structured fields. */
   decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
     return this.manager.decodeRGBInvoice(params);
   }
 
   // ── IWalletManager — Transactions & Transfers ──────────────────────────────
 
+  /** On-chain transaction history. */
   listTransactions(): Promise<Transaction[]> {
     return this.manager.listTransactions();
   }
 
+  /** RGB transfer history, optionally filtered by asset. */
   listTransfers(asset_id?: string): Promise<Transfer[]> {
     return this.manager.listTransfers(asset_id);
   }
 
+  /** Mark pending transfers as failed. */
   failTransfers(params: FailTransfersRequest): Promise<boolean> {
     return this.manager.failTransfers(params);
   }
 
+  /** Refresh pending RGB transfer state. */
   refreshWallet(): Promise<void> {
     return this.manager.refreshWallet();
   }
 
+  /** Sync BTC/UTXO blockchain state. */
   syncWallet(): Promise<void> {
     return this.manager.syncWallet();
   }
 
   // ── IWalletManager — VSS Backup ────────────────────────────────────────────
 
+  /** Enable VSS (cloud) auto-backup with the given config. */
   configureVssBackup(config: VssBackupConfig): Promise<void> {
     return this.manager.configureVssBackup(config);
   }
 
+  /** Disable VSS auto-backup. */
   disableVssAutoBackup(): Promise<void> {
     return this.manager.disableVssAutoBackup();
   }
 
+  /** Trigger a VSS backup — returns the new backup version. */
   vssBackup(config: VssBackupConfig): Promise<number> {
     return this.manager.vssBackup(config);
   }
 
+  /** Query VSS backup metadata (latest version, etc.). */
   vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
     return this.manager.vssBackupInfo(config);
   }
 
   // ── IWalletManager — Fee Estimation ────────────────────────────────────────
 
+  /** Fee-rate estimate (sat/vB) for a target confirmation in `blocks`. */
   estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
     return this.manager.estimateFeeRate(blocks);
   }
 
+  /** Fee estimate for a given PSBT (base64). */
   estimateFee(psbtBase64: string): Promise<EstimateFeeResult> {
     return this.manager.estimateFee(psbtBase64);
   }
 
   // ── IWalletManager — Backup ────────────────────────────────────────────────
 
+  /** Create an encrypted backup — read the bytes with {@link getLastBackupBytes}. */
   createBackup(params: {
     backupPath: string;
     password: string;
@@ -393,14 +430,17 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IWalletManager — Cryptographic Operations ──────────────────────────────
 
+  /** Sign a PSBT with the wallet mnemonic (BDK path). */
   signPsbt(psbt: string, mnemonic?: string): Promise<string> {
     return this.manager.signPsbt(psbt, mnemonic);
   }
 
+  /** Schnorr-sign a message with the wallet keys. */
   signMessage(message: string): Promise<string> {
     return this.manager.signMessage(message);
   }
 
+  /** Verify a Schnorr message signature (defaults to this wallet's key). */
   verifyMessage(
     message: string,
     signature: string,
@@ -411,6 +451,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IUTEXOProtocol — Lightning ─────────────────────────────────────────────
 
+  /** Create a Lightning invoice (BTC via `amountSats`, or an RGB asset via `asset`). */
   async createLightningInvoice(
     params: CreateLightningInvoiceRequestModel & {
       paymentHash?: string | null;
@@ -432,28 +473,33 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return { lnInvoice: resp.invoice };
   }
 
+  /** Poll receive status for a Lightning invoice. */
   getLightningReceiveRequest(id: string): Promise<TransferStatus | null> {
     return this.requireNode().invoiceStatus(id).then(mapInvoiceStatus);
   }
 
+  /** Poll send status by payment hash (`'WaitingCounterparty'` → `'Settled'` | `'Failed'`). */
   async getLightningSendRequest(id: string): Promise<TransferStatus | null> {
     const payment = await this.requireNode().getPayment(id);
     if (!payment) return null;
     return mapPaymentStatus(payment.status);
   }
 
+  /** Not implemented — the local RLN node pays atomically via {@link payLightningInvoice}. @throws always */
   getLightningSendFeeEstimate(
     _params: GetLightningSendFeeEstimateRequestModel
   ): Promise<number> {
     throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
   }
 
+  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
   payLightningInvoiceBegin(
     _params: PayLightningInvoiceRequestModel
   ): Promise<string> {
     throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
   }
 
+  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
   payLightningInvoiceEnd(
     _params: SendAssetEndRequestModel
   ): Promise<LightningSendRequest> {
@@ -477,6 +523,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return { txid: resp.paymentHash, status: resp.status };
   }
 
+  /** List all Lightning payments (txid = payment hash, plus status). */
   async listLightningPayments(): Promise<ListLightningPaymentsResponse> {
     const payments = await this.requireNode().listPayments();
     return {
@@ -517,6 +564,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.sendBegin(params);
   }
 
+  /** Finish an RGB send from a signed PSBT (3-step variant of {@link onchainSend}). */
   onchainSendEnd(
     params: SendAssetEndRequestModel
   ): Promise<OnchainSendResponse> {
@@ -531,6 +579,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.send(params, mnemonic);
   }
 
+  /** Not implemented — track send state via {@link listTransfers} / {@link refreshWallet}. @throws always */
   getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
     throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
@@ -573,38 +622,47 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.getNodePubkey();
   }
 
+  /** Node pubkey, channel counts, and sync status. Requires the Lightning node. */
   getNodeInfo(): Promise<LightningNodeInfo> {
     return this.requireNode().nodeInfo();
   }
 
+  /** Network-level info (fees, node/channel counts). Requires the Lightning node. */
   getNetworkInfo(): Promise<LightningNetworkInfo> {
     return this.requireNode().networkInfo();
   }
 
+  /** Connect to a peer (`peerAddr` = `'host:port'`, plus its pubkey). */
   connectPeer(peerAddr: string, peerPubkey: string): Promise<void> {
     return this.requireNode().connectPeer(peerAddr, peerPubkey);
   }
 
+  /** Disconnect a peer by pubkey. */
   disconnectPeer(peerPubkey: string): Promise<void> {
     return this.requireNode().disconnectPeer(peerPubkey);
   }
 
+  /** List connected peers. */
   listPeers(): Promise<LightningPeer[]> {
     return this.requireNode().listPeers();
   }
 
+  /** List channels. */
   listChannels(): Promise<LightningChannel[]> {
     return this.requireNode().listChannels();
   }
 
+  /** Open a channel (`capacitySat`/`assetLocalAmount` are `bigint`) — returns the temporary channel ID. */
   openChannel(params: OpenChannelParams): Promise<string> {
     return this.requireNode().openChannel(params);
   }
 
+  /** Close a channel (cooperative unless `force`). */
   closeChannel(channelId: string, peerPubkey?: string, force = false): void {
     this.requireNode().closeChannel(channelId, peerPubkey, force);
   }
 
+  /** Spontaneous keysend payment (BTC, or an RGB asset via `assetId`/`assetAmount`). */
   keysend(
     destPubkey: string,
     amtMsat: number,
@@ -619,30 +677,36 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     });
   }
 
+  /** Lightning payment history. */
   listPayments(): Promise<LightningPayment[]> {
     return this.requireNode().listPayments();
   }
 
+  /** A single Lightning payment by hash, or null if unknown. */
   getPayment(paymentHash: string): Promise<LightningPayment | null> {
     return this.requireNode().getPayment(paymentHash);
   }
 
+  /** Decode a Lightning (BOLT11) invoice into its structured fields. */
   decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
     return this.requireNode().decodeLnInvoice(invoice);
   }
 
+  /** Raw invoice status (`'Pending'` | `'Paid'` | `'Expired'`). */
   invoiceStatus(invoice: string): Promise<InvoiceStatus> {
     return this.requireNode().invoiceStatus(invoice);
   }
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
 
+  /** Create a HODL invoice tied to a specific payment hash. */
   createHodlLnInvoice(
     params: CreateHodlLnInvoiceParams
   ): Promise<LightningInvoice> {
     return this.requireNode().createHodlLnInvoice(params);
   }
 
+  /** Reveal the preimage to claim an inbound HODL payment. */
   claimHodlInvoice(
     paymentHash: string,
     preimage: string
@@ -650,6 +714,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.requireNode().claimHodlInvoice(paymentHash, preimage);
   }
 
+  /** Cancel a HODL invoice — the held HTLC is failed back to the sender. */
   cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
     return this.requireNode().cancelHodlInvoice(paymentHash);
   }

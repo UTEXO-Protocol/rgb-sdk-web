@@ -24,7 +24,9 @@ export class RlnSigner implements ISigner {
     _psbt: string,
     _network: Network
   ): Promise<string> {
-    throw new Error('Seed-based signing is not supported for RLN wallet. Use mnemonic instead.');
+    throw new Error(
+      'Seed-based signing is not supported for RLN wallet. Use mnemonic instead.'
+    );
   }
 
   async signMessage(params: {

@@ -22,6 +22,9 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       'no-unused-vars': 'off',
+      // TypeScript already resolves identifiers; the core rule false-positives
+      // on type-only names (e.g. DOM lib types like RequestInit).
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {

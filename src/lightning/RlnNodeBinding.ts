@@ -50,16 +50,18 @@ function parseJson<T>(jsonStr: string): T {
   return JSON.parse(jsonStr) as T;
 }
 
+// rgb-lib serializes assets snake_case: the wasm build does not enable its
+// `camel_case` feature (CI: `wasm-pack build --target web`, no --features).
 function normalizeAssetNia(raw: RlnRawAssetNia): AssetNIA {
   return {
-    assetId: String(raw.asset_id ?? raw.assetId ?? ''),
+    assetId: String(raw.asset_id ?? ''),
     ticker: String(raw.ticker ?? ''),
     name: String(raw.name ?? ''),
     details: (raw.details ?? null) as string | null,
     precision: Number(raw.precision ?? 0),
-    issuedSupply: Number(raw.issued_supply ?? raw.issuedSupply ?? 0),
+    issuedSupply: Number(raw.issued_supply ?? 0),
     timestamp: Number(raw.timestamp ?? 0),
-    addedAt: Number(raw.added_at ?? raw.addedAt ?? 0),
+    addedAt: Number(raw.added_at ?? 0),
     balance: {
       settled: Number(raw.balance?.settled ?? 0),
       future: Number(raw.balance?.future ?? 0),
@@ -70,13 +72,13 @@ function normalizeAssetNia(raw: RlnRawAssetNia): AssetNIA {
 
 function normalizeAssetCfa(raw: RlnRawAssetCfa): AssetCFA {
   return {
-    assetId: String(raw.asset_id ?? raw.assetId ?? ''),
+    assetId: String(raw.asset_id ?? ''),
     name: String(raw.name ?? ''),
     details: (raw.details ?? undefined) as string | undefined,
     precision: Number(raw.precision ?? 0),
-    issuedSupply: Number(raw.issued_supply ?? raw.issuedSupply ?? 0),
+    issuedSupply: Number(raw.issued_supply ?? 0),
     timestamp: Number(raw.timestamp ?? 0),
-    addedAt: Number(raw.added_at ?? raw.addedAt ?? 0),
+    addedAt: Number(raw.added_at ?? 0),
     balance: {
       settled: Number(raw.balance?.settled ?? 0),
       future: Number(raw.balance?.future ?? 0),
@@ -86,31 +88,25 @@ function normalizeAssetCfa(raw: RlnRawAssetCfa): AssetCFA {
 }
 
 function normalizeChannel(raw: RlnRawChannel): LightningChannel {
+  // RlnWasmNodeChannelData exposes only outbound_msat (this node's spendable
+  // outbound); there is no inbound/remote balance field, so those read 0.
+  const outboundMsat = Number(raw.outbound_msat ?? 0);
   return {
-    channelId: String(raw.channel_id ?? raw.channelId ?? ''),
-    peerPubkey: String(raw.peer_pubkey ?? raw.peerPubkey ?? ''),
-    capacitySat: Number(raw.capacity_sat ?? raw.capacitySat ?? 0),
-    // The current wasm channel view (RlnWasmNodeChannelData) has no
-    // local/remote balance fields — only outbound_msat (spendable outbound).
-    // Fall back to it so balances don't read 0 forever
-    // (waitForOutboundLiquidity polls outboundBalanceMsat).
-    localBalanceMsat: Number(
-      raw.local_balance_msat ?? raw.localBalanceMsat ?? raw.outbound_msat ?? 0
-    ),
-    remoteBalanceMsat: Number(raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0),
-    isPublic: Boolean(raw.is_public ?? raw.isPublic ?? raw.public),
-    isActive: Boolean(raw.is_active ?? raw.isActive ?? raw.ready),
-    isUsable: Boolean(raw.is_usable ?? raw.isUsable ?? raw.is_active ?? raw.isActive ?? raw.ready),
-    outboundBalanceMsat: Number(
-      raw.outbound_msat ?? raw.outbound_balance_msat ?? raw.outboundBalanceMsat ?? raw.local_balance_msat ?? raw.localBalanceMsat ?? 0
-    ),
-    inboundBalanceMsat: Number(
-      raw.inbound_balance_msat ?? raw.inboundBalanceMsat ?? raw.remote_balance_msat ?? raw.remoteBalanceMsat ?? 0
-    ),
-    assetId: (raw.asset_id ?? raw.assetId ?? undefined) as string | undefined,
-    assetLocalAmount: raw.asset_local_amount != null
-      ? Number(raw.asset_local_amount ?? raw.assetLocalAmount)
-      : undefined,
+    channelId: String(raw.channel_id ?? ''),
+    peerPubkey: String(raw.peer_pubkey ?? ''),
+    capacitySat: Number(raw.capacity_sat ?? 0),
+    localBalanceMsat: outboundMsat,
+    remoteBalanceMsat: 0,
+    isPublic: Boolean(raw.public),
+    isActive: Boolean(raw.ready),
+    isUsable: Boolean(raw.is_usable),
+    outboundBalanceMsat: outboundMsat,
+    inboundBalanceMsat: 0,
+    assetId: raw.asset_id ?? undefined,
+    assetLocalAmount:
+      raw.asset_local_amount != null
+        ? Number(raw.asset_local_amount)
+        : undefined,
   };
 }
 
@@ -125,11 +121,14 @@ function foldPaymentStatus(raw: unknown): LightningPaymentStatus {
 
 function normalizePayment(raw: RlnRawPayment): LightningPayment {
   return {
-    paymentHash: String(raw.payment_hash ?? raw.paymentHash ?? ''),
+    paymentHash: String(raw.payment_hash ?? ''),
     amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
     status: foldPaymentStatus(raw.status),
-    assetId: (raw.asset_id ?? raw.assetId ?? undefined) as string | undefined,
-    assetAmount: raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
+    assetId: (raw.asset_id ?? undefined) as string | undefined,
+    assetAmount:
+      raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
+    // `invoice` is not part of RlnWasmNodePaymentData; it is only set by the
+    // synthetic record sendPayment() builds from its own request.
     invoice: (raw.invoice ?? undefined) as string | undefined,
     inbound: Boolean(raw.inbound),
   };
@@ -148,7 +147,10 @@ type LiveRawPayment = {
 };
 
 /** Fold a wasm status string into the InvoiceStatus union. */
-function foldInvoiceStatus(raw: unknown, expiresAt?: number | null): InvoiceStatus {
+function foldInvoiceStatus(
+  raw: unknown,
+  expiresAt?: number | null
+): InvoiceStatus {
   const s = String(raw ?? '').toLowerCase();
   if (s === 'succeeded' || s === 'settled' || s === 'paid') return 'Paid';
   if (s === 'expired' || s === 'failed') return 'Expired';
@@ -159,58 +161,60 @@ function foldInvoiceStatus(raw: unknown, expiresAt?: number | null): InvoiceStat
 function normalizeInvoice(raw: RlnRawInvoice): LightningInvoice {
   return {
     invoice: String(raw.invoice ?? ''),
-    paymentHash: String(raw.payment_hash ?? raw.paymentHash ?? ''),
-    expirySeconds: Number(raw.expiry_sec ?? raw.expirySec ?? 0),
+    paymentHash: String(raw.payment_hash ?? ''),
+    expirySeconds: Number(raw.expiry_sec ?? 0),
     amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
-    assetId: (raw.asset_id ?? raw.assetId ?? undefined) as string | undefined,
-    assetAmount: raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
+    assetId: (raw.asset_id ?? undefined) as string | undefined,
+    assetAmount:
+      raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
   };
 }
 
 function normalizePeer(raw: RlnRawPeer): LightningPeer {
   return {
     pubkey: String(raw.pubkey ?? ''),
-    address: (raw.address ?? undefined) as string | undefined,
+    address: (raw.peer_addr ?? undefined) as string | undefined,
+    isConnected: Boolean(raw.started),
   };
 }
 
 function normalizeNodeInfo(raw: RlnRawNodeInfo): LightningNodeInfo {
+  // RlnWasmNodeInfoData carries counters only (no pubkey — filled separately via
+  // nodePubkey() — and no balance field).
   return {
     pubkey: String(raw.pubkey ?? ''),
-    numChannels: Number(raw.num_channels ?? raw.numChannels ?? 0),
-    numUsableChannels: Number(raw.num_usable_channels ?? raw.numUsableChannels ?? 0),
-    localBalanceMsat: Number(raw.local_balance_msat ?? raw.localBalanceMsat ?? 0),
+    numChannels: Number(raw.num_channels ?? 0),
+    numUsableChannels: Number(raw.num_usable_channels ?? 0),
   };
 }
 
 function normalizeNetworkInfo(raw: RlnRawNetworkInfo): LightningNetworkInfo {
   return {
     network: String(raw.network ?? ''),
-    blockHeight: Number(raw.block_height ?? raw.blockHeight ?? 0),
+    blockHeight: Number(raw.height ?? 0),
   };
 }
 
-/** node.apayNewValue returns snake_case keys (serde) — normalize to ApayNewResponse. */
+/** Normalize apayNewValue's `AsyncOrderNewResponse` (snake_case serde) to ApayNewResponse. */
 function normalizeApayResponse(raw: unknown): ApayNewResponse {
   const r = (raw ?? {}) as Record<string, unknown>;
-  const pick = (camel: string, snake: string): unknown => r[camel] ?? r[snake];
-  const hashes = (pick('hashes', 'hashes') ?? []) as Array<Record<string, unknown>>;
+  const hashes = (r.hashes ?? []) as Array<Record<string, unknown>>;
   return {
-    requestId: String(pick('requestId', 'request_id') ?? ''),
-    hostNodeId: String(pick('hostNodeId', 'host_node_id') ?? ''),
-    protocolVersion: Number(pick('protocolVersion', 'protocol_version') ?? 0),
-    orderId: String(pick('orderId', 'order_id') ?? ''),
+    requestId: String(r.request_id ?? ''),
+    hostNodeId: String(r.host_node_id ?? ''),
+    protocolVersion: Number(r.protocol_version ?? 0),
+    orderId: String(r.order_id ?? ''),
     status: String(r.status ?? ''),
-    acceptedThroughIndex: Number(pick('acceptedThroughIndex', 'accepted_through_index') ?? 0),
-    nextIndexExpected: Number(pick('nextIndexExpected', 'next_index_expected') ?? 0),
-    unusedHashes: Number(pick('unusedHashes', 'unused_hashes') ?? 0),
-    refillBatchSize: Number(pick('refillBatchSize', 'refill_batch_size') ?? 0),
-    firstHashIndex: Number(pick('firstHashIndex', 'first_hash_index') ?? 0),
-    lastHashIndex: Number(pick('lastHashIndex', 'last_hash_index') ?? 0),
+    acceptedThroughIndex: Number(r.accepted_through_index ?? 0),
+    nextIndexExpected: Number(r.next_index_expected ?? 0),
+    unusedHashes: Number(r.unused_hashes ?? 0),
+    refillBatchSize: Number(r.refill_batch_size ?? 0),
+    firstHashIndex: Number(r.first_hash_index ?? 0),
+    lastHashIndex: Number(r.last_hash_index ?? 0),
     hashes: hashes.map(
       (h): ApayHashEntry => ({
-        hashIndex: Number(h.hashIndex ?? h.hash_index ?? 0),
-        paymentHash: String(h.paymentHash ?? h.payment_hash ?? ''),
+        hashIndex: Number(h.hash_index ?? 0),
+        paymentHash: String(h.payment_hash ?? ''),
       })
     ),
   };
@@ -250,7 +254,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   // ── Channels ───────────────────────────────────────────────────────────────
 
   async openChannel(params: OpenChannelParams): Promise<string> {
-    const raw = parseJson<{ channel_id?: string; channelId?: string }>(
+    const raw = parseJson<{ channel_id?: string }>(
       this.nodeHandle.openChannelJson(
         params.peerPubkey,
         params.capacitySat,
@@ -259,12 +263,16 @@ export class RlnNodeBinding implements IRlnNodeBinding {
         params.assetLocalAmount ?? null
       )
     );
-    return String(raw.channel_id ?? raw.channelId ?? '');
+    return String(raw.channel_id ?? '');
   }
 
   closeChannel(channelId: string, peerPubkey?: string, force?: boolean): void {
     if (peerPubkey != null || force != null) {
-      this.nodeHandle.closeChannelWithOptions(channelId, peerPubkey ?? null, force ?? false);
+      this.nodeHandle.closeChannelWithOptions(
+        channelId,
+        peerPubkey ?? null,
+        force ?? false
+      );
     } else {
       this.nodeHandle.closeChannel(channelId);
     }
@@ -306,7 +314,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   // ── Payments ───────────────────────────────────────────────────────────────
 
-  async createLnInvoice(params: CreateLnInvoiceParams): Promise<LightningInvoice> {
+  async createLnInvoice(
+    params: CreateLnInvoiceParams
+  ): Promise<LightningInvoice> {
     // Use the LIVE ChannelManager invoice API (createLnInvoiceLiveJson — same as the
     // wasm-interop e2e reference), NOT the scaffold createLnInvoiceJson builder. The
     // live invoice (a) registers the payment secret/preimage with the ChannelManager
@@ -327,9 +337,12 @@ export class RlnNodeBinding implements IRlnNodeBinding {
       invoice,
       paymentHash: decoded?.paymentHash ?? '',
       expirySeconds: decoded?.expirySeconds || params.expirySec,
-      amtMsat: decoded?.amtMsat ?? (params.amtMsat != null ? BigInt(params.amtMsat) : undefined),
+      amtMsat:
+        decoded?.amtMsat ??
+        (params.amtMsat != null ? BigInt(params.amtMsat) : undefined),
       assetId: params.assetId ?? undefined,
-      assetAmount: params.assetAmount != null ? BigInt(params.assetAmount) : undefined,
+      assetAmount:
+        params.assetAmount != null ? BigInt(params.assetAmount) : undefined,
     };
   }
 
@@ -381,7 +394,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
    */
   private livePayment(paymentHash: string): LiveRawPayment | null {
     try {
-      const v = this.nodeHandle.livePaymentValue(paymentHash) as LiveRawPayment | null;
+      const v = this.nodeHandle.livePaymentValue(
+        paymentHash
+      ) as LiveRawPayment | null;
       return v && typeof v === 'object' ? v : null;
     } catch {
       return null;
@@ -389,10 +404,13 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   private mergedRawPayments(): RlnRawPayment[] {
-    const scaffold = parseJson<RlnRawPayment[]>(this.nodeHandle.listPaymentsJson());
-    const seen = new Set(scaffold.map((p) => String(p.payment_hash ?? p.paymentHash ?? '')));
+    const scaffold = parseJson<RlnRawPayment[]>(
+      this.nodeHandle.listPaymentsJson()
+    );
+    const seen = new Set(scaffold.map((p) => String(p.payment_hash ?? '')));
     try {
-      const live = (this.nodeHandle.livePaymentsValue() as RlnRawPayment[] | null) ?? [];
+      const live =
+        (this.nodeHandle.livePaymentsValue() as RlnRawPayment[] | null) ?? [];
       for (const p of live) {
         const hash = String(p.payment_hash ?? '');
         if (hash && !seen.has(hash)) scaffold.push(p);
@@ -416,7 +434,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   async getPayment(paymentHash: string): Promise<LightningPayment | null> {
     await this.driveRgbWorkBestEffort();
     try {
-      const raw = parseJson<RlnRawPayment>(this.nodeHandle.getPaymentJson(paymentHash));
+      const raw = parseJson<RlnRawPayment>(
+        this.nodeHandle.getPaymentJson(paymentHash)
+      );
       return normalizePayment(raw);
     } catch {
       const live = this.livePayment(paymentHash);
@@ -435,7 +455,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     } catch {
       // fall through to the scaffold reader
     }
-    const raw = parseJson<{ status?: string }>(this.nodeHandle.invoiceStatusJson(invoice));
+    const raw = parseJson<{ status?: string }>(
+      this.nodeHandle.invoiceStatusJson(invoice)
+    );
     return foldInvoiceStatus(raw.status);
   }
 
@@ -445,7 +467,10 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   async updatePaymentStatus(params: PaymentStatusUpdate): Promise<void> {
     if (params.invoice) {
-      this.nodeHandle.updatePaymentStatusByInvoice(params.invoice, params.status);
+      this.nodeHandle.updatePaymentStatusByInvoice(
+        params.invoice,
+        params.status
+      );
     } else if (params.paymentHash) {
       this.nodeHandle.updatePaymentStatus(params.paymentHash, params.status);
     }
@@ -453,7 +478,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
 
-  async createHodlLnInvoice(params: CreateHodlLnInvoiceParams): Promise<LightningInvoice> {
+  async createHodlLnInvoice(
+    params: CreateHodlLnInvoiceParams
+  ): Promise<LightningInvoice> {
     const raw = parseJson<RlnRawInvoice>(
       this.nodeHandle.createHodlLnInvoiceJson(
         params.amtMsat ?? null,
@@ -476,7 +503,10 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     };
   }
 
-  async claimHodlInvoice(paymentHash: string, preimage: string): Promise<HodlInvoiceResult> {
+  async claimHodlInvoice(
+    paymentHash: string,
+    preimage: string
+  ): Promise<HodlInvoiceResult> {
     const raw = parseJson<{ payment_hash?: string; status?: string }>(
       this.nodeHandle.claimHodlInvoiceJson(paymentHash, preimage)
     );
@@ -489,7 +519,6 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   // ── Peers ──────────────────────────────────────────────────────────────────
 
   async connectPeer(peerAddr: string, peerPubkey: string): Promise<void> {
-    console.log(peerAddr, peerPubkey)
     await this.nodeHandle.connectPeer(peerAddr, peerPubkey);
   }
 
@@ -510,7 +539,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
       const parsed = JSON.parse(jsonStr);
       if (typeof parsed === 'string') return parsed.trim();
       if (parsed && typeof parsed === 'object') {
-        const candidate = (parsed as Record<string, unknown>).pubkey ?? (parsed as Record<string, unknown>).node_pubkey;
+        const candidate =
+          (parsed as Record<string, unknown>).pubkey ??
+          (parsed as Record<string, unknown>).node_pubkey;
         if (typeof candidate === 'string') return candidate.trim();
       }
     } catch {
@@ -535,10 +566,11 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   async ldkRuntimeStatus(): Promise<LdkRuntimeStatus> {
-    const raw = parseJson<{ is_running?: boolean; isRunning?: boolean }>(
+    // LdkRuntimeStatusData exposes `ready` (no is_running field).
+    const raw = parseJson<{ ready?: boolean }>(
       this.nodeHandle.ldkRuntimeStatusJson()
     );
-    return { isRunning: Boolean(raw.is_running ?? raw.isRunning) };
+    return { isRunning: Boolean(raw.ready) };
   }
 
   async listRuntimeEvents(): Promise<ListRuntimeEventsResult> {
@@ -549,21 +581,21 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   // ── Decoding ───────────────────────────────────────────────────────────────
 
   async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
+    // RlnWasmNodeDecodeLnInvoiceData: payment_hash, amt_msat, expiry_sec,
+    // payee_pubkey (no description field).
     const raw = parseJson<{
       payment_hash?: string;
-      paymentHash?: string;
       amt_msat?: number | bigint | null;
-      amtMsat?: number | bigint | null;
-      description?: string | null;
-      expiry?: number;
-      payee?: string | null;
+      expiry_sec?: number;
+      payee_pubkey?: string | null;
     }>(this.nodeHandle.decodeLnInvoiceJson(invoice));
     return {
-      paymentHash: String(raw.payment_hash ?? raw.paymentHash ?? ''),
-      amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
-      description: (raw.description ?? undefined) as string | undefined,
-      expirySeconds: Number(raw.expiry ?? 0),
-      payee: (raw.payee ?? undefined) as string | undefined,
+      paymentHash: String(raw.payment_hash ?? ''),
+      amtMsat:
+        raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
+      description: undefined,
+      expirySeconds: Number(raw.expiry_sec ?? 0),
+      payee: (raw.payee_pubkey ?? undefined) as string | undefined,
     };
   }
 
@@ -574,14 +606,18 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   // ── Messaging ─────────────────────────────────────────────────────────────
 
   async signMessage(message: string): Promise<string> {
-    const raw = parseJson<{ signature?: string }>(this.nodeHandle.signMessageJson(message));
+    const raw = parseJson<{ signature?: string }>(
+      this.nodeHandle.signMessageJson(message)
+    );
     return String(raw.signature ?? '');
   }
 
   // ── Async payments (APay) ────────────────────────────────────────────────────
 
   async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
-    return normalizeApayResponse(await this.nodeHandle.apayNewValue(hostNodeId));
+    return normalizeApayResponse(
+      await this.nodeHandle.apayNewValue(hostNodeId)
+    );
   }
 
   async apayNewWithAddress(
@@ -589,18 +625,11 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     username: string,
     domain: string
   ): Promise<ApayNewResponse> {
-    // TEMP debug logging — remove after APay wasm verification.
-    console.debug('[rgb-sdk-web][apay:tmp] apayNewWithAddress →', {
-      hostNodeId,
-      username,
-      domain,
-    });
     const raw = await this.nodeHandle.apayNewWithAddressValue(
       hostNodeId,
       username,
       domain
     );
-    console.debug('[rgb-sdk-web][apay:tmp] apayNewWithAddress ← raw', raw);
     return normalizeApayResponse(raw);
   }
 }

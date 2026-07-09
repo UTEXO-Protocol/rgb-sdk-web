@@ -1,4 +1,3 @@
-// utexo-lsp HTTP client. Ported from @utexo/rgb-sdk-rn — browser fetch only.
 import type { IUtexoLSPClient } from './IUtexoLSPClient';
 import type {
   LspClientConfig,

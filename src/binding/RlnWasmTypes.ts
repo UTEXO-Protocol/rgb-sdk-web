@@ -60,29 +60,23 @@ export interface RlnRawBtcBalance {
 
 export interface RlnRawAssetNia {
   asset_id?: string;
-  assetId?: string;
   ticker?: string;
   name?: string;
   precision?: number;
   issued_supply?: number | bigint;
-  issuedSupply?: number | bigint;
   timestamp?: number;
   added_at?: number;
-  addedAt?: number;
   balance?: RlnRawBalance;
   details?: string | null;
 }
 
 export interface RlnRawAssetCfa {
   asset_id?: string;
-  assetId?: string;
   name?: string;
   precision?: number;
   issued_supply?: number | bigint;
-  issuedSupply?: number | bigint;
   timestamp?: number;
   added_at?: number;
-  addedAt?: number;
   balance?: RlnRawBalance;
   details?: string | null;
 }
@@ -98,35 +92,26 @@ export interface RlnRawListAssets {
 export interface RlnRawTransportEndpoint {
   endpoint?: string;
   transport_type?: string;
-  transportType?: string;
   used?: boolean;
 }
 
+/** rgb-lib `Transfer` (snake_case). */
 export interface RlnRawTransfer {
   idx?: number;
   batch_transfer_idx?: number;
-  batchTransferIdx?: number;
   created_at?: number;
-  createdAt?: number;
   updated_at?: number;
-  updatedAt?: number;
   status?: string;
   requested_assignment?: unknown;
-  requestedAssignment?: unknown;
   assignments?: unknown[];
   kind?: string;
   txid?: string;
   recipient_id?: string;
-  recipientId?: string;
   receive_utxo?: unknown;
-  receiveUtxo?: unknown;
   change_utxo?: unknown;
-  changeUtxo?: unknown;
   expiration?: number | null;
   transport_endpoints?: RlnRawTransportEndpoint[];
-  transportEndpoints?: RlnRawTransportEndpoint[];
   invoice_string?: string;
-  invoiceString?: string;
 }
 
 export interface RlnRawConfirmationTime {
@@ -136,27 +121,21 @@ export interface RlnRawConfirmationTime {
 
 export interface RlnRawTransaction {
   transaction_type?: string;
-  transactionType?: string;
   txid?: string;
   received?: number | bigint;
   sent?: number | bigint;
   fee?: number | bigint;
   confirmation_time?: RlnRawConfirmationTime | null;
-  confirmationTime?: RlnRawConfirmationTime | null;
 }
 
 // ─── Receive (blind / witness) ────────────────────────────────────────────────
 
+/** rgb-lib `ReceiveData` (snake_case). */
 export interface RlnRawInvoiceReceiveData {
   invoice?: string;
-  invoice_string?: string;
-  invoiceString?: string;
   recipient_id?: string;
-  recipientId?: string;
   expiration_timestamp?: number | null;
-  expirationTimestamp?: number | null;
   batch_transfer_idx?: number;
-  batchTransferIdx?: number;
 }
 
 // ─── Unspents ─────────────────────────────────────────────────────────────────
@@ -169,14 +148,12 @@ export interface RlnRawOutpoint {
 export interface RlnRawUtxo {
   outpoint?: RlnRawOutpoint;
   btc_amount?: number | bigint;
-  btcAmount?: number | bigint;
   colorable?: boolean;
   exists?: boolean;
 }
 
 export interface RlnRawAllocation {
   asset_id?: string | null;
-  assetId?: string | null;
   assignment?: unknown;
   settled?: boolean;
 }
@@ -184,9 +161,7 @@ export interface RlnRawAllocation {
 export interface RlnRawUnspent {
   utxo?: RlnRawUtxo;
   rgb_allocations?: RlnRawAllocation[];
-  rgbAllocations?: RlnRawAllocation[];
   pending_blinded?: number;
-  pendingBlinded?: number;
 }
 
 // ─── Send result ──────────────────────────────────────────────────────────────
@@ -194,7 +169,6 @@ export interface RlnRawUnspent {
 export interface RlnRawSendResult {
   txid?: string;
   batch_transfer_idx?: number;
-  batchTransferIdx?: number;
 }
 
 // ─── Asset balance ────────────────────────────────────────────────────────────
@@ -204,57 +178,44 @@ export interface RlnRawAssetBalance {
   future?: number | bigint;
   spendable?: number | bigint;
   offchain_outbound?: number | bigint;
-  offchainOutbound?: number | bigint;
   offchain_inbound?: number | bigint;
-  offchainInbound?: number | bigint;
 }
 
 // ─── Lightning ────────────────────────────────────────────────────────────────
 
+/**
+ * Shape of one entry from `RlnWasmNode.listChannelsJson()` — the serde
+ * serialization of `RlnWasmNodeChannelData` (snake_case, no rename). The wasm
+ * exposes only `outbound_msat` for balances; there is no inbound/remote field.
+ */
 export interface RlnRawChannel {
+  temporary_channel_id?: string;
   channel_id?: string;
-  channelId?: string;
   peer_pubkey?: string;
-  peerPubkey?: string;
-  capacity_sat?: number | bigint;
-  capacitySat?: number | bigint;
-  local_balance_msat?: number | bigint;
-  localBalanceMsat?: number | bigint;
-  remote_balance_msat?: number | bigint;
-  remoteBalanceMsat?: number | bigint;
-  is_public?: boolean;
-  isPublic?: boolean;
-  public?: boolean;
-  is_active?: boolean;
-  isActive?: boolean;
+  status?: string;
   ready?: boolean;
   is_usable?: boolean;
-  isUsable?: boolean;
-  outbound_balance_msat?: number | bigint;
-  outboundBalanceMsat?: number | bigint;
-  /** Spendable outbound BTC capacity — emitted by the runtime-state channel
-   *  view (RlnWasmNodeChannelData) since rgb-lightning-node 4339f94. */
-  outbound_msat?: number | bigint;
-  /** Largest single outbound HTLC currently sendable. */
-  next_outbound_htlc_limit_msat?: number | bigint;
-  inbound_balance_msat?: number | bigint;
-  inboundBalanceMsat?: number | bigint;
+  public?: boolean;
+  capacity_sat?: number | bigint;
   asset_id?: string | null;
-  assetId?: string | null;
   asset_local_amount?: number | bigint | null;
-  assetLocalAmount?: number | bigint | null;
+  virtual_open_mode?: string | null;
+  /** This node's spendable outbound BTC capacity, in msat. */
+  outbound_msat?: number | bigint;
+  /** Largest single outbound HTLC currently sendable, in msat. */
+  next_outbound_htlc_limit_msat?: number | bigint;
 }
 
+/**
+ * `RlnWasmNodePaymentData` (snake_case). `invoice` is not part of that struct —
+ * it is only present on the synthetic record `sendPayment()` constructs.
+ */
 export interface RlnRawPayment {
   payment_hash?: string;
-  paymentHash?: string;
   amt_msat?: bigint | number | null;
-  amtMsat?: bigint | number | null;
   status?: string;
   asset_id?: string | null;
-  assetId?: string | null;
   asset_amount?: bigint | number | null;
-  assetAmount?: bigint | number | null;
   invoice?: string | null;
   inbound?: boolean;
 }
@@ -262,36 +223,33 @@ export interface RlnRawPayment {
 export interface RlnRawInvoice {
   invoice?: string;
   payment_hash?: string;
-  paymentHash?: string;
   expiry_sec?: number;
-  expirySec?: number;
   amt_msat?: bigint | number | null;
-  amtMsat?: bigint | number | null;
   asset_id?: string | null;
-  assetId?: string | null;
   asset_amount?: bigint | number | null;
-  assetAmount?: bigint | number | null;
 }
 
+/** `RlnWasmNodePeerData`. */
 export interface RlnRawPeer {
   pubkey?: string;
-  address?: string | null;
+  peer_addr?: string | null;
+  started?: boolean;
 }
 
+/** `RlnWasmNodeInfoData` (counters only; pubkey is filled from nodePubkey()). */
 export interface RlnRawNodeInfo {
   pubkey?: string;
+  runtime?: string;
+  ldk_over_websocket?: boolean;
+  num_peers?: number;
   num_channels?: number;
-  numChannels?: number;
   num_usable_channels?: number;
-  numUsableChannels?: number;
-  local_balance_msat?: number | bigint;
-  localBalanceMsat?: number | bigint;
 }
 
+/** `RlnWasmNodeNetworkInfoData`. */
 export interface RlnRawNetworkInfo {
   network?: string;
-  block_height?: number;
-  blockHeight?: number;
+  height?: number;
 }
 
 // ─── Recipient map (sendBegin input) ─────────────────────────────────────────

@@ -143,34 +143,36 @@ function normalizeAssetBalance(raw: unknown): AssetBalance {
     settled: Number(r?.settled ?? 0),
     future: Number(r?.future ?? 0),
     spendable: Number(r?.spendable ?? 0),
-    offchainOutbound: Number(r?.offchain_outbound ?? r?.offchainOutbound ?? 0),
-    offchainInbound: Number(r?.offchain_inbound ?? r?.offchainInbound ?? 0),
+    offchainOutbound: Number(r?.offchain_outbound ?? 0),
+    offchainInbound: Number(r?.offchain_inbound ?? 0),
   };
 }
 
+// rgb-lib serializes assets snake_case (the wasm build does not enable its
+// `camel_case` feature — CI: `wasm-pack build --target web`, no --features).
 function normalizeAssetNia(a: RlnRawAssetNia): AssetNIA {
   return {
-    assetId: String(a.asset_id ?? a.assetId ?? ''),
+    assetId: String(a.asset_id ?? ''),
     ticker: String(a.ticker ?? ''),
     name: String(a.name ?? ''),
     details: (a.details ?? null) as string | null,
     precision: Number(a.precision ?? 0),
-    issuedSupply: Number(a.issued_supply ?? a.issuedSupply ?? 0),
+    issuedSupply: Number(a.issued_supply ?? 0),
     timestamp: Number(a.timestamp ?? 0),
-    addedAt: Number(a.added_at ?? a.addedAt ?? 0),
+    addedAt: Number(a.added_at ?? 0),
     balance: normalizeBalance(a.balance),
   };
 }
 
 function normalizeAssetCfa(a: RlnRawAssetCfa): AssetCFA {
   return {
-    assetId: String(a.asset_id ?? a.assetId ?? ''),
+    assetId: String(a.asset_id ?? ''),
     name: String(a.name ?? ''),
     details: (a.details ?? undefined) as string | undefined,
     precision: Number(a.precision ?? 0),
-    issuedSupply: Number(a.issued_supply ?? a.issuedSupply ?? 0),
+    issuedSupply: Number(a.issued_supply ?? 0),
     timestamp: Number(a.timestamp ?? 0),
-    addedAt: Number(a.added_at ?? a.addedAt ?? 0),
+    addedAt: Number(a.added_at ?? 0),
     balance: normalizeBalance(a.balance),
   };
 }
@@ -200,49 +202,36 @@ function parseAssignment(raw: unknown): Assignment {
 }
 
 function normalizeTransfer(raw: RlnRawTransfer): Transfer {
-  const eps = (raw.transport_endpoints ??
-    raw.transportEndpoints ??
-    []) as RlnRawTransportEndpoint[];
-  const req = raw.requested_assignment ?? raw.requestedAssignment;
+  const eps = (raw.transport_endpoints ?? []) as RlnRawTransportEndpoint[];
+  const req = raw.requested_assignment;
   return {
     idx: Number(raw.idx ?? 0),
-    batchTransferIdx: Number(
-      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
-    ),
-    createdAt: Number(raw.created_at ?? raw.createdAt ?? 0),
-    updatedAt: Number(raw.updated_at ?? raw.updatedAt ?? 0),
+    batchTransferIdx: Number(raw.batch_transfer_idx ?? 0),
+    createdAt: Number(raw.created_at ?? 0),
+    updatedAt: Number(raw.updated_at ?? 0),
     status: (raw.status ?? 'WaitingCounterparty') as Transfer['status'],
     requestedAssignment: req != null ? parseAssignment(req) : undefined,
     assignments: ((raw.assignments ?? []) as unknown[]).map(parseAssignment),
     kind: (raw.kind ?? 'Send') as Transfer['kind'],
     txid: (raw.txid ?? undefined) as string | undefined,
-    recipientId: (raw.recipient_id ?? raw.recipientId ?? undefined) as
-      | string
-      | undefined,
-    receiveUtxo: (raw.receive_utxo ??
-      raw.receiveUtxo ??
-      undefined) as Transfer['receiveUtxo'],
-    changeUtxo: (raw.change_utxo ??
-      raw.changeUtxo ??
-      undefined) as Transfer['changeUtxo'],
+    recipientId: (raw.recipient_id ?? undefined) as string | undefined,
+    receiveUtxo: (raw.receive_utxo ?? undefined) as Transfer['receiveUtxo'],
+    changeUtxo: (raw.change_utxo ?? undefined) as Transfer['changeUtxo'],
     expiration: (raw.expiration ?? undefined) as number | undefined,
     transportEndpoints: eps.map((te) => ({
       endpoint: String(te.endpoint ?? ''),
-      transportType: String(te.transport_type ?? te.transportType ?? ''),
+      transportType: String(te.transport_type ?? ''),
       used: Boolean(te.used),
     })),
-    invoiceString: (raw.invoice_string ?? raw.invoiceString ?? undefined) as
-      | string
-      | undefined,
+    invoiceString: (raw.invoice_string ?? undefined) as string | undefined,
     consignmentPath: undefined,
   };
 }
 
 function normalizeTransaction(raw: RlnRawTransaction): Transaction {
-  const ct = raw.confirmation_time ?? raw.confirmationTime;
+  const ct = raw.confirmation_time;
   return {
-    transactionType: (raw.transaction_type ??
-      raw.transactionType) as Transaction['transactionType'],
+    transactionType: raw.transaction_type as Transaction['transactionType'],
     txid: String(raw.txid ?? ''),
     received: Number(raw.received ?? 0),
     sent: Number(raw.sent ?? 0),
@@ -257,45 +246,37 @@ function normalizeReceiveData(
   raw: RlnRawInvoiceReceiveData
 ): InvoiceReceiveData {
   return {
-    invoice: String(
-      raw.invoice ?? raw.invoice_string ?? raw.invoiceString ?? ''
-    ),
-    recipientId: String(raw.recipient_id ?? raw.recipientId ?? ''),
-    expirationTimestamp: (raw.expiration_timestamp ??
-      raw.expirationTimestamp ??
-      null) as number | null,
-    batchTransferIdx: Number(
-      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
-    ),
+    invoice: String(raw.invoice ?? ''),
+    recipientId: String(raw.recipient_id ?? ''),
+    expirationTimestamp: (raw.expiration_timestamp ?? null) as number | null,
+    batchTransferIdx: Number(raw.batch_transfer_idx ?? 0),
   };
 }
 
 function normalizeUnspent(raw: RlnRawUnspent): Unspent {
   const utxo = raw.utxo ?? {};
   const op = utxo.outpoint ?? {};
-  const allocs = raw.rgb_allocations ?? raw.rgbAllocations ?? [];
+  const allocs = raw.rgb_allocations ?? [];
   return {
     utxo: {
       outpoint: { txid: String(op.txid ?? ''), vout: Number(op.vout ?? 0) },
-      btcAmount: Number(utxo.btc_amount ?? utxo.btcAmount ?? 0),
+      btcAmount: Number(utxo.btc_amount ?? 0),
       colorable: Boolean(utxo.colorable),
       exists: Boolean(utxo.exists ?? true),
     },
     rgbAllocations: allocs.map((a) => ({
-      assetId: (a.asset_id ?? a.assetId ?? undefined) as string | undefined,
+      assetId: (a.asset_id ?? undefined) as string | undefined,
       assignment: parseAssignment(a.assignment),
       settled: Boolean(a.settled),
     })),
-    pendingBlinded: Number(raw.pending_blinded ?? raw.pendingBlinded ?? 0),
+    pendingBlinded: Number(raw.pending_blinded ?? 0),
   };
 }
 
 function normalizeSendResult(raw: RlnRawSendResult): SendResult {
   return {
     txid: String(raw.txid ?? ''),
-    batchTransferIdx: Number(
-      raw.batch_transfer_idx ?? raw.batchTransferIdx ?? 0
-    ),
+    batchTransferIdx: Number(raw.batch_transfer_idx ?? 0),
   };
 }
 
@@ -313,9 +294,6 @@ function parseJson<T>(jsonStr: string): T {
 function sdkRecipientToRln(r: BatchRecipient) {
   return {
     recipient_id: r.recipientId,
-    // amount_sat / blinding use rgb-lib's from_str_or_number deserializer,
-    // which rejects the integer form serde_wasm_bindgen produces for whole
-    // JS numbers — pass them as strings.
     witness_data:
       r.witnessData != null
         ? {
@@ -372,25 +350,17 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     await initRlnWasm();
 
     const sdk = new RlnWasmSdk();
-
-    // Enable virtual channels before any init (matches official SDK sequence).
     sdk.setDefaultEnableVirtualChannelsV0(params.enableVirtualChannels ?? true);
-
-    // Preload persistent runtime state BEFORE initValue.
     await sdk.preloadPersistentRuntimeState();
 
-    // Set default RGB proxy transport at SDK level if provided.
     if (params.transportEndpoint) {
       sdk.setDefaultRgbProxyTransport(params.transportEndpoint, null, null);
     }
 
-    console.log('[RLN] initValue start, network:', params.network);
     try {
       await sdk.initValue(params.password, params.mnemonic);
-      console.log('[RLN] initValue ok');
     } catch (e) {
       const msg = String(e);
-      console.error('[RLN] initValue failed:', msg);
       if (
         msg.includes('already initialized with different password') ||
         msg.includes('already initialized with different mnemonic')
@@ -403,9 +373,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       throw e;
     }
 
-    console.log('[RLN] unlock start');
     await sdk.unlock(JSON.stringify({ password: params.password }));
-    console.log('[RLN] unlock ok');
 
     const networkStr = mapNetwork(params.network);
     const keys = rgbRestoreKeysValue(networkStr, params.mnemonic) as {
@@ -430,32 +398,18 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       supported_schemas: params.supportedSchemas ?? ['Nia', 'Ifa'],
     };
 
-    console.log('[RLN] createWallet start, data_dir:', walletData.data_dir);
-
-    // Create node handle BEFORE wallet (matches official RLN init sequence).
     let nodeHandle: RlnWasmNode | null = null;
     let rlnNode: IRlnNodeBinding | null = null;
 
     const proxyUrl = params.proxyUrl ?? params.transportEndpoint;
     if (proxyUrl) {
       const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
-      // Use the STANDALONE node constructor (static newWithNodeRuntimeId), not
-      // sdk.newNode(): the latter binds the node to the SDK facade and
-      // auto-attaches the SDK default wallet, which then conflicts (shared
-      // RefCell) with our standalone RlnWasmWallet. The official examples always
-      // build the node this way. A stable runtimeId (master fingerprint) keeps
-      // the node identity + persisted runtime state stable across reloads.
       const runtimeId = params.nodeRuntimeId ?? keys.master_fingerprint;
-      // Upstream now requires the node's Bitcoin network at construction; it
-      // drives the LDK handshake chain and attachWallet rejects mismatches.
-      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(proxyUrl, runtimeId, networkStr);
-      // Enable virtual channels v0 ON THE NODE (the SDK-default flag does not
-      // propagate to a standalone node). Gates both outbound virtual opens and
-      // the inbound accept path: the wasm backend's OpenChannelRequest handler
-      // accepts the LSP's trusted virtual channels (trusted_no_broadcast,
-      // dust_limit_satoshis=1) via accept_inbound_channel_from_trusted_peer_0conf
-      // only when this flag is set; without it LDK's stock accept rejects them
-      // with "dust_limit_satoshis (1) is less than the implementation limit (354)".
+      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(
+        proxyUrl,
+        runtimeId,
+        networkStr
+      );
       if (params.enableVirtualChannels ?? true) {
         try {
           nodeHandle.setEnableVirtualChannelsV0(true);
@@ -465,30 +419,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       }
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
-
-    let wallet: RlnWasmWallet;
-    try {
-      // Use the STANDALONE wallet (static RlnWasmWallet.create), not
-      // sdk.createWallet(): the latter returns an SDK-managed handle whose ops
-      // route through the SDK facade and re-borrow the same RefCell the node's
-      // ldk-over-websocket runtime holds → "RefCell already borrowed" panic on
-      // any wallet call (getBtcBalanceValue, etc). The official example uses the
-      // standalone wallet for exactly this reason.
-      wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
-      console.log('[RLN] createWallet ok');
-    } catch (e) {
-      console.error('[RLN] createWallet failed:', String(e));
-      throw e;
-    }
-
-    // NOTE: the wallet must NOT be attached to the node here. goOnlineValue
-    // holds a borrow_mut() on the wallet's shared RefCell across its await
-    // (sdk_facade.rs); once attached, the node's ldk-over-websocket runtime
-    // borrows that same RefCell on its ticks → "RefCell already borrowed"
-    // panic. connect() attaches right AFTER goOnlineValue resolves (auto
-    // during create() via the indexerUrl param — one-call UX); if the wallet
-    // comes up offline, attach falls back to first LN use (ensureNodeAttached).
-
+    const wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
     const normalizedNet = normalizeNetwork(params.network);
     const defaultIndexerUrl =
       DEFAULT_INDEXER_URLS[normalizedNet] ?? DEFAULT_INDEXER_URLS.utexo;
@@ -539,10 +470,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   ): Promise<void> {
     const url = indexerUrl || this.defaultIndexerUrl;
     if (this.online) {
-      // Idempotent: create({ indexerUrl }) auto-connects, so app code that
-      // still calls goOnline() afterwards must not re-enter goOnlineValue
-      // (rgb-lib rejects a second go_online, and the wallet may already be
-      // attached to the LN node by then — see ensureNodeAttached).
+      // Idempotent: rgb-lib rejects a second go_online, and create({ indexerUrl })
+      // may have already connected + attached the node (see ensureNodeAttached).
       if (indexerUrl && indexerUrl !== this.online.indexer_url) {
         logger.warn(
           `RlnWasmBinding.connect: already online via ${this.online.indexer_url}; ignoring ${indexerUrl}`
@@ -550,18 +479,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       }
       return;
     }
-    console.log('[RLN] goOnline start', { url, skipConsistencyCheck });
     this.online = await this.wallet.goOnlineValue(skipConsistencyCheck, url);
-    console.log('[RLN] goOnline ok');
     // Attach the wallet to the LN node now that goOnlineValue has RESOLVED —
-    // the ordering is the hard constraint, not the location: goOnlineValue
-    // holds a borrow_mut() on the wallet's shared RefCell across its await,
-    // and an already-attached node's ldk-over-websocket runtime would borrow
-    // the same cell on its ticks → "RefCell already borrowed" panic. Attaching
-    // here gives RN-style UX: after init()/goOnline() Lightning is ready with
-    // no separate attach call. The node's background chain-sync session is
-    // started dormant (see ensureNodeAttached); the full loop stays opt-in
-    // (startNodeChainSync), never auto-started.
+    // the ordering is the hard constraint: goOnlineValue holds a borrow_mut()
+    // on the wallet's shared RefCell across its await, so an already-attached
+    // node's runtime ticks would collide → "RefCell already borrowed" panic.
+    // Attaching here gives RN-style UX (Lightning ready after init()/goOnline()
+    // with no separate attach call).
     this.ensureNodeAttached();
   }
 
@@ -577,19 +501,14 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       // Start a DORMANT chain-sync session (huge interval — the background loop
       // must stay idle or it collides with foreground wallet ops on the shared
       // RefCell). Explicit chainSyncTickValue() calls in RlnNodeBinding's drive
-      // path keep the LDK best-block fresh; without an active session the node's
-      // height freezes at attach time and, once the regtest chain advances, peers
-      // reject our HTLCs (expiry_too_soon → temporary channel failure). Matches
-      // the wasm-interop reference pattern.
+      // path keep the LDK best-block fresh; without a live session the node's
+      // height freezes at attach time and peers reject our HTLCs once the chain
+      // advances (expiry_too_soon).
       try {
         this.nodeHandle.chainSyncStartValue(this.defaultIndexerUrl, 3_600_000);
       } catch (e) {
         logger.warn('RlnWasmBinding: chainSyncStart on attach failed', e);
       }
-      console.log(
-        '[RLN] wallet attached to node',
-        this.nodeHandle.nodeInfoValue()
-      );
     }
   }
 
@@ -732,7 +651,6 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     } as AssetIfa;
   }
 
-  // IFA inflation is not supported in RLN WASM
   async inflateBegin(_params: InflateAssetIfaRequestModel): Promise<string> {
     const online = this.requireOnline();
     return await this.wallet.inflateBegin(
@@ -756,8 +674,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   async sendBegin(params: SendAssetBeginRequestModel): Promise<string> {
     const online = this.requireOnline();
-    // RLN wallet.sendBegin takes a recipient map, not an invoice string.
-    // Decode the RGB invoice to build the map.
+    // sendBegin takes a recipient map, not an invoice string — decode to build it.
     const invoiceObj = new RlnWasmInvoice(params.invoice);
     const invoiceData = invoiceObj.invoiceDataValue() as Record<
       string,
@@ -778,9 +695,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       [assetId]: [
         {
           recipient_id: recipientId,
-          // amount_sat / blinding use rgb-lib's from_str_or_number
-          // deserializer — pass as strings (whole JS numbers arrive as
-          // rejected serde integers otherwise).
+          // amount_sat / blinding must be strings (see sdkRecipientToRln).
           witness_data: params.witnessData
             ? {
                 amount_sat: String(params.witnessData.amountSat),
@@ -920,19 +835,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     );
   }
 
-  // NOTE: these MUST await the underlying wallet call. The wasm wallet holds a
-  // RefCell borrow across the await inside syncOnline/refreshJson; if we fire
-  // them without awaiting (fire-and-forget) and a subsequent wallet op
-  // (getBtcBalance, etc.) runs before they settle, the wasm panics with
-  // "RefCell already borrowed". (The IRgbLibBinding signature is `void`, but a
-  // Promise-returning impl is structurally compatible and lets callers await.)
+  // Must await: the wasm wallet holds a RefCell borrow across the await, so a
+  // fire-and-forget call racing a later wallet op panics ("RefCell already
+  // borrowed"). Returning a Promise from the `void` interface method is fine.
   async refreshWallet(): Promise<void> {
     if (!this.online) return;
-    // filter must be an array — the wasm deserializes Vec<RefreshFilter>
-    // and rejects null with "Invalid filter"; [] = refresh all transfers.
-    // Use refreshValue, not refreshJson: the result is keyed by integer
-    // batch_transfer_idx, which refreshJson's JSON conversion rejects
-    // ("expected a string key"). The result is discarded anyway.
+    // filter must be [] (wasm rejects null); refreshValue not refreshJson (the
+    // integer-keyed result breaks JSON conversion). Result is discarded.
     await this.wallet.refreshValue(this.online, null, [], false);
   }
 
@@ -1041,10 +950,10 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async makerInit(params: SwapMakerInitParams): Promise<SwapMakerInitResult> {
-    const raw = parseJson<{ swap_string?: string; swapString?: string }>(
+    const raw = parseJson<{ swap_string?: string }>(
       await this.sdk.makerInitJson(params.requestJson)
     );
-    return { swapString: raw.swap_string ?? raw.swapString ?? '' };
+    return { swapString: raw.swap_string ?? '' };
   }
 
   async makerExecute(swapString: string): Promise<void> {
@@ -1063,11 +972,11 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async listSwaps(): Promise<SwapInfo[]> {
-    const raw = parseJson<
-      Array<{ swap_string?: string; swapString?: string; status?: string }>
-    >(await this.sdk.listSwapsJson());
+    const raw = parseJson<Array<{ swap_string?: string; status?: string }>>(
+      await this.sdk.listSwapsJson()
+    );
     return raw.map((s) => ({
-      swapString: s.swap_string ?? s.swapString ?? '',
+      swapString: s.swap_string ?? '',
       status: s.status ?? '',
     }));
   }

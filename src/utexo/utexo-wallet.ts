@@ -85,6 +85,7 @@ import type {
   LightningNetworkInfo,
   DecodedLnInvoice,
   InvoiceStatus,
+  LightningAssetParam,
   SendPaymentResult,
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
@@ -236,12 +237,12 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.getAddress();
   }
 
-  /** Advance to the next vanilla (BTC) receive address. */
+  /** Not implemented — the RLN wasm wallet does not expose address rotation yet. @throws always */
   rotateVanillaAddress(): Promise<string> {
     return this.manager.rotateVanillaAddress();
   }
 
-  /** Advance to the next colored (RGB) receive address. */
+  /** Not implemented — the RLN wasm wallet does not expose address rotation yet. @throws always */
   rotateColoredAddress(): Promise<string> {
     return this.manager.rotateColoredAddress();
   }
@@ -451,24 +452,33 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IUTEXOProtocol — Lightning ─────────────────────────────────────────────
 
-  /** Create a Lightning invoice (BTC via `amountSats`, or an RGB asset via `asset`). */
+  /**
+   * Create a Lightning invoice (BTC via `amountSats`, or an RGB asset via
+   * `asset`). Wider than the core model: `asset` is optional (BTC-only
+   * invoices), and `asset.assetAmount` is accepted as an alias for
+   * `asset.amount` — an asset with neither amount key throws instead of
+   * silently issuing an amount-less invoice.
+   */
   async createLightningInvoice(
-    params: CreateLightningInvoiceRequestModel & {
+    params: Omit<CreateLightningInvoiceRequestModel, 'asset'> & {
+      asset?: LightningAssetParam;
       paymentHash?: string | null;
     }
   ): Promise<LightningReceiveRequest> {
     const amtMsat =
       params.amountSats != null ? BigInt(params.amountSats * 1000) : undefined;
     const assetId = params.asset?.assetId || undefined;
-    const assetAmount =
-      assetId && params.asset?.amount != null
-        ? BigInt(params.asset.amount)
-        : undefined;
+    const assetUnits = params.asset?.amount ?? params.asset?.assetAmount;
+    if (assetId && assetUnits == null) {
+      throw new Error(
+        'UTEXOWallet.createLightningInvoice: asset.amount (or its alias asset.assetAmount) is required when asset.assetId is set'
+      );
+    }
     const resp = await this.requireNode().createLnInvoice({
       amtMsat,
       expirySec: params.expirySeconds ?? 3600,
       assetId,
-      assetAmount,
+      assetAmount: assetId != null ? BigInt(assetUnits!) : undefined,
     });
     return { lnInvoice: resp.invoice };
   }
@@ -506,10 +516,20 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
   }
 
-  /** Atomic Lightning payment (native LN pay via the RLN node). */
+  /**
+   * Atomic Lightning payment (native LN pay via the RLN node). `amount` is in
+   * sats; `assetAmount` is in asset units. The core model's `maxFee` is not
+   * supported by the wasm node (LDK route limits apply) — passing it throws
+   * rather than silently ignoring a fee cap.
+   */
   async payLightningInvoice(
     params: PayLightningInvoiceRequestModel & { assetAmount?: number }
   ): Promise<LightningSendRequest> {
+    if (params.maxFee != null) {
+      throw new Error(
+        'UTEXOWallet.payLightningInvoice: maxFee is not supported by the local RLN node — remove it (LDK route limits apply)'
+      );
+    }
     const amtMsat =
       params.amount != null ? BigInt(params.amount * 1000) : undefined;
     const assetAmount =
@@ -733,11 +753,6 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     domain: string
   ): Promise<ApayNewResponse> {
     return this.requireNode().apayNewWithAddress(hostNodeId, username, domain);
-  }
-
-  /** Raw payment records (incl. preimage) — used by LSP HODL-claim flows. */
-  listPaymentsRaw(): Promise<unknown[]> {
-    return this.requireNode().listPaymentsRaw();
   }
 
   // ── LSP (utexo-lsp composed flows) ─────────────────────────────────────────

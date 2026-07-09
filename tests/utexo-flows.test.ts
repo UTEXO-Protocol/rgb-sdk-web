@@ -144,12 +144,8 @@ describe('UTEXOWallet API', () => {
   });
 
   describe('APay + LSP', () => {
-    [
-      'apayNew',
-      'apayNewWithAddress',
-      'listPaymentsRaw',
-      'createLsp',
-      'getLspConfig',
-    ].forEach(hasMethod);
+    ['apayNew', 'apayNewWithAddress', 'createLsp', 'getLspConfig'].forEach(
+      hasMethod
+    );
   });
 });

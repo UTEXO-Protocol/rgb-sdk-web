@@ -10,7 +10,7 @@ Browser-first TypeScript SDK for in-browser RGB assets and Lightning payments vi
 [![npm version](https://img.shields.io/npm/v/@utexo/rgb-sdk-web)](https://www.npmjs.com/package/@utexo/rgb-sdk-web)
 [![license](https://img.shields.io/npm/l/@utexo/rgb-sdk-web)](https://www.npmjs.com/package/@utexo/rgb-sdk-web)
 
-> **Note**: Web port of the RGB SDK family. Use [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) for Node.js and [`@utexo/rgb-sdk-rn`](https://github.com/UTEXO-Protocol/rgb-sdk-rn) for React Native. The `UTEXOWallet` surface mirrors the RN SDK, so app code ports across web ↔ mobile with minimal change.
+> **Note**: The web SDK of the UTEXO RGB SDK ecosystem. Use [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) for Node.js and [`@utexo/rgb-sdk-rn`](https://github.com/UTEXO-Protocol/rgb-sdk-rn) for React Native. The `UTEXOWallet` surface mirrors the RN SDK, so app code ports across web ↔ mobile with minimal change.
 
 ## Requirements
 
@@ -45,7 +45,7 @@ export default defineConfig({
 ```typescript
 import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
 
-const network = 'regtest';
+const network = 'utexo';
 const keys = await generateKeys(network);
 
 // Constructor stores params synchronously; init() loads the WASM, creates
@@ -60,9 +60,10 @@ const wallet = new UTEXOWallet({
 await wallet.init();
 
 // init() connects non-fatally — if the indexer was unreachable the wallet
-// comes back offline; retry with goOnline() (idempotent).
+// comes back offline; retry with goOnline() (idempotent). No-arg retries the
+// network default indexer (https://esplora-api.utexo.com for 'utexo').
 if (!wallet.isOnline()) {
-  await wallet.goOnline('http://127.0.0.1:3002');
+  await wallet.goOnline();
 }
 
 // Fund the wallet, then carve out colored UTXOs for RGB
@@ -106,7 +107,7 @@ import { UTEXOWallet, type UTEXOWalletCreateParams } from '@utexo/rgb-sdk-web';
 const wallet = new UTEXOWallet({
   mnemonic: 'word1 word2 ...',
   password: 'my-secure-password',   // RLN SDK password (encrypts local state)
-  network: 'regtest',
+  network: 'utexo',
   // indexerUrl: '...',             // optional — network default
   // transportEndpoint: '...',      // optional — network default
   // proxyUrl: 'ws://...',          // optional — enables the Lightning node
@@ -124,12 +125,12 @@ await wallet.init();
 |-------|------|-------------|
 | `mnemonic` | `string` | BIP39 mnemonic — required |
 | `password` | `string` | RLN SDK password — required (init/unlock of the local wallet state) |
-| `network` | `string?` | Bitcoin network (`'regtest'`, `'utexo'`, `'testnet'`, `'mainnet'`, …). Default `'regtest'` |
+| `network` | `string?` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …). Default `'utexo'` |
 | `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `create()` always attempts to connect; failure is non-fatal (wallet returned offline) |
-| `transportEndpoint` | `string?` | RGB proxy for consignment delivery. Defaults per network (regtest/utexo) |
-| `proxyUrl` | `string?` | WebSocket LN gateway URL — enables the embedded Lightning node. Defaults per network (regtest/utexo); on networks without a default, omitting it means no Lightning |
+| `transportEndpoint` | `string?` | RGB proxy for consignment delivery. Defaults per network (utexo) |
+| `proxyUrl` | `string?` | WebSocket LN gateway URL — enables the embedded Lightning node. Defaults per network (utexo); on networks without a default, omitting it means no Lightning |
 | `nodeRuntimeId` | `string?` | Stable runtime ID so node state persists across page reloads |
-| `skipConsistencyCheck` | `boolean?` | Skip the indexer consistency check on connect (recommended on regtest) |
+| `skipConsistencyCheck` | `boolean?` | Skip the indexer consistency check on connect |
 | `dataDir` | `string?` | Local wallet DB directory (default: auto-generated) |
 | `supportedSchemas` | `string[]?` | Asset schemas (default `['Nia', 'Ifa']`) |
 | `lspBaseUrl` | `string?` | utexo-lsp HTTP base URL — source for no-arg `createLsp()` peer discovery |
@@ -153,8 +154,6 @@ Like the RN SDK, construction and initialization are split — but there is no s
 |--------|-------------|
 | `getBtcBalance()` | BTC balance (vanilla + colored) |
 | `getAddress()` | Current on-chain deposit address |
-| `rotateVanillaAddress()` | Advance to the next vanilla (BTC) receive address |
-| `rotateColoredAddress()` | Advance to the next colored (RGB) receive address |
 | `getXpub()` | `{ xpubVan, xpubCol }` |
 | `getNetwork()` | Configured network string |
 
@@ -225,8 +224,8 @@ Like the RN SDK, construction and initialization are split — but there is no s
 
 | Method | Description |
 |--------|-------------|
-| `createLightningInvoice({ amountSats?, expirySeconds?, asset })` | Create a Lightning invoice (BTC or RGB asset) |
-| `payLightningInvoice({ lnInvoice, amount?, assetId?, assetAmount? })` | Atomic pay via the local RLN node — returns `{ txid: paymentHash, status }` |
+| `createLightningInvoice({ amountSats?, expirySeconds?, asset? })` | Create a Lightning invoice — BTC via `amountSats`, RGB via `asset: { assetId, amount }` (`assetAmount` accepted as an alias for `amount`) |
+| `payLightningInvoice({ lnInvoice, amount?, assetId?, assetAmount? })` | Atomic pay via the local RLN node (`amount` is sats) — returns `{ txid: paymentHash, status }` |
 | `getLightningSendRequest(paymentHash)` | Poll send status (`'WaitingCounterparty'` → `'Settled'` \| `'Failed'`) |
 | `getLightningReceiveRequest(invoice)` | Poll receive status |
 | `listLightningPayments()` | List all Lightning payments |
@@ -242,7 +241,6 @@ Like the RN SDK, construction and initialization are split — but there is no s
 | `createHodlLnInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
 | `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
 | `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
-| `listPaymentsRaw()` | All payments including `InboundHodl` with preimage |
 
 See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full examples.
 
@@ -261,7 +259,7 @@ See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full exam
 | `closeChannel(channelId, peerPubkey?, force?)` | Close a channel |
 | `listChannels()` | List channels |
 | `keysend(destPubkey, amtMsat, assetId?, assetAmount?)` | Spontaneous keysend payment |
-| `listPayments()` / `getPayment(paymentHash)` | Payment history / one payment |
+| `listPayments()` / `getPayment(paymentHash)` | Payment history / one payment — records carry `rawStatus` (unfolded HODL states like `Claimable`) and `preimage` when known |
 | `decodeLnInvoice(invoice)` | Decode a Lightning invoice |
 | `invoiceStatus(invoice)` | Raw invoice status (`'Pending'` \| `'Paid'` \| `'Expired'`) |
 
@@ -340,8 +338,8 @@ const txid2    = await wallet.sendBtcEnd({ signedPsbt: signed });
 ### Open a Lightning Channel
 
 ```typescript
-// Requires the Lightning node (proxyUrl set or defaulted, e.g. regtest/utexo)
-await wallet.connectPeer('127.0.0.1:9735', peerPubkey);
+// Requires the Lightning node (proxyUrl set or defaulted, e.g. utexo)
+await wallet.connectPeer('peer.example.com:9735', peerPubkey);
 
 const tempChannelId = await wallet.openChannel({
   peerPubkey,
@@ -428,7 +426,6 @@ Used automatically when the corresponding create param is omitted.
 
 | Network | LN gateway (`proxyUrl`) | RGB transport (`transportEndpoint`) | Indexer (`indexerUrl`) |
 |---------|------------------------|-------------------------------------|------------------------|
-| regtest | `ws://127.0.0.1:3001` | `http://127.0.0.1:3001/rgb/json-rpc` | `http://127.0.0.1:3002` |
 | utexo   | `wss://rln-proxy-utexo.utexo.com/rgb/json-rpc` | `rpcs://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
 
 **Indexer-only defaults** (`DEFAULT_INDEXER_URLS`) for the other networks:
@@ -465,7 +462,7 @@ On networks without a `proxyUrl` default, pass one explicitly to enable the Ligh
 import { RlnWalletManager, RlnWasmBinding, initRlnWasm } from '@utexo/rgb-sdk-web';
 
 const manager = await RlnWalletManager.create({
-  mnemonic, password, network: 'regtest',
+  mnemonic, password, network: 'utexo',
 });
 await manager.syncWallet();
 const node = manager.getLightningNode();  // IRlnNodeBinding | null

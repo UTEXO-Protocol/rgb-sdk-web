@@ -18,7 +18,7 @@ const wallet = await UTEXOWallet.create({
   mnemonic,
   password: 'my-secure-password',
   network: 'utexo',
-  lspBaseUrl: 'https://lsp.utexo.com',
+  lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
 
@@ -36,9 +36,9 @@ If you need to override any peer detail (or you didn't set `lspBaseUrl`), pass a
 import { type LspPeer } from '@utexo/rgb-sdk-web';
 
 const lsp = await wallet.createLsp({
-  baseUrl:    'https://lsp.utexo.com',
+  baseUrl:    'https://lsp-signet.utexo.com',
   peerPubkey: '02abc...',
-  peerHost:   'lsp.utexo.com',
+  peerHost:   'lsp-signet.utexo.com',
   peerPort:   9735,
   bearerToken: 'bearer-token',   // required for APay
 });
@@ -190,7 +190,7 @@ Resolve a Lightning Address and pay it. Tries the LSP's `resolveAddress` first; 
 
 ```typescript
 const { invoice, sendResult } = await lsp.payAddress({
-  address: 'alice@lsp.utexo.com',
+  address: 'alice@lsp-signet.utexo.com',
   amtMsat: 3_000_000,
   asset: { assetId: 'rgb:abc...', assetAmount: 1 },  // optional
 });
@@ -204,7 +204,7 @@ Register an async payment hash pool with the LSP, then fetch the auto-generated 
 
 ```typescript
 const { username, domain, address } = await lsp.enableLightningAddress();
-// address → 'excited-mountain-1234@lsp.utexo.com'
+// address → 'excited-mountain-1234@lsp-signet.utexo.com'
 ```
 
 How it works:
@@ -357,7 +357,7 @@ const wallet = await UTEXOWallet.create({
   mnemonic,
   password,
   network: 'utexo',
-  lspBaseUrl: 'https://lsp.utexo.com',
+  lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
 
@@ -441,7 +441,7 @@ const info = await lsp.http.getInfo();
 console.log(info.pubkey, info.numUsableChannels);
 
 // Resolve a Lightning Address (LNURL discovery)
-const { pr } = await lsp.http.resolveAddress('alice@lsp.utexo.com', 3_000_000);
+const { pr } = await lsp.http.resolveAddress('alice@lsp-signet.utexo.com', 3_000_000);
 await wallet.payLightningInvoice({ lnInvoice: pr });
 
 // Get the Lightning Address assigned to a peer pubkey

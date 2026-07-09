@@ -80,10 +80,15 @@ export interface LightningPayment {
   paymentHash: string;
   amtMsat?: bigint;
   status: LightningPaymentStatus;
+  /** Node status before folding into `status` — HODL states like `Claimable`/
+   *  `Claiming` fold to `Pending`, so filter on this for claim flows. */
+  rawStatus?: string;
   assetId?: string;
   assetAmount?: bigint;
   invoice?: string;
   inbound?: boolean;
+  /** Payment preimage once known (settled sends, claimable HODL receives). */
+  preimage?: string;
 }
 
 export interface SendPaymentParams {
@@ -103,6 +108,17 @@ export interface KeysendParams {
 }
 
 export type InvoiceStatus = 'Pending' | 'Expired' | 'Paid';
+
+/**
+ * Asset reference for Lightning invoice/pay-address params. `amount` and
+ * `assetAmount` are aliases for the asset-unit amount (both shapes appear
+ * across the RN-parity and LSP APIs); exactly one must be set.
+ */
+export interface LightningAssetParam {
+  assetId: string;
+  amount?: number;
+  assetAmount?: number;
+}
 
 export interface HodlInvoiceResult {
   paymentHash: string;

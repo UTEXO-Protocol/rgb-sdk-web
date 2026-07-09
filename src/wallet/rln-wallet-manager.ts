@@ -28,7 +28,7 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   mnemonic: string;
   /** SDK password — required for RlnWasmSdk.initValue / unlock */
   password: string;
-  /** Bitcoin network (default: 'regtest') */
+  /** Bitcoin network (default: 'utexo') */
   network?: string;
   /** WebSocket proxy URL for the Lightning node — enables createNodeHandle.
    *  Defaults to the network's DEFAULT_RLN_URLS entry (regtest/utexo); on
@@ -81,7 +81,7 @@ export class RlnWalletManager extends BaseWalletManager {
       );
     }
 
-    const network = String(params.network ?? 'regtest');
+    const network = String(params.network ?? 'utexo');
 
     // Network-dependent URL defaults: explicit param → DEFAULT_RLN_URLS →
     // DEFAULT_INDEXER_URLS (indexer only; proxy/transport stay unset on

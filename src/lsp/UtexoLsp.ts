@@ -2,7 +2,11 @@ import type { UTEXOWallet } from '../utexo/utexo-wallet';
 import { UtexoLSPClient } from './UtexoLSPClient';
 import type { IUtexoLSPClient } from './IUtexoLSPClient';
 import type { LightningSendRequest } from '@utexo/rgb-sdk-core';
-import type { LightningChannel, ApayNewResponse } from '../rln';
+import type {
+  LightningChannel,
+  ApayNewResponse,
+  LightningAssetParam,
+} from '../rln';
 import {
   type LspPeer,
   type ChannelReadyInfo,
@@ -62,7 +66,7 @@ export interface PayAddressOptions {
   /** Lightning Address, e.g. alice@lsp.utexo.com */
   address: string;
   amtMsat: number;
-  asset?: { assetId: string; assetAmount: number };
+  asset?: LightningAssetParam;
 }
 
 // ── enableLightningAddress ────────────────────────────────────────────────────
@@ -290,6 +294,13 @@ export class UtexoLsp {
     const [username, domain] = opts.address.split('@');
     if (!username || !domain)
       throw new Error(`Invalid Lightning Address: "${opts.address}"`);
+    const assetAmount = opts.asset
+      ? (opts.asset.assetAmount ?? opts.asset.amount)
+      : undefined;
+    if (opts.asset && assetAmount == null)
+      throw new Error(
+        'payAddress: asset.assetAmount (or its alias asset.amount) is required when asset is set'
+      );
 
     let invoice: string | undefined;
 
@@ -303,7 +314,7 @@ export class UtexoLsp {
           username,
           opts.amtMsat,
           opts.asset?.assetId,
-          opts.asset?.assetAmount
+          assetAmount
         );
         invoice = cb.pr;
       } catch (err) {
@@ -326,8 +337,7 @@ export class UtexoLsp {
       let url = `${meta.callback}${meta.callback.includes('?') ? '&' : '?'}amount=${opts.amtMsat}`;
       if (opts.asset?.assetId)
         url += `&asset_id=${encodeURIComponent(opts.asset.assetId)}`;
-      if (opts.asset?.assetAmount !== undefined)
-        url += `&asset_amount=${opts.asset.assetAmount}`;
+      if (assetAmount !== undefined) url += `&asset_amount=${assetAmount}`;
 
       const cb = (await fetch(url).then((r) => r.json())) as { pr: string };
       invoice = cb.pr;
@@ -412,18 +422,16 @@ export class UtexoLsp {
 
   /** Find all CLAIMABLE/CLAIMING inbound payments and claim each via claimHodlInvoice. */
   async claimPendingPayments(): Promise<ClaimResult[]> {
-    const payments = await this.wallet.listPaymentsRaw();
-    const claimable = (payments as Array<Record<string, unknown>>).filter(
-      (p) => {
-        const s = String(p.status ?? '').toUpperCase();
-        return s === 'CLAIMABLE' || s === 'CLAIMING';
-      }
-    );
+    const payments = await this.wallet.listPayments();
+    const claimable = payments.filter((p) => {
+      const s = (p.rawStatus ?? '').toUpperCase();
+      return s === 'CLAIMABLE' || s === 'CLAIMING';
+    });
 
     const results: ClaimResult[] = [];
     for (const p of claimable) {
-      const hash = String(p.paymentHash ?? p.payment_hash ?? '');
-      const preimage = String(p.paymentPreimage ?? p.payment_preimage ?? '');
+      const hash = p.paymentHash;
+      const preimage = p.preimage ?? '';
       try {
         await this.wallet.claimHodlInvoice(hash, preimage);
         results.push({ paymentHash: hash, claimed: true });

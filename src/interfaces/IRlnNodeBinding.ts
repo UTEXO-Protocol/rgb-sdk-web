@@ -45,8 +45,6 @@ export interface IRlnNodeBinding {
   sendPayment(params: SendPaymentParams): Promise<SendPaymentResult>;
   keysend(params: KeysendParams): Promise<SendPaymentResult>;
   listPayments(): Promise<LightningPayment[]>;
-  /** Raw (un-normalized) payment records — includes fields like payment preimage. */
-  listPaymentsRaw(): Promise<unknown[]>;
   getPayment(paymentHash: string): Promise<LightningPayment | null>;
   invoiceStatus(invoice: string): Promise<InvoiceStatus>;
   failPendingPayments(): Promise<void>;

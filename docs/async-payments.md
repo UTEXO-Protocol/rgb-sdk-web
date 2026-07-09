@@ -49,7 +49,7 @@ flowchart TD
 | **②** | Hash slot reserved; inbound HODL BOLT11 from Host | **Sender app** | `lsp.http.resolveAddress(username, amtMsat, assetId?, assetAmount?)` |
 | **③** | Payer pays BOLT11; inbound HTLC held at Host | **Sender app** | `lsp.waitForOutboundLiquidity(…)` then `wallet.payLightningInvoice(…)` |
 | **④** | Outbox asks Recipient for outbound invoice over P2P | **Host + utexo-lsp** | Recipient must be reachable — **`lsp.connect()`** |
-| **⑤** | Host pays outbound invoice; Recipient **auto-claims** | **Host + Recipient RLN** | App: optional `listPaymentsRaw()` → `InboundHodl`/`Succeeded` |
+| **⑤** | Host pays outbound invoice; Recipient **auto-claims** | **Host + Recipient RLN** | App: optional `listPayments()` → inbound `Succeeded` |
 | **⑥** | Host settles payer HTLC with preimage | **Host + utexo-lsp** | App: poll `getLightningSendRequest(hash)` → `Settled` |
 
 **Blue steps (①②③)** — your app. **Green steps (④⑤⑥)** — LSP outbox; the recipient app keeps **`lsp.connect()`** alive when online.
@@ -69,7 +69,7 @@ const wallet = await UTEXOWallet.create({
   mnemonic,
   password: 'my-secure-password',
   network: 'utexo',
-  lspBaseUrl: 'https://lsp.utexo.com',
+  lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
 
@@ -148,8 +148,8 @@ const paymentHash = payResult.txid;
 await lsp.connect();
 await wallet.syncWallet();
 
-const payments = await wallet.listPaymentsRaw();
-// APay inbound: InboundHodl → Succeeded (auto-claim, no claimHodlInvoice)
+const payments = await wallet.listPayments();
+// APay inbound: rawStatus Claimable → Succeeded (auto-claim, no claimHodlInvoice)
 ```
 
 **Sender:**
@@ -177,9 +177,9 @@ const status = await senderWallet.getLightningSendRequest(paymentHash);
 | Helper | — | `lsp.claimPendingPayments()` |
 
 ```typescript
-// After createHodlLnInvoice — claim when status is Claimable
-for (const p of await wallet.listPaymentsRaw()) {
-  if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
+// After createHodlLnInvoice — claim when rawStatus is Claimable
+for (const p of await wallet.listPayments()) {
+  if (!p.inbound || p.rawStatus !== 'Claimable') continue;
   if (!p.preimage) continue;
   await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
 }
@@ -200,7 +200,7 @@ for (const p of await wallet.listPaymentsRaw()) {
 | `lsp.waitForOutboundLiquidity(msat)` | ③ | Confirm the sender can route before paying |
 | `wallet.payLightningInvoice(…)` | ③ | Pay the HODL invoice |
 | `wallet.getLightningSendRequest(hash)` | ⑥ | Poll the sender until `Settled` |
-| `wallet.listPaymentsRaw()` | ⑤ | Monitor recipient inbound (`Succeeded`) |
+| `wallet.listPayments()` | ⑤ | Monitor recipient inbound (`Succeeded`) |
 | `wallet.getAssetBalance(assetId)` | ⑤ | Confirm RGB received (`offchainOutbound` ↑) |
 | `wallet.createHodlLnInvoice(…)` | — | Issue a HODL invoice you control (pairs with claim below) |
 | `wallet.claimHodlInvoice(…)` | — | Reveal the preimage for a `createHodlLnInvoice` payment |
@@ -208,13 +208,14 @@ for (const p of await wallet.listPaymentsRaw()) {
 
 **Not called from the app:** `POST /internal/async_order/*` — the Host RLN uses those with utexo-lsp.
 
-### Payment fields (from `listPaymentsRaw`)
+### Payment fields (from `listPayments` / `getPayment`)
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `paymentHash` | `string` | Payment identifier |
-| `paymentType` | `'Outbound' \| 'InboundAutoClaim' \| 'InboundHodl'` | APay receive: `InboundHodl` |
-| `status` | `'Pending' \| 'Claimable' \| 'Claiming' \| 'Succeeded' \| …` | APay complete: `Succeeded` |
+| `inbound` | `boolean` | APay receive: `true` |
+| `status` | `'Pending' \| 'Succeeded' \| 'Failed'` | Folded status — HODL states fold to `Pending` |
+| `rawStatus` | `string?` | Unfolded node status (`'Claimable'`, `'Claiming'`, …) — filter on this for claim flows |
 | `preimage` | `string?` | On `Claimable` HODL invoices — pass to `claimHodlInvoice` |
 | `assetId` / `assetAmount` | optional | RGB leg |
 

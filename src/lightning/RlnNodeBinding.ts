@@ -124,6 +124,7 @@ function normalizePayment(raw: RlnRawPayment): LightningPayment {
     paymentHash: String(raw.payment_hash ?? ''),
     amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
     status: foldPaymentStatus(raw.status),
+    rawStatus: raw.status != null ? String(raw.status) : undefined,
     assetId: (raw.asset_id ?? undefined) as string | undefined,
     assetAmount:
       raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
@@ -131,6 +132,9 @@ function normalizePayment(raw: RlnRawPayment): LightningPayment {
     // synthetic record sendPayment() builds from its own request.
     invoice: (raw.invoice ?? undefined) as string | undefined,
     inbound: Boolean(raw.inbound),
+    preimage: (raw.preimage ?? raw.payment_preimage ?? undefined) as
+      | string
+      | undefined,
   };
 }
 
@@ -407,13 +411,20 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     const scaffold = parseJson<RlnRawPayment[]>(
       this.nodeHandle.listPaymentsJson()
     );
-    const seen = new Set(scaffold.map((p) => String(p.payment_hash ?? '')));
+    const byHash = new Map(
+      scaffold.map((p) => [String(p.payment_hash ?? ''), p])
+    );
     try {
       const live =
         (this.nodeHandle.livePaymentsValue() as RlnRawPayment[] | null) ?? [];
       for (const p of live) {
         const hash = String(p.payment_hash ?? '');
-        if (hash && !seen.has(hash)) scaffold.push(p);
+        if (!hash) continue;
+        const existing = byHash.get(hash);
+        if (!existing) scaffold.push(p);
+        // scaffold records win the dedupe but don't carry the preimage
+        else if (existing.preimage == null && p.preimage != null)
+          existing.preimage = p.preimage;
       }
     } catch {
       // live ledger unavailable (runtime not started yet) — scaffold list stands
@@ -426,17 +437,16 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     return this.mergedRawPayments().map(normalizePayment);
   }
 
-  async listPaymentsRaw(): Promise<unknown[]> {
-    await this.driveRgbWorkBestEffort();
-    return this.mergedRawPayments();
-  }
-
   async getPayment(paymentHash: string): Promise<LightningPayment | null> {
     await this.driveRgbWorkBestEffort();
     try {
       const raw = parseJson<RlnRawPayment>(
         this.nodeHandle.getPaymentJson(paymentHash)
       );
+      if (raw.preimage == null && raw.payment_preimage == null) {
+        // scaffold record — the preimage lives only in the live ledger
+        raw.preimage = this.livePayment(paymentHash)?.preimage;
+      }
       return normalizePayment(raw);
     } catch {
       const live = this.livePayment(paymentHash);

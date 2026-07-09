@@ -218,6 +218,10 @@ export interface RlnRawPayment {
   asset_amount?: bigint | number | null;
   invoice?: string | null;
   inbound?: boolean;
+  /** Live-ledger records carry the preimage; scaffold records may use the
+   *  snake_case `payment_preimage` key instead. */
+  preimage?: string | null;
+  payment_preimage?: string | null;
 }
 
 export interface RlnRawInvoice {

@@ -15,6 +15,7 @@ const hasMethod = (name: string) =>
 describe('UTEXOWallet API', () => {
   describe('lifecycle', () => {
     [
+      'init',
       'initialize',
       'goOnline',
       'getXpub',

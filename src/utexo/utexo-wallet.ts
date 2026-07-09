@@ -9,9 +9,10 @@
  * `onchainSendEnd`), avoiding duplicate send entry points.
  *
  * Web-specific approaches are preserved:
- *  - async factory `UTEXOWallet.create({ mnemonic, password, indexerUrl, ... })`
- *    — with `indexerUrl` the wallet comes up online in one call (RN-style
- *    unlock UX); without it, call `goOnline(indexerUrl)` before network ops.
+ *  - RN-parity lifecycle: `new UTEXOWallet({ mnemonic, password, ... })` stores
+ *    params synchronously; `await wallet.init()` performs the WASM/network setup
+ *    and auto-connects to the indexer (`indexerUrl` or the network default).
+ *    `UTEXOWallet.create(params)` remains as a one-call convenience wrapper.
  *    `goOnline()` is idempotent, so legacy create-then-goOnline code still works.
  *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `onchainSend` /
  *    `payLightningInvoice` stay atomic without an injected signer.
@@ -134,39 +135,66 @@ type IWalletManagerBase = Omit<
 >;
 
 export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
-  private readonly manager: RlnWalletManager;
+  private readonly params: RlnWalletInitParams;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;
+  private _manager: RlnWalletManager | null = null;
+  private initPromise: Promise<void> | null = null;
 
-  private constructor(
-    manager: RlnWalletManager,
-    lspBaseUrl: string | null,
-    lspBearerToken: string | null
-  ) {
-    this.manager = manager;
-    this.lspBaseUrl = lspBaseUrl;
-    this.lspBearerToken = lspBearerToken;
+  /** Construction is sync and cheap — params are only stored. All WASM/network
+   *  work happens in init(); every other method throws until it resolves. */
+  constructor(params: RlnWalletInitParams) {
+    this.params = params;
+    this.lspBaseUrl = params.lspBaseUrl ?? null;
+    this.lspBearerToken = params.lspBearerToken ?? null;
   }
 
+  private get manager(): RlnWalletManager {
+    if (!this._manager) {
+      throw new Error(
+        'UTEXOWallet: not initialized — await wallet.init() first'
+      );
+    }
+    return this._manager;
+  }
+
+  /** One-time init (RN parity): creates the RLN wallet/node from the stored
+   *  params and auto-connects to the indexer (non-fatally — see isOnline()).
+   *  Idempotent; concurrent calls share the same in-flight promise. A failed
+   *  init clears the latch so init() can be retried. */
+  async init(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = RlnWalletManager.create(this.params).then(
+        (manager) => {
+          this._manager = manager;
+        },
+        (e) => {
+          this.initPromise = null;
+          throw e;
+        }
+      );
+    }
+    return this.initPromise;
+  }
+
+  /** Back-compat convenience: `new UTEXOWallet(params)` + `await init()`. */
   static async create(params: RlnWalletInitParams): Promise<UTEXOWallet> {
-    const manager = await RlnWalletManager.create(params);
-    return new UTEXOWallet(
-      manager,
-      params.lspBaseUrl ?? null,
-      params.lspBearerToken ?? null
-    );
+    const wallet = new UTEXOWallet(params);
+    await wallet.init();
+    return wallet;
   }
 
   // ── IWalletManager — Lifecycle ─────────────────────────────────────────────
 
+  /** Backward-compat alias for init(). */
   initialize(): Promise<void> {
-    return this.manager.initialize();
+    return this.init();
   }
 
   /** Bring the wallet online. create() already auto-connects (using
    *  `indexerUrl` or the network default), so this is a no-op when online —
    *  only needed to retry after a failed auto-connect (see isOnline()). */
-  goOnline(indexerUrl: string, skipConsistencyCheck?: boolean): Promise<void> {
+  goOnline(indexerUrl?: string, skipConsistencyCheck?: boolean): Promise<void> {
     return this.manager.goOnline(indexerUrl, skipConsistencyCheck);
   }
 

@@ -48,16 +48,18 @@ import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
 const network = 'regtest';
 const keys = await generateKeys(network);
 
-// One call: loads the WASM, creates the wallet and auto-connects to the
-// indexer. indexerUrl / transportEndpoint / proxyUrl default per network
-// when omitted (see Default endpoints).
-const wallet = await UTEXOWallet.create({
+// Constructor stores params synchronously; init() loads the WASM, creates
+// the wallet and auto-connects to the indexer. indexerUrl /
+// transportEndpoint / proxyUrl default per network when omitted (see
+// Default endpoints). One-call alternative: await UTEXOWallet.create(params).
+const wallet = new UTEXOWallet({
   mnemonic: keys.mnemonic,
   password: 'my-secure-password',
   network,
 });
+await wallet.init();
 
-// create() connects non-fatally — if the indexer was unreachable the wallet
+// init() connects non-fatally — if the indexer was unreachable the wallet
 // comes back offline; retry with goOnline() (idempotent).
 if (!wallet.isOnline()) {
   await wallet.goOnline('http://127.0.0.1:3002');
@@ -96,12 +98,12 @@ console.log('RGB invoice:', invoice);
 
 ### Construction
 
-Always use the async factory — never `new UTEXOWallet(...)`:
+Two-phase, RN-parity lifecycle — the constructor is sync and cheap (params are only stored); `init()` does all the WASM/network work:
 
 ```typescript
 import { UTEXOWallet, type UTEXOWalletCreateParams } from '@utexo/rgb-sdk-web';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: 'word1 word2 ...',
   password: 'my-secure-password',   // RLN SDK password (encrypts local state)
   network: 'regtest',
@@ -111,7 +113,10 @@ const wallet = await UTEXOWallet.create({
   // lspBaseUrl: 'https://...',     // optional — enables createLsp() auto-discovery
   // lspBearerToken: '...',         // optional — required for APay
 });
+await wallet.init();
 ```
+
+`init()` is idempotent (concurrent calls share one in-flight promise) and retryable after failure. Every other method throws until it resolves. `UTEXOWallet.create(params)` is a one-call convenience doing exactly constructor + `init()`.
 
 #### `UTEXOWalletCreateParams`
 
@@ -132,9 +137,9 @@ const wallet = await UTEXOWallet.create({
 
 ### Lifecycle
 
-Unlike the RN SDK there is no `init()`/`unlock()`/`reinit()` split — `create()` does everything in one call, RN-unlock style:
+Like the RN SDK, construction and initialization are split — but there is no separate `unlock()`/`reinit()`: `init()` does everything, RN-unlock style:
 
-1. **`UTEXOWallet.create(params)`** — loads the WASM (singleton), creates/unlocks the wallet, wires the Lightning node (when `proxyUrl` resolves) and auto-connects to the indexer non-fatally.
+1. **`new UTEXOWallet(params)` + `await wallet.init()`** — loads the WASM (singleton), creates/unlocks the wallet, wires the Lightning node (when `proxyUrl` resolves) and auto-connects to the indexer non-fatally. (`UTEXOWallet.create(params)` = constructor + `init()` in one call; `initialize()` is an alias for `init()`.)
 2. **`isOnline()` / `goOnline(indexerUrl)`** — check the connection; retry when offline. `goOnline` is idempotent, so legacy create-then-goOnline code keeps working.
 3. **`dispose()`** — release the WASM wallet/node handles. Check with `isDisposed()`.
 

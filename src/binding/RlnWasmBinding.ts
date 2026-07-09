@@ -446,7 +446,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       // build the node this way. A stable runtimeId (master fingerprint) keeps
       // the node identity + persisted runtime state stable across reloads.
       const runtimeId = params.nodeRuntimeId ?? keys.master_fingerprint;
-      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(proxyUrl, runtimeId);
+      // Upstream now requires the node's Bitcoin network at construction; it
+      // drives the LDK handshake chain and attachWallet rejects mismatches.
+      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(proxyUrl, runtimeId, networkStr);
       // Enable virtual channels v0 ON THE NODE (the SDK-default flag does not
       // propagate to a standalone node). Gates both outbound virtual opens and
       // the inbound accept path: the wasm backend's OpenChannelRequest handler
@@ -483,9 +485,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     // holds a borrow_mut() on the wallet's shared RefCell across its await
     // (sdk_facade.rs); once attached, the node's ldk-over-websocket runtime
     // borrows that same RefCell on its ticks → "RefCell already borrowed"
-    // panic. goOnline itself is safe anywhere BEFORE attach (connect() may run
-    // during create() via the indexerUrl param); attach is deferred to first
-    // LN use (ensureNodeAttached).
+    // panic. connect() attaches right AFTER goOnlineValue resolves (auto
+    // during create() via the indexerUrl param — one-call UX); if the wallet
+    // comes up offline, attach falls back to first LN use (ensureNodeAttached).
 
     const normalizedNet = normalizeNetwork(params.network);
     const defaultIndexerUrl =
@@ -551,19 +553,22 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     console.log('[RLN] goOnline start', { url, skipConsistencyCheck });
     this.online = await this.wallet.goOnlineValue(skipConsistencyCheck, url);
     console.log('[RLN] goOnline ok');
-    // NOTE: the wallet is NOT attached to the node here. Once attached, the
-    // node's running ldk-over-websocket runtime borrows the shared wallet
-    // RefCell on its ticks; a concurrent foreground wallet op (getBtcBalance
-    // during funding, etc.) then panics with "RefCell already borrowed". Attach
-    // is deferred until the LN node is actually used (ensureNodeAttached), which
-    // is after on-chain wallet setup. Likewise chain sync is opt-in
+    // Attach the wallet to the LN node now that goOnlineValue has RESOLVED —
+    // the ordering is the hard constraint, not the location: goOnlineValue
+    // holds a borrow_mut() on the wallet's shared RefCell across its await,
+    // and an already-attached node's ldk-over-websocket runtime would borrow
+    // the same cell on its ticks → "RefCell already borrowed" panic. Attaching
+    // here gives RN-style UX: after init()/goOnline() Lightning is ready with
+    // no separate attach call. The node's background chain-sync session is
+    // started dormant (see ensureNodeAttached); the full loop stays opt-in
     // (startNodeChainSync), never auto-started.
+    this.ensureNodeAttached();
   }
 
   /**
-   * Attach the wallet to the LN node on first use. Deferred from connect() so
-   * that on-chain wallet operations (funding, createUtxos) run while the node
-   * does not yet share the wallet's RefCell. Idempotent.
+   * Attach the wallet to the LN node. Called from connect() once goOnlineValue
+   * has resolved (RN-style UX — no separate attach step) and lazily from LN
+   * entry points as a fallback for wallets that came up offline. Idempotent.
    */
   private ensureNodeAttached(): void {
     if (this.nodeHandle && !this.nodeAttached) {

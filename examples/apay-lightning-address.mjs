@@ -19,13 +19,14 @@ const ASSET_ID = 'rgb:...';
 // ── Recipient: enable a Lightning Address ────────────────────────────────────
 
 // lspBaseUrl defaults per network (utexo → https://lsp-signet.utexo.com)
-const recipient = await UTEXOWallet.create({
+const recipient = new UTEXOWallet({
   mnemonic: 'recipient twelve word mnemonic phrase here ...',
   password: PASSWORD,
   network: NETWORK,
   lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: LSP_BEARER_TOKEN,
 });
+await recipient.init();
 const recipientLsp = await recipient.createLsp();
 
 await recipientLsp.connect();
@@ -52,11 +53,12 @@ setInterval(async () => {
 
 // ── Sender: pay the Lightning Address ────────────────────────────────────────
 
-const sender = await UTEXOWallet.create({
+const sender = new UTEXOWallet({
   mnemonic: 'sender twelve word mnemonic phrase here ...',
   password: PASSWORD,
   network: NETWORK,
 });
+await sender.init();
 const senderLsp = await sender.createLsp();
 
 await senderLsp.connect();

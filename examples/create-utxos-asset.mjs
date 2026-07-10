@@ -9,11 +9,12 @@ import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: 'my-secure-password',
   network: NETWORK,
 });
+await wallet.init();
 
 await wallet.syncWallet();
 const count = await wallet.createUtxos({ upTo: true, num: 4, feeRate: 2 });

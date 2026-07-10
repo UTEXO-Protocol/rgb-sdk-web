@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.0.0-beta.10
+
+**Breaking — RLN-only architecture.** The SDK now runs entirely in the browser
+through `rln-wasm-sdk` (rgb-lightning-node WASM), covering **native Lightning** in
+addition to RGB on-chain. No external RGB Node server is required. The previous
+`@utexo/rgb-lib-wasm` stack has been removed.
+
+### Added
+
+- **Native Lightning** — invoices, payments, channels, keysend, and HODL invoices
+  via `RlnNodeBinding` (`src/lightning/RlnNodeBinding.ts`) over a direct `RlnWasmNode`
+- **LSP support** — `UtexoLSPClient` / `UtexoLsp` (`src/lsp/`) with typed models and
+  errors for the UTEXO LSP bridge (see `docs/lsp.md`)
+- **Async payments** — documented in `docs/async-payments.md`
+- `RlnWasmBinding` (`src/binding/RlnWasmBinding.ts`) — `IRlnSdkBinding` impl using a
+  single `RlnWasmWallet` for wallet ops plus a direct `RlnWasmNode` for Lightning and
+  NIA/CFA issuance
+- `RlnNodeBinding` — `IRlnNodeBinding` impl wrapping `RlnWasmNode`
+- `RlnWalletManager` (`src/wallet/rln-wallet-manager.ts`) — extends `BaseWalletManager`
+  + `RlnSigner`
+- `RlnSigner` (`src/signer/RlnSigner.ts`) — `ISigner`; delegates PSBT signing to the
+  BDK path (`@bitcoindevkit/bdk-wallet-web`)
+- `initRlnWasm()` (`src/wasm/initRln.ts`) — singleton WASM initializer, called
+  internally by `RlnWasmBinding.create()`
+- Vendored RLN contracts: `src/types/rln-model.ts`, `src/interfaces/IRln*.ts`, and
+  `src/binding/RlnDefaults.ts` (`DEFAULT_RLN_URLS` / `DEFAULT_INDEXER_URLS`),
+  re-exported via the `src/rln` barrel
+- New examples: `apay-lightning-address`, `lightning-payment`,
+  `lightning-channels-keysend`, `lsp-bridge`
+- RFC `docs/rfcs/001-utexo-wallet-v2-interfaces.md`
+
+### Changed
+
+- Swapped WASM backend: dropped `@utexo/rgb-lib-wasm`, added `rln-wasm-sdk`;
+  `@utexo/rgb-sdk-core` now resolves via a local `file:` link
+- Reworked `UTEXOWallet` (`src/utexo/utexo-wallet.ts`) as the single public API
+  implementing `IWalletManager` + `IUTEXOProtocol`, mirroring `@utexo/rgb-sdk-rn` so
+  app code ports across web ↔ RN
+  - **Two-phase lifecycle**: `new UTEXOWallet(params)` stores params synchronously,
+    then `await wallet.init()` does WASM/network setup (idempotent, retryable;
+    `initialize()` is an alias). `UTEXOWallet.create(params)` remains as a one-call
+    convenience
+  - **One-call UX**: `indexerUrl` / `transportEndpoint` / `proxyUrl` default per
+    network, and `create` auto-connects to the indexer non-fatally (unreachable
+    indexer → offline wallet + warning; check `isOnline()`, retry with `goOnline()`)
+  - `send` / `onchainSend` / `payLightningInvoice` are atomic — signed with the stored
+    mnemonic via `RlnSigner`
+
+### Removed
+
+- `@utexo/rgb-lib-wasm` dependency and its stack: `WasmRgbLibBinding`, `WasmTypes`,
+  `WasmSigner`, `src/wasm/init.ts`, the old dual-wallet `WalletManager`, and
+  `src/utexo/restore.ts`
+- Legacy tests: `restore.test.ts`, `utexo-mocked.test.ts`,
+  `utexo-wallet-mocked.test.ts`, `wallet-init-params.test.ts`, and the `rgb-lib-wasm`
+  mock. `tests/utexo-flows.test.ts` updated to assert the new `UTEXOWallet` surface
+
 ## 1.0.0-beta.9
 
 ### Added

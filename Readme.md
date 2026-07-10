@@ -126,13 +126,14 @@ await wallet.init();
 | `mnemonic` | `string` | BIP39 mnemonic — required |
 | `password` | `string` | RLN SDK password — required (init/unlock of the local wallet state) |
 | `network` | `string?` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …). Default `'utexo'` |
-| `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `create()` always attempts to connect; failure is non-fatal (wallet returned offline) |
+| `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `init()` always attempts to connect; failure is non-fatal (wallet returned offline) |
 | `transportEndpoint` | `string?` | RGB proxy for consignment delivery. Defaults per network (utexo) |
 | `proxyUrl` | `string?` | WebSocket LN gateway URL — enables the embedded Lightning node. Defaults per network (utexo); on networks without a default, omitting it means no Lightning |
 | `nodeRuntimeId` | `string?` | Stable runtime ID so node state persists across page reloads |
 | `skipConsistencyCheck` | `boolean?` | Skip the indexer consistency check on connect |
 | `dataDir` | `string?` | Local wallet DB directory (default: auto-generated) |
 | `supportedSchemas` | `string[]?` | Asset schemas (default `['Nia', 'Ifa']`) |
+| `enableVirtualChannels` | `boolean?` | Enable virtual channels v0 on the Lightning node (default `true`). Applies node-wide to all peers, persisted per `nodeRuntimeId` |
 | `lspBaseUrl` | `string?` | utexo-lsp HTTP base URL — source for no-arg `createLsp()` peer discovery |
 | `lspBearerToken` | `string?` | LSP bearer token — required for APay routes |
 
@@ -487,7 +488,7 @@ Layering: `UTEXOWallet` → `RlnWalletManager` → `RlnWasmBinding` (RGB wallet)
 
 | File | What it shows |
 |------|---------------|
-| `new-wallet.mjs` | Generate keys, `UTEXOWallet.create()`, address + balance |
+| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()`, address + balance |
 | `read-wallet.mjs` | Read operations and online/offline state |
 | `create-utxos-asset.mjs` | Create UTXOs and issue a NIA asset |
 | `transfer.mjs` | `onchainReceive()` (witness + blind), `onchainSend()`, transfer polling |

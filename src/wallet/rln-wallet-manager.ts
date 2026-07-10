@@ -53,6 +53,9 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   dataDir?: string;
   /** Asset schemas to support (default: ['Nia', 'Ifa']) */
   supportedSchemas?: string[];
+  /** Enable virtual channels v0 on the Lightning node (default: true).
+   *  Applies node-wide to all peers; persisted per nodeRuntimeId. */
+  enableVirtualChannels?: boolean;
   /** utexo-lsp HTTP base URL — enables `UTEXOWallet.createLsp()` auto-discovery. */
   lspBaseUrl?: string;
   /** Bearer token for utexo-lsp APay/internal routes. */
@@ -117,6 +120,7 @@ export class RlnWalletManager extends BaseWalletManager {
       transportEndpoint,
       nodeRuntimeId: params.nodeRuntimeId,
       supportedSchemas: params.supportedSchemas,
+      enableVirtualChannels: params.enableVirtualChannels,
     };
 
     const fullParams: WalletInitParams = {

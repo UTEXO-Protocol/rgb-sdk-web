@@ -14,12 +14,13 @@ const MNEMONIC = 'twelve word mnemonic phrase here ...';
 const PASSWORD = 'my-secure-password';
 const ASSET_ID = 'rgb:...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: PASSWORD,
   network: NETWORK,
   // lspBaseUrl: 'https://...',  // optional — network default when omitted
 });
+await wallet.init();
 
 // Peer discovered from lspBaseUrl; port defaults to 9735
 const lsp = await wallet.createLsp();

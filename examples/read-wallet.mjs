@@ -4,7 +4,7 @@
  * Offline (no indexer): getXpub, getNetwork
  * Online (requires indexer): getAddress, getBtcBalance, listAssets
  *
- * create() auto-connects non-fatally — check isOnline() and retry with
+ * init() auto-connects non-fatally — check isOnline() and retry with
  * goOnline() if the indexer was unreachable.
  */
 
@@ -13,11 +13,12 @@ import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: 'my-secure-password',
   network: NETWORK,
 });
+await wallet.init();
 
 // Offline — no indexer needed
 console.log('xpub:', wallet.getXpub());

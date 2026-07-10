@@ -16,11 +16,12 @@ const PEER_PUBKEY = '02...'; // hosted RLN node pubkey
 const PEER_ADDR = 'peer.example.com:9735'; // LDK P2P host:port
 const ASSET_ID = 'rgb:...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: PASSWORD,
   network: NETWORK,
 });
+await wallet.init();
 console.log('Node pubkey:', await wallet.getNodePubkey());
 
 // Connect to the peer over Lightning P2P

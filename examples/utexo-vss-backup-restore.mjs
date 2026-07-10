@@ -15,11 +15,12 @@ import {
 const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: 'my-secure-password',
   network: NETWORK,
 });
+await wallet.init();
 
 const config = {
   serverUrl: DEFAULT_VSS_SERVER_URL,

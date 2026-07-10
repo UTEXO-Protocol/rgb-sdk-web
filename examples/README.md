@@ -11,7 +11,7 @@ self-contained ES module using `import` from `@utexo/rgb-sdk-web`.
 
 | File | What it shows |
 |------|---------------|
-| `new-wallet.mjs` | Generate keys, `UTEXOWallet.create()`, get address + BTC balance |
+| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()`, get address + BTC balance |
 | `read-wallet.mjs` | Offline (xpub, network) and online (address, balance, assets) reads, `isOnline()`/`goOnline()` |
 | `create-utxos-asset.mjs` | Create UTXOs and issue a NIA asset |
 | `transfer.mjs` | Send RGB assets: `onchainReceive()` (witness + blind), `onchainSend()`, `refreshWallet()`, `listTransfers()` |

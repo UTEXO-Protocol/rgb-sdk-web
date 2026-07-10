@@ -21,11 +21,12 @@ const BACKUP_PASSWORD = 'backup-password';
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: PASSWORD,
   network: NETWORK,
 });
+await wallet.init();
 
 await wallet.createBackup({ backupPath: '', password: BACKUP_PASSWORD });
 const bytes = wallet.getLastBackupBytes(); // Uint8Array | null
@@ -35,11 +36,12 @@ console.log('backup bytes:', bytes?.byteLength);
 // ── Restore ───────────────────────────────────────────────────────────────────
 // Provide the bytes retrieved from your storage / file input.
 
-const restoredWallet = await UTEXOWallet.create({
+const restoredWallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: PASSWORD,
   network: NETWORK,
 });
+await restoredWallet.init();
 restoredWallet.restoreFromBackupBytes(bytes, BACKUP_PASSWORD);
 
 console.log('Restored address:', await restoredWallet.getAddress());

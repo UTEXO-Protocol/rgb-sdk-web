@@ -65,13 +65,14 @@ When `unusedHashes` runs low, call `lsp.refillHashPool()` to register a fresh at
 ```typescript
 import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic,
   password: 'my-secure-password',
   network: 'utexo',
   lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
+await wallet.init();
 
 // No-arg: discovers pubkey from lspBaseUrl + GET /get_info,
 // host from the URL hostname, port 9735.
@@ -81,13 +82,14 @@ const lsp = await wallet.createLsp();
 **Regtest local stack** (non-standard LDK peer port):
 
 ```typescript
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic,
   password,
   network: 'regtest',
   lspBaseUrl: 'http://127.0.0.1:8080',   // or a dev-proxy path like '/lsp'
   lspBearerToken: 'dev-token',
 });
+await wallet.init();
 
 const lsp = await wallet.createLsp(undefined, 9745);  // regtest LDK port ≠ default 9735
 ```

@@ -14,13 +14,14 @@ import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
 // lspBaseUrl is the source for no-arg createLsp() peer discovery.
 // lspBearerToken is only required for APay routes.
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic,
   password: 'my-secure-password',
   network: 'utexo',
   lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
+await wallet.init();
 
 // No-arg: peer pubkey from GET /get_info, host from the lspBaseUrl hostname,
 // port defaults to 9735 (override with the second argument).
@@ -44,7 +45,7 @@ const lsp = await wallet.createLsp({
 });
 ```
 
-> Unlike the RN SDK there is no init-order constraint — `createLsp()` can be called at any time after `UTEXOWallet.create()`.
+> Unlike the RN SDK there is no init-order constraint — `createLsp()` can be called at any time after `wallet.init()` resolves.
 
 ---
 
@@ -215,7 +216,7 @@ With the `username` and `domain` resolved, it calls `wallet.apayNewWithAddress(l
 
 Returns `{ username, domain, address, unusedHashes, nextIndexExpected, refillBatchSize }`.
 
-Both `lspBaseUrl` and `lspBearerToken` should be set on `UTEXOWallet.create()` (or `bearerToken` on the explicit `LspPeer`) — registration runs through the RLN node, not the HTTP client.
+Both `lspBaseUrl` and `lspBearerToken` should be set in the `UTEXOWallet` constructor params (or `bearerToken` on the explicit `LspPeer`) — registration runs through the RLN node, not the HTTP client.
 
 > Register exactly one batch. The node's batch size already matches the LSP's pool cap, so a single batch fills it. Issuing an `apayNew` bootstrap first overflows the pool, and the LSP rejects the second batch with `invalid_hash_batch`.
 
@@ -353,13 +354,14 @@ await wallet.payLightningInvoice({ lnInvoice });
 ### APay — Lightning Address (offline receive)
 
 ```typescript
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic,
   password,
   network: 'utexo',
   lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'bearer-token',
 });
+await wallet.init();
 
 const lsp = await wallet.createLsp();
 

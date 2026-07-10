@@ -14,16 +14,18 @@ const PASSWORD = 'my-secure-password';
 const ASSET_ID = 'rgb:...';
 const AMOUNT = 50;
 
-const walletA = await UTEXOWallet.create({
+const walletA = new UTEXOWallet({
   mnemonic: MNEMONIC_A,
   password: PASSWORD,
   network: NETWORK,
 });
-const walletB = await UTEXOWallet.create({
+await walletA.init();
+const walletB = new UTEXOWallet({
   mnemonic: MNEMONIC_B,
   password: PASSWORD,
   network: NETWORK,
 });
+await walletB.init();
 
 // Receiver: create invoices — onchainReceive is witness by default,
 // pass witness: false for a blinded invoice.

@@ -14,11 +14,12 @@ const keys = await generateKeys(NETWORK);
 console.log('Mnemonic (store securely):', keys.mnemonic);
 
 // indexerUrl / transportEndpoint / proxyUrl default per network when omitted.
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: keys.mnemonic,
   password: 'my-secure-password',
   network: NETWORK,
 });
+await wallet.init();
 console.log('online:', wallet.isOnline());
 
 const address = await wallet.getAddress();

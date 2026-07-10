@@ -13,11 +13,12 @@ const MNEMONIC = 'twelve word mnemonic phrase here ...';
 const PASSWORD = 'my-secure-password';
 const ASSET_ID = 'rgb:...';
 
-const wallet = await UTEXOWallet.create({
+const wallet = new UTEXOWallet({
   mnemonic: MNEMONIC,
   password: PASSWORD,
   network: NETWORK,
 });
+await wallet.init();
 
 // ── Receive ──────────────────────────────────────────────────────────────────
 

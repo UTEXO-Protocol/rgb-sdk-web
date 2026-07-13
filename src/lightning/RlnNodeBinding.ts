@@ -5,7 +5,7 @@
  * to the canonical rln-model.ts types.
  */
 
-import type { RlnWasmNode } from 'rln-wasm-sdk';
+import type { RlnWasmNode } from '@utexo/rln-wasm';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 import type { IRlnNodeBinding } from '../rln';
 import type {

@@ -1,4 +1,4 @@
-import init from 'rln-wasm-sdk';
+import init from '@utexo/rln-wasm';
 
 let initPromise: Promise<void> | null = null;
 

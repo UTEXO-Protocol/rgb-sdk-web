@@ -14,7 +14,7 @@ import {
   RlnWasmNode,
   RlnWasmInvoice,
   rgbRestoreKeysValue,
-} from 'rln-wasm-sdk';
+} from '@utexo/rln-wasm';
 import { initRlnWasm } from '../wasm/initRln';
 import { WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
 import { DEFAULT_INDEXER_URLS } from './RlnDefaults';

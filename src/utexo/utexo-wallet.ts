@@ -10,10 +10,12 @@
  *
  * Web-specific approaches are preserved:
  *  - RN-parity lifecycle: `new UTEXOWallet(params)` stores params; `init()`
- *    does the SDK-level setup only (wallet LOCKED — no RlnWasmWallet yet);
- *    `unlock()` runs sdk.unlock → LDK VSS configure → wallet create → VSS
- *    restore → go-online/attach. `UTEXOWallet.create(params)` does all
- *    three. Full contract in CLAUDE.md.
+ *    does all local setup (SDK init, keys, node handle, RlnWasmWallet +
+ *    wallet-stream VSS configure — wallet reported LOCKED); the init→unlock
+ *    gap is the explicit-restore window (`rlnRestoreVSSBackup()`, fence
+ *    takeover); `unlock()` runs sdk.unlock → LDK VSS configure (guarded
+ *    channel restore) → go-online/attach. `UTEXOWallet.create(params)` does
+ *    init + unlock. Restore is never automatic. Full contract in CLAUDE.md.
  *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `onchainSend` /
  *    `payLightningInvoice` stay atomic without an injected signer.
  *
@@ -100,6 +102,14 @@ import type {
 
 export type { RlnWalletInitParams as UTEXOWalletCreateParams };
 
+/** Result of the explicit one-call VSS restore ({@link UTEXOWallet.rlnRestoreVSSBackup}). */
+export interface RlnVssRestoreResult {
+  /** Whether a wallet-stream backup existed on the server and was installed. */
+  walletRestored: boolean;
+  /** Server version of the installed snapshot (null when none existed). */
+  serverVersion: number | null;
+}
+
 // ── Status mappers (RLN → core TransferStatus) ───────────────────────────────
 
 function mapInvoiceStatus(status: InvoiceStatus): TransferStatus | null {
@@ -158,6 +168,9 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   // state-changing op schedules a best-effort background vssBackup().
   private vssAutoConfig: VssBackupConfig | null = null;
   private vssBackupRunning = false;
+  /** Whether rlnRestoreVSSBackup() ran — consumed by the unlock()-time
+   *  unrestored-backup warning. */
+  private vssRestoreRan = false;
 
   /** Construction is sync and cheap — params are only stored. All WASM/network
    *  work happens in init(); every other method throws until it resolves. */
@@ -198,10 +211,12 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return result;
   }
 
-  /** Phase 1 — SDK-level setup only (initValue, key derivation, node
-   *  handle; runtime not started). The wallet stays LOCKED until unlock();
-   *  the init→unlock gap is where vssClearFence() can release a stale
-   *  fence. Idempotent; a thrown failure clears the latch for a retry. */
+  /** Phase 1 — all local setup: sdk.initValue, key derivation, node handle
+   *  (runtime not started), RlnWasmWallet creation (loads the local IDB
+   *  snapshot) and wallet-stream VSS configure. The wallet reports LOCKED
+   *  until unlock(); the init→unlock gap is the explicit-restore window —
+   *  rlnRestoreVSSBackup() and/or vssClearFence() run here. Idempotent; a
+   *  thrown failure clears the latch for a retry. */
   async init(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = this.initInternal().catch((e) => {
@@ -213,8 +228,8 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   private async initInternal(): Promise<void> {
-    // VSS identity derived at init (not unlock) so clearLdkVssFence() can
-    // default to it while locked.
+    // VSS identity derived at init so the gap APIs (rlnRestoreVSSBackup,
+    // clearLdkVssFence) can default to it while locked.
     const vssUrl =
       this.params.vssUrl === null
         ? null
@@ -226,11 +241,18 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
       ...this.params,
       vssConfig: this.derivedVssConfig,
     });
+    // Wallet-stream VSS client configured at init: enables the explicit
+    // restore in the gap, and per-op auto-backups once unlocked.
+    if (this.derivedVssConfig) {
+      await this.configureVssBackup(this.derivedVssConfig);
+    }
   }
 
-  /** Phase 2, in order: sdk.unlock → LDK VSS configure (channel restore,
-   *  pre-runtime) → RGB wallet create → wallet-stream VSS configure +
-   *  restore → auto go-online/node attach. Throws unless init() ran first.
+  /** Phase 2, in order: sdk.unlock (password check + runtime authorization)
+   *  → LDK VSS configure (guarded channel restore, pre-runtime) → auto
+   *  go-online/node attach. Throws unless init() ran first. The wallet
+   *  stream is NEVER restored here — that is the explicit
+   *  rlnRestoreVSSBackup() call in the init→unlock gap.
    *  Runs once; only a thrown failure clears the latch for a retry — a
    *  non-fatal LDK-configure failure (e.g. held fence) needs the explicit
    *  recovery disableLdkVssReplication() → clearLdkVssFence() → unlock().
@@ -253,29 +275,82 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   private async unlockInternal(): Promise<void> {
     await this.manager.unlockWallet();
-    const vssConfig = this.derivedVssConfig;
-    if (vssConfig) {
-      await this.configureVssBackup(vssConfig);
-      if (this.params.vssAutoRestore !== false) {
-        await this.restoreWalletStateFromVSS();
-      }
-    }
+    await this.warnIfUnrestoredBackupExists();
     await this.manager.autoGoOnline();
   }
 
-  /** Restore the wallet stream from VSS at unlock() when the server has a
-   *  backup — overwrites local state (`vssAutoRestore: false` opts out).
-   *  Non-fatal: failures are logged and the wallet starts fresh. */
-  private async restoreWalletStateFromVSS(): Promise<void> {
-    try {
-      const info = await this.vssBackupInfo();
-      if (!info.backupExists) return;
+  /** Explicit one-call VSS restore — the ONLY restore path. Call in the
+   *  init→unlock gap: `init()` → `rlnRestoreVSSBackup()` → `unlock()`.
+   *
+   *  Restores the wallet stream (RGB assets, stock, BDK state) immediately,
+   *  overwriting local wallet state with the cloud snapshot; channel state
+   *  (LDK stream) is then restored by the `unlock()` that follows — its
+   *  `configureLdkVssReplication` performs the guarded fresh-store restore.
+   *  On a replaced device whose old fence is still held, pass
+   *  `{ takeoverFence: true }` (ONLY after confirming the old device is
+   *  gone — two live writers corrupt channel state) to clear the fence so
+   *  that unlock-time channel restore can claim the store. */
+  async rlnRestoreVSSBackup(opts?: {
+    takeoverFence?: boolean;
+  }): Promise<RlnVssRestoreResult> {
+    if (!this.initPromise) {
+      throw new Error(
+        'UTEXOWallet.rlnRestoreVSSBackup: not initialized — await wallet.init() first'
+      );
+    }
+    await this.initPromise;
+    if (this.unlockPromise) {
+      throw new Error(
+        'UTEXOWallet.rlnRestoreVSSBackup: wallet is already unlocked — restore must run in the init()→unlock() gap'
+      );
+    }
+    if (!this.derivedVssConfig) {
+      throw new Error(
+        'UTEXOWallet.rlnRestoreVSSBackup: VSS is disabled (vssUrl: null)'
+      );
+    }
+    if (opts?.takeoverFence) {
+      await this.clearLdkVssFence();
+    }
+    const info = await this.vssBackupInfo();
+    if (info.backupExists) {
       await this.vssRestoreBackup();
       logger.info(
         `UTEXOWallet: restored wallet state from VSS (server version ${info.serverVersion})`
       );
+    } else {
+      logger.info(
+        'UTEXOWallet.rlnRestoreVSSBackup: no wallet-stream backup on the server (nothing to restore)'
+      );
+    }
+    this.vssRestoreRan = true;
+    return {
+      walletRestored: info.backupExists,
+      serverVersion: info.serverVersion ?? null,
+    };
+  }
+
+  /** Guard rail for the explicit-restore model: a fresh local wallet + an
+   *  existing cloud backup + no rlnRestoreVSSBackup() call means the next
+   *  state-changing op would OVERWRITE the cloud snapshot (last-write-wins).
+   *  Warn loudly; never fatal. */
+  private async warnIfUnrestoredBackupExists(): Promise<void> {
+    if (!this.vssAutoConfig || this.vssRestoreRan) return;
+    try {
+      const info = await this.vssBackupInfo();
+      if (!info.backupExists) return;
+      // Local-freshness proxy: any funded/used wallet has at least one
+      // on-chain transaction in its local DB (offline read).
+      const transactions = await this.manager.listTransactions();
+      if (transactions.length > 0) return;
+      logger.warn(
+        `UTEXOWallet: a VSS backup exists for this mnemonic (server version ${info.serverVersion}) ` +
+          'but the local wallet is empty and rlnRestoreVSSBackup() was not called. Continuing fresh — ' +
+          'the next state-changing operation will overwrite the cloud backup. To restore instead: ' +
+          'init() → rlnRestoreVSSBackup() → unlock().'
+      );
     } catch (e) {
-      logger.warn('UTEXOWallet: VSS restore skipped (starting fresh)', e);
+      logger.warn('UTEXOWallet: unrestored-backup check skipped', e);
     }
   }
 
@@ -484,7 +559,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IWalletManager — VSS Backup ────────────────────────────────────────────
 
-  /** Enable VSS (cloud) auto-backup — called automatically by unlock();
+  /** Enable VSS (cloud) auto-backup — called automatically by init();
    *  only needed to override the mnemonic-derived config. Every
    *  state-changing op then schedules a best-effort background vssBackup(). */
   async configureVssBackup(config: VssBackupConfig): Promise<void> {
@@ -584,8 +659,10 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.clearLdkVssFence();
   }
 
-  /** Restore the wallet stream (RGB assets, stock, BDK state) from VSS —
-   *  overwrites local wallet state with the cloud snapshot. */
+  /** Low-level: force-restore the wallet stream (RGB assets, stock, BDK
+   *  state) from VSS — overwrites local wallet state with the cloud
+   *  snapshot. Prefer {@link rlnRestoreVSSBackup}, the orchestrated restore
+   *  flow for the init→unlock gap. */
   vssRestoreBackup(): Promise<void> {
     if (!this.vssAutoConfig) {
       throw new Error(

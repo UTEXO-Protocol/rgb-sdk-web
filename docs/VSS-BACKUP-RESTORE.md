@@ -4,54 +4,58 @@
 > `rmn-boiko:feat/wasm-followup-fixes` → `dev`), built locally from the `pr-105-vss`
 > branch. Not yet released upstream.
 
-## How the app uses it (zero-config)
+## How the app uses it
 
-The wallet stream needs **no VSS calls at all** — backup *and* restore are on
-by default:
+**Backup is zero-config** (both streams, automatic once VSS is configured —
+which happens by default). **Restore is explicit-only**: one call,
+`rlnRestoreVSSBackup()`, in the init→unlock gap. Nothing ever restores
+without the app asking.
 
-The lifecycle mirrors RN: `init()` → wallet LOCKED (SDK initialized but
-locked, node handle exists; the RGB wallet is not created yet, no VSS
-replication, no indexer connection) → `unlock()` → sdk unlocked, wallet
-created, VSS configured, channels restored, online. The init→unlock gap is
-where a stale fence can be cleared — exactly like RN's init →
-`vssClearFence()` → unlock.
+The lifecycle: `init()` → wallet LOCKED (SDK initialized but locked, node
+handle exists — runtime not started, RGB wallet object created from the
+local IDB snapshot, wallet-stream VSS client configured; wallet/network ops
+throw, VSS ops work) → *optional explicit restore* → `unlock()` → sdk
+unlocked, channels restored (guarded), online.
 
 ```ts
-// Same flow on every device — new or existing:
+// Normal start (existing device) — no restore, no surprises:
 const wallet = new UTEXOWallet({ mnemonic, password, network });
 await wallet.init();    // locked
-await wallet.unlock();  // VSS + online (UTEXOWallet.create() does both)
+await wallet.unlock();  // online (UTEXOWallet.create() does both)
 // - backup: identity derived from the mnemonic, server defaults to
-//   DEFAULT_VSS_SERVER_URL; every state-changing op auto-uploads.
-// - restore: if the server has a backup for this mnemonic, unlock()
-//   restores it automatically, overwriting local wallet state with the
-//   cloud snapshot (vssAutoRestore: false opts out).
-// - channels (LDK stream): replication is configured at unlock() too,
-//   and on a fresh device channel state is restored automatically —
-//   PROVIDED the previous device released its single-writer fence
-//   (clean shutdown). A wiped/dead device leaves its fence behind; that
-//   one case needs the explicit fence clear below.
+//   DEFAULT_VSS_SERVER_URL; every state-changing op auto-uploads, and
+//   channel state replicates continuously.
+
+// New device, restore from the mnemonic — ONE extra call:
+const wallet = new UTEXOWallet({ mnemonic, password, network });
+await wallet.init();                  // locked
+await wallet.rlnRestoreVSSBackup();   // wallet stream restored NOW;
+                                      // channels restore at the unlock below
+await wallet.unlock();                // channel restore + online
+
+// Old device wiped/dead (its fence is still held) — fold the takeover in.
+// ONLY after the user confirmed the old device is gone: two live writers
+// on one channel store = stale-commitment / fund-loss risk.
+await wallet.init();
+await wallet.rlnRestoreVSSBackup({ takeoverFence: true });
+await wallet.unlock();
 ```
 
-Opt-outs and manual controls:
+`rlnRestoreVSSBackup()` returns `{ walletRestored, serverVersion }`, throws
+if called after `unlock()` (the safe window is gone once the runtime can
+start), and throws on restore failure — no silent "starting fresh". Plain
+`unlock()` on a fresh device logs a prominent warning when a cloud backup
+exists that wasn't restored (the next auto-backup would overwrite it).
+
+Manual controls:
 
 ```ts
 new UTEXOWallet({ ..., vssUrl: null });          // disable VSS entirely
 new UTEXOWallet({ ..., vssUrl: 'https://…' });   // custom server
-new UTEXOWallet({ ..., vssAutoRestore: false }); // no restore at unlock
 await wallet.vssBackup();        // force a backup now (no args needed)
 await wallet.vssBackupInfo();    // { backupExists, serverVersion, … }
-await wallet.vssRestoreBackup(); // force restore (overwrites local state!)
-
-// Fence takeover — the ONLY manual step in the restore story, and never
-// invoked automatically: the SDK can't tell "old device wiped" apart from
-// "old device still running", and taking over while it's alive would put
-// two writers on one channel store (stale-commitment / fund-loss risk).
-// RN-identical flow — clear the fence in the locked gap:
-const wallet = new UTEXOWallet({ mnemonic, password, network });
-await wallet.init();          // locked
-await wallet.vssClearFence(); // after the user confirmed the old device is gone
-await wallet.unlock();        // claims the fence → restores channels
+await wallet.vssRestoreBackup(); // low-level wallet-stream-only restore
+await wallet.vssClearFence();    // fence clear alone (in the locked gap)
 
 // Detecting a held fence after a normal unlock() — unlock() runs ONCE, so
 // the retry must be explicit: disable (resets the latch) → clear → unlock:
@@ -240,12 +244,13 @@ Store layout (`F` = master fingerprint, `P` = native VSS pubkey hex):
 ### Browser B (new device / fresh profile)
 
 1. User enters the **mnemonic** (+ password, network). Same mnemonic → same
-   signing key and store id. Nothing else is needed.
-2. **Wallet stream**: `await wallet.unlock()` does it all — configures VSS,
-   sees the local wallet is empty, finds a backup on the server, and installs
-   the last wallet snapshot → on-chain funds **and RGB assets** are back.
-   (No fence on this stream — restore always works.)
-3. **LDK stream**: `configureLdkVssReplication(...)`:
+   signing key and store id. Nothing else is needed for identity.
+2. **Wallet stream**: `await wallet.rlnRestoreVSSBackup()` in the
+   init→unlock gap finds the backup on the server and installs the last
+   wallet snapshot → on-chain funds **and RGB assets** are back. (No fence
+   on this stream — restore always works.) Skipping the call means starting
+   fresh; `unlock()` warns loudly if a backup existed.
+3. **LDK stream**: `configureLdkVssReplication(...)` inside `unlock()`:
    - Browser B has a *different* persistent instance id, so if browser A's fence
      is still standing, this call **fails** with "VSS store is owned by another
      rgb-lightning-node instance (…); … clear the `__rln_instance__` key to take
@@ -254,9 +259,10 @@ Store layout (`F` = master fingerprint, `P` = native VSS pubkey hex):
      "browser A is still running somewhere". Blindly taking over while A is alive
      would mean two writers on one channel state.
    - The takeover is an explicit app step: after user confirmation,
-     `vssClearFence()` in the locked gap before the first `unlock()` (RN's
-     init → vssClearFence → unlock); if the conflict was only noticed after
-     unlock, `disableLdkVssReplication()` → `vssClearFence()` → `unlock()`.
+     `rlnRestoreVSSBackup({ takeoverFence: true })` (or a bare
+     `vssClearFence()`) in the locked gap before the first `unlock()`; if
+     the conflict was only noticed after unlock,
+     `disableLdkVssReplication()` → `vssClearFence()` → `unlock()`.
    - On that retry the call finds an empty local
      store → downloads the manifest → restores RGB KV entries, monitors, network
      graph, scorer, and the channel manager **last** (its presence is the
@@ -285,30 +291,40 @@ than an accident.
 2. ~~**Wallet-stream auto-backup**~~ — **done**: `UTEXOWallet` schedules a
    background `vssBackup()` after every state-changing op once
    `configureVssBackup()` has been called (see the wallet-stream section).
-3. ~~**`UTEXOWallet` wiring**~~ — **done for both streams**: `unlock()`
-   auto-configures VSS from the mnemonic-derived identity (`vssUrl` param,
-   default `DEFAULT_VSS_SERVER_URL`, `null` disables); wallet stream gets
-   per-op auto-backup + guarded auto-restore, LDK stream is configured on the
-   node handle pre-runtime (non-fatal; health via
+3. ~~**`UTEXOWallet` wiring**~~ — **done for both streams**: `init()`
+   auto-configures the wallet-stream VSS client from the mnemonic-derived
+   identity (`vssUrl` param, default `DEFAULT_VSS_SERVER_URL`, `null`
+   disables) and gets per-op auto-backup; the LDK stream is configured on
+   the node handle pre-runtime at `unlock()` (non-fatal; health via
    `wallet.ldkVssBackupInfo()`).
+4. ~~**Explicit restore**~~ — **done** (see docs/RESTORE-API-PROPOSAL.md):
+   restore is never automatic; `rlnRestoreVSSBackup()` in the init→unlock
+   gap is the single restore entry point (wallet stream immediately,
+   channels at the following unlock; optional `takeoverFence`). `unlock()`
+   warns when a cloud backup exists but the fresh local wallet wasn't
+   restored. The former `vssAutoRestore` param was removed.
 
 ## RN vs WASM: backup UX flow compared
 
 | | RN (`@utexo/rgb-sdk-rn`, native node) | Web (`@utexo/rgb-sdk-web`, wasm PR #105) |
 |---|---|---|
-| Lifecycle | `init()` (locked) → optional `vssClearFence(password)` → `unlock()` | Same: `init()` (locked) → optional `vssClearFence()` → `unlock()` (`UTEXOWallet.create()` = init + unlock) |
-| Enabling | Constructor params: `vssUrl`, `vssAllowHttp?`, `vssAllowEmptyRestore?` — nothing else | Wallet stream: **on by default** (`vssUrl` optional, `null` disables). LDK stream: configured automatically at unlock too |
+| Lifecycle | `init()` (locked) → optional `vssClearFence(password)` → `unlock()` | Same gap, one call: `init()` (locked) → optional `rlnRestoreVSSBackup({ takeoverFence? })` → `unlock()` (`UTEXOWallet.create()` = init + unlock) |
+| Enabling | Constructor params: `vssUrl`, `vssAllowHttp?`, `vssAllowEmptyRestore?` — nothing else | Wallet stream: **on by default**, configured at init (`vssUrl` optional, `null` disables). LDK stream: configured automatically at unlock |
 | Identity | Auto-derived in the node from the mnemonic at `m/535'/1'` (or from bootstrap material in external-signer mode) | Auto-derived at init via core's `buildVssConfigFromMnemonic` (HMAC-SHA256 key, storeId = `wallet_<masterFingerprint>`) |
 | RGB wallet backup | **Automatic + blocking** after every op (`auto_backup(true)`, `VssBackupMode::Blocking`) — an op isn't done until it's backed up | Wasm layer is manual, but **`UTEXOWallet` auto-schedules** a background `vssBackup()` after every state-changing op (non-blocking: op completes locally first, cloud follows) |
 | LDK/channel replication | Continuous via `SyncedKvStore`, starts at unlock | Continuous via `VssReplicator`, starts at `configureLdkVssReplication` (must be before runtime start) |
-| Restore | Automatic at unlock; guarded (never clobbers a local wallet); failure blocks unlock unless `vssAllowEmptyRestore` | Wallet stream: automatic at unlock when the local wallet is empty and a backup exists (guarded, non-fatal on failure; `vssAutoRestore: false` opts out). LDK stream: automatic inside the unlock-time `configureLdkVssReplication` on a fresh store; a configure failure is non-fatal (recover via disable → clear fence → unlock) |
-| Restore failure policy | `vssAllowEmptyRestore` flag decides fail-closed vs start-fresh | No flag — the configure call errors; the app decides |
+| Restore | Automatic at unlock; guarded (never clobbers a local wallet); failure blocks unlock unless `vssAllowEmptyRestore` | **Explicit-only**: `rlnRestoreVSSBackup()` in the init→unlock gap restores the wallet stream (throws on failure — no silent fresh start). LDK stream: guarded fresh-store restore inside the unlock-time `configureLdkVssReplication`; a configure failure is non-fatal (recover via disable → clear fence → unlock) |
+| Restore failure policy | `vssAllowEmptyRestore` flag decides fail-closed vs start-fresh | Wallet stream: the explicit call throws; the app decides. Skipped restore with an existing cloud backup → loud unlock() warning (next auto-backup would overwrite the snapshot) |
 | Single-writer | VSS fence + `vssClearFence(password)` recovery API (works on a locked node) | VSS fence (persisted instance id) + Web Locks for multi-tab; `vssClearFence()` in the locked init→unlock gap (refused while replication is active) |
 | Backup health | node HTTP routes `/vssbackupinfo` | `vssBackupInfo()` (wallet) + `ldkVssBackupInfoJson()` (node) |
-| App code required | Zero backup-related calls | Wallet stream: zero (default-on at unlock; `vssRestoreBackup()` for a forced restore). LDK stream: zero (auto at unlock; health via `ldkVssBackupInfo()`) |
+| App code required | Zero backup-related calls | Backup: zero. Restore: one call — `rlnRestoreVSSBackup()` on a new device |
 
-**The essential UX difference:** on RN the app opts in with one URL and the node
-guarantees cloud durability synchronously (blocking auto-backup); on web the SDK
-orchestrates the same guarantees itself — `UTEXOWallet` auto-backs-up the wallet
-stream after each state-changing op (asynchronously, so the cloud can briefly lag
-local state), and the LDK stream, once configured, is as automatic as RN's.
+**The essential UX differences:** on RN the app opts in with one URL and the
+node guarantees cloud durability synchronously (blocking auto-backup); on web
+the SDK orchestrates the same guarantees itself — `UTEXOWallet` auto-backs-up
+the wallet stream after each state-changing op (asynchronously, so the cloud
+can briefly lag local state), and the LDK stream, once configured, is as
+automatic as RN's. And where RN restores automatically at unlock, web makes
+restore a deliberate one-call decision (`rlnRestoreVSSBackup()`) — restoring
+overwrites local state, so it is explicit and loud instead of automatic and
+silent (rationale in docs/RESTORE-API-PROPOSAL.md).

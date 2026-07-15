@@ -55,16 +55,12 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
    *  automatically at unlock() with an identity derived from the mnemonic
    *  (storeId = wallet_<masterFingerprint>). Pass `null` to disable VSS. */
   vssUrl?: string | null;
-  /** Auto-restore at unlock() (default: true). When the VSS server has a
-   *  backup for this mnemonic, the wallet state is restored automatically —
-   *  overwriting local wallet state with the cloud snapshot (RN-parity
-   *  unlock behavior). Set false to opt out (restore manually via
-   *  vssRestoreBackup()). */
-  vssAutoRestore?: boolean;
   /** Internal — set by UTEXOWallet.init(): the mnemonic-derived VSS config,
    *  stored on the binding and applied by unlock() so LDK/channel-state
    *  replication is configured on the node handle BEFORE its runtime starts
-   *  (the wallet-stream backup is configured separately, after unlock). */
+   *  (the wallet-stream backup is configured separately, at init). Restore
+   *  is never automatic — the app calls rlnRestoreVSSBackup() in the
+   *  init→unlock gap (see docs/VSS-BACKUP-RESTORE.md). */
   vssConfig?: VssBackupConfig | null;
   /** Local directory for wallet DB (default: auto-generated in-memory path) */
   dataDir?: string;
@@ -167,9 +163,9 @@ export class RlnWalletManager extends BaseWalletManager {
     return manager;
   }
 
-  /** Phase 2, step 1: sdk.unlock + LDK VSS configure + RGB wallet creation
-   *  (no network) — separate from autoGoOnline() so UTEXOWallet can run the
-   *  wallet-stream VSS restore in between. */
+  /** Phase 2, step 1: sdk.unlock (password check + runtime authorization) +
+   *  LDK VSS configure (guarded channel restore, pre-runtime) — no network.
+   *  The RGB wallet object exists since create(); this releases its gate. */
   async unlockWallet(): Promise<void> {
     await this.rlnBinding.unlockWallet();
   }
@@ -262,7 +258,8 @@ export class RlnWalletManager extends BaseWalletManager {
   }
 
   /** Restore the wallet stream from VSS (requires configureVssBackup first).
-   *  Overwrites local wallet state with the cloud snapshot. */
+   *  Overwrites local wallet state with the cloud snapshot. Works in the
+   *  LOCKED init→unlock gap — that's the intended restore window. */
   vssRestoreBackup(): Promise<void> {
     return this.rlnBinding.vssRestoreBackup();
   }

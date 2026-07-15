@@ -8,8 +8,11 @@
  * fail-pending-payment operations are only exposed on RlnWasmNode.
  *
  * Split lifecycle: create() = initValue (SDK stays locked) + key derivation +
- * node handle (runtime not started; clearLdkVssFence works in this gap);
- * unlockWallet() = sdk.unlock → LDK VSS configure → RlnWasmWallet.create;
+ * node handle (runtime not started; clearLdkVssFence works in this gap) +
+ * RlnWasmWallet.create (loads the local IDB snapshot — the wasm wallet has no
+ * lifecycle check, so it can exist while LOCKED; VSS wallet-stream ops work in
+ * the gap, everything else is gated by the `unlocked` flag);
+ * unlockWallet() = sdk.unlock → LDK VSS configure → unlocked = true;
  * connect() = goOnline → node attach. Full contract in CLAUDE.md.
  */
 
@@ -110,9 +113,11 @@ export interface RlnBindingCreateParams {
   enableVirtualChannels?: boolean;
   /** asset schemas to support (default: ['Nia', 'Ifa']) */
   supportedSchemas?: string[];
-  /** LDK/channel-state VSS replication identity — stored at create(),
-   *  applied by unlockWallet() before the node runtime starts (the wasm side
-   *  appends `-ldk` to storeId to keep it separate from the wallet stream). */
+  /** VSS identity (shared by both streams) — stored at create(). The LDK
+   *  stream is configured by unlockWallet() before the node runtime starts
+   *  (the wasm side appends `-ldk` to storeId to keep it separate from the
+   *  wallet stream); the wallet stream is configured by the owner (UTEXOWallet
+   *  calls configureVssBackup at init). */
   vss?: {
     serverUrl: string;
     storeId: string;
@@ -351,10 +356,16 @@ function sdkRecipientMapToRln(map: RecipientMap) {
 
 export class RlnWasmBinding implements IRlnSdkBinding {
   private readonly sdk: RlnWasmSdk;
-  /** The RGB wallet — created by unlockWallet() (phase 2), null while LOCKED. */
+  /** The RGB wallet — created at create() (the wasm wallet has no lifecycle
+   *  check). Access via the `wallet` getter, which enforces the LOCKED gate;
+   *  only the VSS wallet-stream methods use `walletPreUnlock` (they are the
+   *  point of the init→unlock gap: restore before the runtime can start). */
   private _wallet: RlnWasmWallet | null = null;
-  /** Wallet init payload built at create(), consumed by unlockWallet(). Also
-   *  the single source of truth for the derived account keys (getKeys()). */
+  /** LOCKED gate — false until unlockWallet() completes. The wallet object
+   *  exists from create(), so the gate is this flag, not the wallet's absence. */
+  private unlocked = false;
+  /** Wallet init payload built at create(). Also the single source of truth
+   *  for the derived account keys (getKeys()). */
   private readonly walletData: RlnWalletData;
   /** SDK password — kept for the sdk.unlock in unlockWallet() (create() only
    *  runs initValue, leaving the SDK initialized-but-locked). */
@@ -399,12 +410,26 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   /** Every wallet op goes through this getter — the LOCKED phase is
-   *  enforced by construction (no wallet object exists until unlock). */
+   *  enforced by the `unlocked` flag (the wallet object itself exists from
+   *  create(), so VSS restore can run in the init→unlock gap). */
   private get wallet(): RlnWasmWallet {
+    if (!this.unlocked || !this._wallet) {
+      throw new WalletError(
+        'Wallet is locked — call unlock() first (init() only prepares the SDK, wallet and node handle).',
+        'walletLocked'
+      );
+    }
+    return this._wallet;
+  }
+
+  /** Ungated wallet access for the VSS wallet-stream ops (configure/backup/
+   *  info/restore) — they legitimately run in the LOCKED init→unlock gap
+   *  (explicit restore before the node runtime starts / indexer connects). */
+  private get walletPreUnlock(): RlnWasmWallet {
     if (!this._wallet) {
       throw new WalletError(
-        'Wallet is locked — call unlock() first (init() only prepares the SDK and node handle).',
-        'walletLocked'
+        'Wallet is not initialized — call init() first.',
+        'walletNotInitialized'
       );
     }
     return this._wallet;
@@ -492,25 +517,26 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       params.enableVirtualChannels ?? true
     );
     binding.vssParams = params.vss ?? null;
+    // The wasm wallet has no lifecycle check — create it now (loads the local
+    // IDB snapshot) so the VSS wallet-stream restore can run in the LOCKED
+    // init→unlock gap. Ops stay gated by the `unlocked` flag.
+    binding._wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
     return binding;
   }
 
-  /** Phase 2: sdk.unlock (idempotent for the same password) → LDK VSS
-   *  configure (non-fatal — see getLdkVssInitError) → RGB wallet creation.
+  /** Phase 2: sdk.unlock (idempotent for the same password; validates the
+   *  password and authorizes the node runtime) → LDK VSS configure
+   *  (non-fatal — see getLdkVssInitError) → LOCKED gate released.
    *  Idempotent/retryable; the binding stays locked on a thrown failure. */
   async unlockWallet(): Promise<void> {
     await this.sdk.unlock(JSON.stringify({ password: this.password }));
     await this.configureLdkVss();
-    if (!this._wallet) {
-      this._wallet = await RlnWasmWallet.create(
-        JSON.stringify(this.walletData)
-      );
-    }
+    this.unlocked = true;
   }
 
-  /** Whether unlockWallet() has completed (the RGB wallet exists). */
+  /** Whether unlockWallet() has completed (the LOCKED gate is released). */
   isUnlocked(): boolean {
-    return this._wallet !== null;
+    return this.unlocked;
   }
 
   /** Account keys derived once at create() via the wasm rgbRestoreKeysValue —
@@ -566,6 +592,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     try {
       this._wallet?.free();
       this._wallet = null;
+      this.unlocked = false;
       this.nodeHandle?.free();
       this.sdk.free();
     } catch (e) {
@@ -1013,9 +1040,11 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   // ── VSS ───────────────────────────────────────────────────────────────────
+  // Wallet-stream VSS ops use walletPreUnlock: they must work in the LOCKED
+  // init→unlock gap (the explicit-restore window — see CLAUDE.md).
 
   configureVssBackup(config: VssBackupConfig): void {
-    this.wallet.configureVssBackup(
+    this.walletPreUnlock.configureVssBackup(
       config.serverUrl,
       config.storeId,
       config.signingKey
@@ -1023,19 +1052,19 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   disableVssAutoBackup(): void {
-    this.wallet.disableVssBackup();
+    this.walletPreUnlock.disableVssBackup();
   }
 
   /** Download and install the wallet snapshot from VSS (assets/stock/BDK
    *  state). Requires configureVssBackup first. Overwrites local wallet
    *  state with the cloud copy — callers guard against clobbering. */
   vssRestoreBackup(): Promise<void> {
-    return this.wallet.vssRestoreBackup();
+    return this.walletPreUnlock.vssRestoreBackup();
   }
 
   async vssBackup(_config: VssBackupConfig): Promise<number> {
     const raw = parseJson<{ version?: number }>(
-      await this.wallet.vssBackupJson()
+      await this.walletPreUnlock.vssBackupJson()
     );
     return raw.version ?? 0;
   }
@@ -1045,7 +1074,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       backup_exists?: boolean;
       server_version?: number;
       backup_required?: boolean;
-    }>(await this.wallet.vssBackupInfoJson());
+    }>(await this.walletPreUnlock.vssBackupInfoJson());
     return {
       backupExists: Boolean(raw.backup_exists),
       serverVersion: raw.server_version ?? null,

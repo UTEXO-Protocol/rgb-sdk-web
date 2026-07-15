@@ -4,7 +4,10 @@ import { DEFAULT_INDEXER_URLS } from './binding/RlnDefaults';
 // Single RLN-backed wallet (RGB on-chain + native Lightning). Mirrors
 // @utexo/rgb-sdk-rn's UTEXOWallet surface (IWalletManager + IUTEXOProtocol).
 export { UTEXOWallet } from './utexo/utexo-wallet';
-export type { UTEXOWalletCreateParams } from './utexo/utexo-wallet';
+export type {
+  UTEXOWalletCreateParams,
+  RlnVssRestoreResult,
+} from './utexo/utexo-wallet';
 
 // Core protocol interfaces / base classes
 export {

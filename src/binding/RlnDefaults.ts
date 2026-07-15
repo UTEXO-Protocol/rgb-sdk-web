@@ -16,7 +16,6 @@ export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
     indexerUrl: 'http://127.0.0.1:3002',
   },
   utexo: {
-    // TODO: proxyUrl is a placeholder — replace once the real WS proxy is deployed.
     proxyUrl: 'wss://ln-gateway-signet.utexo.com',
     transportEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc',
     indexerUrl: 'https://esplora-api.utexo.com',

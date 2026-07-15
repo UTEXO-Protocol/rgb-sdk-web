@@ -396,25 +396,7 @@ while (status !== 'Settled') {
 
 ---
 
-## Backup & Restore
-
-Backups return raw `Uint8Array` bytes — no filesystem. Store them with your own mechanism (file download, upload, etc.).
-
-### File backup
-
-```typescript
-await wallet.createBackup({ backupPath: '', password: 'backup-password' });
-const bytes = wallet.getLastBackupBytes(); // Uint8Array — trigger a download, upload, …
-```
-
-### File restore
-
-```typescript
-// Restores into the active wallet's in-memory state
-wallet.restoreFromBackupBytes(bytes, 'backup-password');
-```
-
-### VSS — encrypted cloud backup & restore
+## VSS — encrypted cloud backup & restore
 
 VSS (Versioned Storage Service) keeps an encrypted remote copy of the wallet
 (RGB assets, stock, BDK state) and the node's LDK/channel state. When a device
@@ -498,15 +480,7 @@ Used automatically when the corresponding create param is omitted.
 
 | Network | LN gateway (`proxyUrl`) | RGB transport (`transportEndpoint`) | Indexer (`indexerUrl`) |
 |---------|------------------------|-------------------------------------|------------------------|
-| utexo   | `wss://rln-proxy-utexo.utexo.com/rgb/json-rpc` | `rpcs://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
-
-**Indexer-only defaults** (`DEFAULT_INDEXER_URLS`) for the other networks:
-
-| Network  | URL |
-|----------|-----|
-| mainnet  | `https://esplora-mainnet.utexo.com` |
-| testnet  | `https://esplora-testnet3.utexo.com` |
-| testnet4 | `https://esplora-testnet4.utexo.com` |
+| utexo   | `wss://ln-gateway-signet.utexo.com` | `rpcs://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
 
 On networks without a `proxyUrl` default, pass one explicitly to enable the Lightning node; without it the wallet is on-chain RGB only.
 

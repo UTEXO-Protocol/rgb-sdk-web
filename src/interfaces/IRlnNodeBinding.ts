@@ -20,6 +20,7 @@ import type {
   IssueAssetNiaRequest,
   IssueAssetCfaRequest,
   ApayNewResponse,
+  LdkVssBackupInfo,
 } from '../types/rln-model';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 
@@ -71,6 +72,31 @@ export interface IRlnNodeBinding {
   networkInfo(): Promise<LightningNetworkInfo>;
   ldkRuntimeStatus(): Promise<LdkRuntimeStatus>;
   listRuntimeEvents(): Promise<ListRuntimeEventsResult>;
+
+  // ── VSS (LDK/channel-state replication) ────────────────────────────────────
+  /** Enable background VSS replication of channel state; must be called
+   *  before the node runtime starts. Returns the number of keys restored
+   *  from VSS (fresh device) — 0 when the local store was already populated. */
+  configureLdkVssReplication(
+    serverUrl: string,
+    storeId: string,
+    signingKeyHex: string
+  ): Promise<number>;
+  /** Stop replication and release the single-writer guards. */
+  disableLdkVssReplication(): void;
+  /** Replication health: `{ configured, pendingWrites, lastError, disabled }`. */
+  ldkVssBackupInfo(): LdkVssBackupInfo;
+  /** Clear the VSS single-writer fence for this node's LDK store — recovery
+   *  for when configureLdkVssReplication fails with "owned by another
+   *  instance" and that owner can never release the fence itself (wiped
+   *  browser profile / dead device). Refused while replication is active on
+   *  this node. Only clear when the previous owner is truly gone: two live
+   *  writers on one VSS store corrupt each other's channel state. */
+  clearLdkVssFence(
+    serverUrl: string,
+    storeId: string,
+    signingKeyHex: string
+  ): Promise<void>;
 
   // ── Decoding ───────────────────────────────────────────────────────────────
   decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice>;

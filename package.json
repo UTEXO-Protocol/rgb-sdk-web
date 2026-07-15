@@ -47,7 +47,7 @@
     "@scure/btc-signer": "^2.0.1",
     "@utexo/rgb-sdk-core": "1.0.0-beta.3",
     "bitcoinjs-lib": "^6.1.7",
-    "@utexo/rln-wasm": "https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v0.7.0-beta.3/rln-wasm-sdk-pkg-0.7.0-beta.3.tar.gz"
+    "@utexo/rln-wasm": "file:../../utexo/rgb-lightning-node/bindings/wasm-sdk/pkg"
   },
   "keywords": [
     "rgb",

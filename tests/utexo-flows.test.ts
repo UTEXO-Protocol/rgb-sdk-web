@@ -16,6 +16,7 @@ describe('UTEXOWallet API', () => {
   describe('lifecycle', () => {
     [
       'init',
+      'unlock',
       'initialize',
       'goOnline',
       'getXpub',
@@ -84,6 +85,11 @@ describe('UTEXOWallet API', () => {
       'disableVssAutoBackup',
       'vssBackup',
       'vssBackupInfo',
+      'vssRestoreBackup',
+      'ldkVssBackupInfo',
+      'clearLdkVssFence',
+      'vssClearFence',
+      'disableLdkVssReplication',
       'createBackup',
       'getLastBackupBytes',
       'restoreFromBackupBytes',

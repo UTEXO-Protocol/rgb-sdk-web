@@ -226,3 +226,17 @@ export interface SwapInfo {
   swapString: string;
   status: string;
 }
+
+// ─── VSS (LDK/channel-state replication) ──────────────────────────────────────
+
+/** Health view of the node's LDK VSS replication (ldkVssBackupInfoJson). */
+export interface LdkVssBackupInfo {
+  /** True when configureLdkVssReplication succeeded for this node. */
+  configured: boolean;
+  /** Writes queued but not yet on the VSS server; alert if it stays > 0. */
+  pendingWrites: number;
+  /** Most recent replication error, or null. */
+  lastError: string | null;
+  /** True when the fence was lost to another instance and replication stopped. */
+  disabled: boolean;
+}

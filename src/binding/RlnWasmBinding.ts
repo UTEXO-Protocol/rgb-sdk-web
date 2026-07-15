@@ -6,6 +6,11 @@
  * (with wallet attached) handles Lightning + asset issuance. The direct node
  * object is used (not RlnWasmSdkNodeHandle) because HODL-invoice and
  * fail-pending-payment operations are only exposed on RlnWasmNode.
+ *
+ * Split lifecycle: create() = initValue (SDK stays locked) + key derivation +
+ * node handle (runtime not started; clearLdkVssFence works in this gap);
+ * unlockWallet() = sdk.unlock → LDK VSS configure → RlnWasmWallet.create;
+ * connect() = goOnline → node attach. Full contract in CLAUDE.md.
  */
 
 import {
@@ -105,6 +110,14 @@ export interface RlnBindingCreateParams {
   enableVirtualChannels?: boolean;
   /** asset schemas to support (default: ['Nia', 'Ifa']) */
   supportedSchemas?: string[];
+  /** LDK/channel-state VSS replication identity — stored at create(),
+   *  applied by unlockWallet() before the node runtime starts (the wasm side
+   *  appends `-ldk` to storeId to keep it separate from the wallet stream). */
+  vss?: {
+    serverUrl: string;
+    storeId: string;
+    signingKeyHex: string;
+  } | null;
 }
 
 // ─── Normalizers ──────────────────────────────────────────────────────────────
@@ -242,6 +255,23 @@ function normalizeTransaction(raw: RlnRawTransaction): Transaction {
   };
 }
 
+/** rgb-lib refresh returns a map of batch-transfer idx → RefreshedTransfer
+ *  (serde_wasm_bindgen emits a JS Map; handle a plain object defensively).
+ *  A non-null `updated_status` means that transfer advanced this pass. */
+function refreshResultHasChanges(result: unknown): boolean {
+  const entries =
+    result instanceof Map
+      ? Array.from(result.values())
+      : result && typeof result === 'object'
+        ? Object.values(result)
+        : [];
+  return entries.some((entry) => {
+    if (entry == null || typeof entry !== 'object') return false;
+    const t = entry as { updated_status?: unknown; updatedStatus?: unknown };
+    return (t.updated_status ?? t.updatedStatus) != null;
+  });
+}
+
 function normalizeReceiveData(
   raw: RlnRawInvoiceReceiveData
 ): InvoiceReceiveData {
@@ -321,7 +351,15 @@ function sdkRecipientMapToRln(map: RecipientMap) {
 
 export class RlnWasmBinding implements IRlnSdkBinding {
   private readonly sdk: RlnWasmSdk;
-  private readonly wallet: RlnWasmWallet;
+  /** The RGB wallet — created by unlockWallet() (phase 2), null while LOCKED. */
+  private _wallet: RlnWasmWallet | null = null;
+  /** Wallet init payload built at create(), consumed by unlockWallet(). Also
+   *  the single source of truth for the derived account keys (getKeys()). */
+  private readonly walletData: RlnWalletData;
+  /** SDK password — kept for the sdk.unlock in unlockWallet() (create() only
+   *  runs initValue, leaving the SDK initialized-but-locked). */
+  private readonly password: string;
+  private readonly enableVirtualChannels: boolean;
   private nodeHandle: RlnWasmNode | null;
   private rlnNode: IRlnNodeBinding | null;
   private online: RlnOnline | null = null;
@@ -329,21 +367,47 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   private lastBackupBytes: Uint8Array | null = null;
   private readonly defaultIndexerUrl: string;
   private readonly configuredTransportEndpoint: string | null;
+  /** Error from the unlock-time configureLdkVssReplication attempt (see
+   *  getLdkVssInitError). */
+  private ldkVssInitError: string | null = null;
+  /** LDK-VSS identity stored at create(), applied by unlock(). */
+  private vssParams: {
+    serverUrl: string;
+    storeId: string;
+    signingKeyHex: string;
+  } | null = null;
+  private ldkVssConfigured = false;
 
   private constructor(
     sdk: RlnWasmSdk,
-    wallet: RlnWasmWallet,
+    walletData: RlnWalletData,
+    password: string,
     nodeHandle: RlnWasmNode | null,
     rlnNode: IRlnNodeBinding | null,
     defaultIndexerUrl: string,
-    transportEndpoint: string | null
+    transportEndpoint: string | null,
+    enableVirtualChannels: boolean
   ) {
     this.sdk = sdk;
-    this.wallet = wallet;
+    this.walletData = walletData;
+    this.password = password;
     this.nodeHandle = nodeHandle;
     this.rlnNode = rlnNode;
     this.defaultIndexerUrl = defaultIndexerUrl;
     this.configuredTransportEndpoint = transportEndpoint;
+    this.enableVirtualChannels = enableVirtualChannels;
+  }
+
+  /** Every wallet op goes through this getter — the LOCKED phase is
+   *  enforced by construction (no wallet object exists until unlock). */
+  private get wallet(): RlnWasmWallet {
+    if (!this._wallet) {
+      throw new WalletError(
+        'Wallet is locked — call unlock() first (init() only prepares the SDK and node handle).',
+        'walletLocked'
+      );
+    }
+    return this._wallet;
   }
 
   static async create(params: RlnBindingCreateParams): Promise<RlnWasmBinding> {
@@ -372,9 +436,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       }
       throw e;
     }
-
-    await sdk.unlock(JSON.stringify({ password: params.password }));
-
+    // No sdk.unlock here — that happens in unlockWallet(); everything below
+    // is standalone and doesn't need the unlocked SDK.
     const networkStr = mapNetwork(params.network);
     const keys = rgbRestoreKeysValue(networkStr, params.mnemonic) as {
       account_xpub_vanilla: string;
@@ -401,6 +464,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     let nodeHandle: RlnWasmNode | null = null;
     let rlnNode: IRlnNodeBinding | null = null;
 
+    // Node handle creation doesn't start the runtime (attachWallet does) —
+    // it must exist in the LOCKED phase so clearLdkVssFence works in the gap.
     const proxyUrl = params.proxyUrl ?? params.transportEndpoint;
     if (proxyUrl) {
       const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
@@ -410,28 +475,85 @@ export class RlnWasmBinding implements IRlnSdkBinding {
         runtimeId,
         networkStr
       );
-      if (params.enableVirtualChannels ?? true) {
-        try {
-          nodeHandle.setEnableVirtualChannelsV0(true);
-        } catch (e) {
-          logger.warn('RlnWasmBinding: setEnableVirtualChannelsV0 failed', e);
-        }
-      }
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
-    const wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
     const normalizedNet = normalizeNetwork(params.network);
     const defaultIndexerUrl =
       DEFAULT_INDEXER_URLS[normalizedNet] ?? DEFAULT_INDEXER_URLS.utexo;
 
-    return new RlnWasmBinding(
+    const binding = new RlnWasmBinding(
       sdk,
-      wallet,
+      walletData,
+      params.password,
       nodeHandle,
       rlnNode,
       defaultIndexerUrl,
-      params.transportEndpoint ?? null
+      params.transportEndpoint ?? null,
+      params.enableVirtualChannels ?? true
     );
+    binding.vssParams = params.vss ?? null;
+    return binding;
+  }
+
+  /** Phase 2: sdk.unlock (idempotent for the same password) → LDK VSS
+   *  configure (non-fatal — see getLdkVssInitError) → RGB wallet creation.
+   *  Idempotent/retryable; the binding stays locked on a thrown failure. */
+  async unlockWallet(): Promise<void> {
+    await this.sdk.unlock(JSON.stringify({ password: this.password }));
+    await this.configureLdkVss();
+    if (!this._wallet) {
+      this._wallet = await RlnWasmWallet.create(
+        JSON.stringify(this.walletData)
+      );
+    }
+  }
+
+  /** Whether unlockWallet() has completed (the RGB wallet exists). */
+  isUnlocked(): boolean {
+    return this._wallet !== null;
+  }
+
+  /** Account keys derived once at create() via the wasm rgbRestoreKeysValue —
+   *  the single source of truth (callers must not re-derive from the mnemonic). */
+  getKeys(): {
+    accountXpubVanilla: string;
+    accountXpubColored: string;
+    masterFingerprint: string;
+  } {
+    return {
+      accountXpubVanilla: this.walletData.account_xpub_vanilla,
+      accountXpubColored: this.walletData.account_xpub_colored,
+      masterFingerprint: this.walletData.master_fingerprint,
+    };
+  }
+
+  /** Configure LDK/channel-state VSS replication — must run before the node
+   *  runtime starts (the wasm side does the guarded fresh-device restore
+   *  here). Non-fatal: a failure (held fence, VSS down) is captured in
+   *  getLdkVssInitError() and channel state stays local-only. Idempotent. */
+  private async configureLdkVss(): Promise<void> {
+    if (this.ldkVssConfigured || !this.vssParams || !this.nodeHandle) return;
+    const { serverUrl, storeId, signingKeyHex } = this.vssParams;
+    try {
+      const restored = await this.nodeHandle.configureLdkVssReplication(
+        serverUrl,
+        storeId,
+        signingKeyHex
+      );
+      // Latch only on success so the recovery path (disable → clearFence →
+      // unlock) can re-run the configure.
+      this.ldkVssConfigured = true;
+      this.ldkVssInitError = null;
+      logger.info(
+        `RlnWasmBinding: LDK VSS replication enabled (${restored} keys restored)`
+      );
+    } catch (e) {
+      this.ldkVssInitError = String(e);
+      logger.warn(
+        'RlnWasmBinding: configureLdkVssReplication failed — channel state stays local-only',
+        e
+      );
+    }
   }
 
   // ── Lifecycle (IRgbLibBinding) ─────────────────────────────────────────────
@@ -442,7 +564,8 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   dropWallet(): void {
     try {
-      this.wallet.free();
+      this._wallet?.free();
+      this._wallet = null;
       this.nodeHandle?.free();
       this.sdk.free();
     } catch (e) {
@@ -480,12 +603,9 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       return;
     }
     this.online = await this.wallet.goOnlineValue(skipConsistencyCheck, url);
-    // Attach the wallet to the LN node now that goOnlineValue has RESOLVED —
-    // the ordering is the hard constraint: goOnlineValue holds a borrow_mut()
-    // on the wallet's shared RefCell across its await, so an already-attached
-    // node's runtime ticks would collide → "RefCell already borrowed" panic.
-    // Attaching here gives RN-style UX (Lightning ready after init()/goOnline()
-    // with no separate attach call).
+    // Attach only after goOnlineValue RESOLVES — it holds a borrow_mut()
+    // across its await; an attached node's runtime tick would panic
+    // ("RefCell already borrowed").
     this.ensureNodeAttached();
   }
 
@@ -496,14 +616,22 @@ export class RlnWasmBinding implements IRlnSdkBinding {
    */
   private ensureNodeAttached(): void {
     if (this.nodeHandle && !this.nodeAttached) {
+      // Accept trusted virtual-channel opens (0-conf, scid-privacy,
+      // never-broadcast). Must be set BEFORE attachWallet, which seeds the
+      // backend's flag registry (mirrors the wasm-sdk example flows).
+      if (this.enableVirtualChannels) {
+        try {
+          this.nodeHandle.setEnableVirtualChannelsV0(true);
+        } catch (e) {
+          logger.warn('RlnWasmBinding: setEnableVirtualChannelsV0 failed', e);
+        }
+      }
       this.nodeHandle.attachWallet(this.wallet);
       this.nodeAttached = true;
-      // Start a DORMANT chain-sync session (huge interval — the background loop
-      // must stay idle or it collides with foreground wallet ops on the shared
-      // RefCell). Explicit chainSyncTickValue() calls in RlnNodeBinding's drive
-      // path keep the LDK best-block fresh; without a live session the node's
-      // height freezes at attach time and peers reject our HTLCs once the chain
-      // advances (expiry_too_soon).
+      // DORMANT chain-sync session (huge interval; a busy loop collides with
+      // wallet ops on the shared RefCell). Explicit chainSyncTickValue()
+      // calls keep the LDK best-block fresh — without a session the height
+      // freezes at attach and peers reject HTLCs (expiry_too_soon).
       try {
         this.nodeHandle.chainSyncStartValue(this.defaultIndexerUrl, 3_600_000);
       } catch (e) {
@@ -835,14 +963,17 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     );
   }
 
-  // Must await: the wasm wallet holds a RefCell borrow across the await, so a
-  // fire-and-forget call racing a later wallet op panics ("RefCell already
-  // borrowed"). Returning a Promise from the `void` interface method is fine.
-  async refreshWallet(): Promise<void> {
-    if (!this.online) return;
+  // Must be awaited (wasm RefCell rules — see CLAUDE.md); returning a
+  // Promise from the `void` interface method is fine.
+  /** Returns true when any transfer changed status this pass — refresh
+   *  settlements don't bump rgb-lib's backup timestamp, so this is the only
+   *  signal callers (auto VSS backup) have that wallet state advanced. */
+  async refreshWallet(): Promise<boolean> {
+    if (!this.online) return false;
     // filter must be [] (wasm rejects null); refreshValue not refreshJson (the
-    // integer-keyed result breaks JSON conversion). Result is discarded.
-    await this.wallet.refreshValue(this.online, null, [], false);
+    // integer-keyed result breaks JSON conversion).
+    const result = await this.wallet.refreshValue(this.online, null, [], false);
+    return refreshResultHasChanges(result);
   }
 
   async syncWallet(): Promise<void> {
@@ -893,6 +1024,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
   disableVssAutoBackup(): void {
     this.wallet.disableVssBackup();
+  }
+
+  /** Download and install the wallet snapshot from VSS (assets/stock/BDK
+   *  state). Requires configureVssBackup first. Overwrites local wallet
+   *  state with the cloud copy — callers guard against clobbering. */
+  vssRestoreBackup(): Promise<void> {
+    return this.wallet.vssRestoreBackup();
   }
 
   async vssBackup(_config: VssBackupConfig): Promise<number> {
@@ -988,14 +1126,33 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     return this.rlnNode;
   }
 
+  /** Stop LDK VSS replication and release the fence + Web Lock; resets the
+   *  latch so unlockWallet() can re-run the configure. Local channel state
+   *  is unaffected. */
+  disableLdkVssReplication(): void {
+    this.nodeHandle?.disableLdkVssReplication();
+    this.ldkVssConfigured = false;
+    this.ldkVssInitError = null;
+  }
+
+  /** getLightningNode() without the lazy attach — required in the locked
+   *  phase (attach starts the runtime, breaking the pre-runtime configure). */
+  peekLightningNode(): IRlnNodeBinding | null {
+    return this.rlnNode;
+  }
+
+  /** Error from the unlock-time configureLdkVssReplication attempt, or null.
+   *  Kept here because a configure failure never reaches the wasm replicator,
+   *  whose own lastError would stay null. */
+  getLdkVssInitError(): string | null {
+    return this.ldkVssInitError;
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private _transportEndpoint(): string {
-    // The endpoint configured at create() (also registered SDK-wide via
-    // setDefaultRgbProxyTransport); localhost is a dev-only last resort.
-    // rgb-lib transport endpoints must use the rpc:// / rpcs:// scheme
-    // (RgbTransport::JsonRpc) — configured values are http(s) URLs
-    // (DEFAULT_RLN_URLS), so normalize the scheme here.
+    // rgb-lib transport endpoints require the rpc:// / rpcs:// scheme —
+    // normalize the configured http(s) URL; localhost is a dev-only fallback.
     const ep = this.configuredTransportEndpoint;
     if (!ep) return 'rpc://localhost:3000/json-rpc';
     return ep

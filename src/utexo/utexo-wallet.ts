@@ -9,11 +9,11 @@
  * `onchainSendEnd`), avoiding duplicate send entry points.
  *
  * Web-specific approaches are preserved:
- *  - RN-parity lifecycle: `new UTEXOWallet({ mnemonic, password, ... })` stores
- *    params synchronously; `await wallet.init()` performs the WASM/network setup
- *    and auto-connects to the indexer (`indexerUrl` or the network default).
- *    `UTEXOWallet.create(params)` remains as a one-call convenience wrapper.
- *    `goOnline()` is idempotent, so legacy create-then-goOnline code still works.
+ *  - RN-parity lifecycle: `new UTEXOWallet(params)` stores params; `init()`
+ *    does the SDK-level setup only (wallet LOCKED — no RlnWasmWallet yet);
+ *    `unlock()` runs sdk.unlock → LDK VSS configure → wallet create → VSS
+ *    restore → go-online/attach. `UTEXOWallet.create(params)` does all
+ *    three. Full contract in CLAUDE.md.
  *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `onchainSend` /
  *    `payLightningInvoice` stay atomic without an injected signer.
  *
@@ -64,6 +64,11 @@ import type {
   OnchainSendStatus,
   TransferStatus,
 } from '@utexo/rgb-sdk-core';
+import {
+  logger,
+  buildVssConfigFromMnemonic,
+  DEFAULT_VSS_SERVER_URL,
+} from '@utexo/rgb-sdk-core';
 import { RlnWalletManager } from '../wallet/rln-wallet-manager';
 import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
 import { UtexoLsp } from '../lsp/UtexoLsp';
@@ -90,6 +95,7 @@ import type {
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
   ApayNewResponse,
+  LdkVssBackupInfo,
 } from '../rln';
 
 export type { RlnWalletInitParams as UTEXOWalletCreateParams };
@@ -142,6 +148,16 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   private readonly lspBearerToken: string | null;
   private _manager: RlnWalletManager | null = null;
   private initPromise: Promise<void> | null = null;
+  private unlockPromise: Promise<void> | null = null;
+  /** Mnemonic-derived VSS identity, computed at init() (null = VSS disabled).
+   *  Used by unlock() for the wallet-stream backup/restore and as the default
+   *  identity for clearLdkVssFence() in the locked state. */
+  private derivedVssConfig: VssBackupConfig | null = null;
+
+  // Auto VSS backup: the wasm wallet-stream backup is manual-only, so every
+  // state-changing op schedules a best-effort background vssBackup().
+  private vssAutoConfig: VssBackupConfig | null = null;
+  private vssBackupRunning = false;
 
   /** Construction is sync and cheap — params are only stored. All WASM/network
    *  work happens in init(); every other method throws until it resolves. */
@@ -160,37 +176,125 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this._manager;
   }
 
-  /** One-time init (RN parity): creates the RLN wallet/node from the stored
-   *  params and auto-connects to the indexer (non-fatally — see isOnline()).
-   *  Idempotent; concurrent calls share the same in-flight promise. A failed
-   *  init clears the latch so init() can be retried. */
+  /** Fire-and-forget VSS backup after a state-changing op. No-op until VSS is
+   *  configured or while an upload is already in flight (no queue/retry — the
+   *  next state-changing op triggers the next backup anyway). Never throws —
+   *  a failed backup must not fail the operation itself. */
+  private triggerAutoVssBackup(): void {
+    if (!this.vssAutoConfig || this.vssBackupRunning) return;
+    this.vssBackupRunning = true;
+    this.manager
+      .vssBackup(this.vssAutoConfig)
+      .catch((e) => logger.warn('UTEXOWallet: auto VSS backup failed', e))
+      .finally(() => {
+        this.vssBackupRunning = false;
+      });
+  }
+
+  /** Await a state-changing op, then schedule an auto VSS backup. */
+  private async withVssBackup<T>(op: Promise<T>): Promise<T> {
+    const result = await op;
+    this.triggerAutoVssBackup();
+    return result;
+  }
+
+  /** Phase 1 — SDK-level setup only (initValue, key derivation, node
+   *  handle; runtime not started). The wallet stays LOCKED until unlock();
+   *  the init→unlock gap is where vssClearFence() can release a stale
+   *  fence. Idempotent; a thrown failure clears the latch for a retry. */
   async init(): Promise<void> {
     if (!this.initPromise) {
-      this.initPromise = RlnWalletManager.create(this.params).then(
-        (manager) => {
-          this._manager = manager;
-        },
-        (e) => {
-          this.initPromise = null;
-          throw e;
-        }
-      );
+      this.initPromise = this.initInternal().catch((e) => {
+        this.initPromise = null;
+        throw e;
+      });
     }
     return this.initPromise;
   }
 
-  /** Back-compat convenience: `new UTEXOWallet(params)` + `await init()`. */
+  private async initInternal(): Promise<void> {
+    // VSS identity derived at init (not unlock) so clearLdkVssFence() can
+    // default to it while locked.
+    const vssUrl =
+      this.params.vssUrl === null
+        ? null
+        : (this.params.vssUrl ?? DEFAULT_VSS_SERVER_URL);
+    this.derivedVssConfig = vssUrl
+      ? await buildVssConfigFromMnemonic(this.params.mnemonic, vssUrl)
+      : null;
+    this._manager = await RlnWalletManager.create({
+      ...this.params,
+      vssConfig: this.derivedVssConfig,
+    });
+  }
+
+  /** Phase 2, in order: sdk.unlock → LDK VSS configure (channel restore,
+   *  pre-runtime) → RGB wallet create → wallet-stream VSS configure +
+   *  restore → auto go-online/node attach. Throws unless init() ran first.
+   *  Runs once; only a thrown failure clears the latch for a retry — a
+   *  non-fatal LDK-configure failure (e.g. held fence) needs the explicit
+   *  recovery disableLdkVssReplication() → clearLdkVssFence() → unlock().
+   *  Full contract in CLAUDE.md / docs/VSS-BACKUP-RESTORE.md. */
+  async unlock(): Promise<void> {
+    if (!this.initPromise) {
+      throw new Error(
+        'UTEXOWallet: not initialized — await wallet.init() before unlock()'
+      );
+    }
+    await this.initPromise;
+    if (!this.unlockPromise) {
+      this.unlockPromise = this.unlockInternal().catch((e) => {
+        this.unlockPromise = null;
+        throw e;
+      });
+    }
+    return this.unlockPromise;
+  }
+
+  private async unlockInternal(): Promise<void> {
+    await this.manager.unlockWallet();
+    const vssConfig = this.derivedVssConfig;
+    if (vssConfig) {
+      await this.configureVssBackup(vssConfig);
+      if (this.params.vssAutoRestore !== false) {
+        await this.restoreWalletStateFromVSS();
+      }
+    }
+    await this.manager.autoGoOnline();
+  }
+
+  /** Restore the wallet stream from VSS at unlock() when the server has a
+   *  backup — overwrites local state (`vssAutoRestore: false` opts out).
+   *  Non-fatal: failures are logged and the wallet starts fresh. */
+  private async restoreWalletStateFromVSS(): Promise<void> {
+    try {
+      const info = await this.vssBackupInfo();
+      if (!info.backupExists) return;
+      await this.vssRestoreBackup();
+      logger.info(
+        `UTEXOWallet: restored wallet state from VSS (server version ${info.serverVersion})`
+      );
+    } catch (e) {
+      logger.warn('UTEXOWallet: VSS restore skipped (starting fresh)', e);
+    }
+  }
+
+  /** One-call convenience: `new UTEXOWallet(params)` + `init()` + `unlock()`
+   *  — a fully usable wallet, no restore-flow gap. */
   static async create(params: RlnWalletInitParams): Promise<UTEXOWallet> {
     const wallet = new UTEXOWallet(params);
     await wallet.init();
+    await wallet.unlock();
     return wallet;
   }
 
   // ── IWalletManager — Lifecycle ─────────────────────────────────────────────
 
-  /** Backward-compat alias for init(). */
-  initialize(): Promise<void> {
-    return this.init();
+  /** Backward-compat alias for the full init() + unlock() sequence (older
+   *  code expects a ready wallet after this call). */
+  async initialize(): Promise<void> {
+    await this.init();
+    await this.unlock();
   }
 
   /** Bring the wallet online. create() already auto-connects (using
@@ -261,7 +365,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Finish creating UTXOs from a signed PSBT — returns the number created. */
   createUtxosEnd(params: CreateUtxosEndRequestModel): Promise<number> {
-    return this.manager.createUtxosEnd(params);
+    return this.withVssBackup(this.manager.createUtxosEnd(params));
   }
 
   /** Create UTXOs atomically (begin → sign → end) — returns the number created. */
@@ -271,7 +375,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     size?: number;
     feeRate?: number;
   }): Promise<number> {
-    return this.manager.createUtxos(params);
+    return this.withVssBackup(this.manager.createUtxos(params));
   }
 
   // ── IWalletManager — Asset Operations ──────────────────────────────────────
@@ -288,12 +392,12 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Issue a Non-Inflatable Asset (NIA). */
   issueAssetNia(params: IssueAssetNiaRequestModel): Promise<AssetNIA> {
-    return this.manager.issueAssetNia(params);
+    return this.withVssBackup(this.manager.issueAssetNia(params));
   }
 
   /** Issue an Inflatable Fungible Asset (IFA). Requires the Lightning node. */
   issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<any> {
-    return this.manager.issueAssetIfa(params);
+    return this.withVssBackup(this.manager.issueAssetIfa(params));
   }
 
   /** Begin inflating an IFA asset — returns an unsigned PSBT for external signing. */
@@ -303,7 +407,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Finish inflating an IFA asset from a signed PSBT. */
   inflateEnd(params: InflateEndRequestModel): Promise<OperationResult> {
-    return this.manager.inflateEnd(params);
+    return this.withVssBackup(this.manager.inflateEnd(params));
   }
 
   /** Inflate an IFA asset atomically (begin → sign with the stored mnemonic → end). */
@@ -311,7 +415,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     params: InflateAssetIfaRequestModel,
     mnemonic?: string
   ): Promise<OperationResult> {
-    return this.manager.inflate(params, mnemonic);
+    return this.withVssBackup(this.manager.inflate(params, mnemonic));
   }
 
   // ── IWalletManager — Sending BTC ───────────────────────────────────────────
@@ -323,24 +427,24 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Finish an on-chain BTC send from a signed PSBT — returns the txid. */
   sendBtcEnd(params: SendBtcEndRequestModel): Promise<string> {
-    return this.manager.sendBtcEnd(params);
+    return this.withVssBackup(this.manager.sendBtcEnd(params));
   }
 
   /** Atomic on-chain BTC send (begin → sign with the stored mnemonic → end) — returns the txid. */
   sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
-    return this.manager.sendBtc(params);
+    return this.withVssBackup(this.manager.sendBtc(params));
   }
 
   // ── IWalletManager — Receiving Assets ──────────────────────────────────────
 
   /** Create a blinded-UTXO RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return this.manager.blindReceive(params);
+    return this.withVssBackup(this.manager.blindReceive(params));
   }
 
   /** Create a witness RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return this.manager.witnessReceive(params);
+    return this.withVssBackup(this.manager.witnessReceive(params));
   }
 
   /** Decode an RGB invoice into its structured fields. */
@@ -362,12 +466,15 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Mark pending transfers as failed. */
   failTransfers(params: FailTransfersRequest): Promise<boolean> {
-    return this.manager.failTransfers(params);
+    return this.withVssBackup(this.manager.failTransfers(params));
   }
 
-  /** Refresh pending RGB transfer state. */
-  refreshWallet(): Promise<void> {
-    return this.manager.refreshWallet();
+  /** Refresh pending RGB transfer state. Schedules an auto VSS backup only
+   *  when a transfer actually changed status — refresh is typically called
+   *  from polling loops, and a no-change pass must not upload a snapshot. */
+  async refreshWallet(): Promise<void> {
+    const changed = await this.manager.refreshWalletChanged();
+    if (changed) this.triggerAutoVssBackup();
   }
 
   /** Sync BTC/UTXO blockchain state. */
@@ -377,24 +484,115 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   // ── IWalletManager — VSS Backup ────────────────────────────────────────────
 
-  /** Enable VSS (cloud) auto-backup with the given config. */
-  configureVssBackup(config: VssBackupConfig): Promise<void> {
-    return this.manager.configureVssBackup(config);
+  /** Enable VSS (cloud) auto-backup — called automatically by unlock();
+   *  only needed to override the mnemonic-derived config. Every
+   *  state-changing op then schedules a best-effort background vssBackup(). */
+  async configureVssBackup(config: VssBackupConfig): Promise<void> {
+    await this.manager.configureVssBackup(config);
+    this.vssAutoConfig = config;
   }
 
-  /** Disable VSS auto-backup. */
-  disableVssAutoBackup(): Promise<void> {
-    return this.manager.disableVssAutoBackup();
+  /** Disable VSS auto-backup (also stops the automatic per-op backups). */
+  async disableVssAutoBackup(): Promise<void> {
+    this.vssAutoConfig = null;
+    await this.manager.disableVssAutoBackup();
   }
 
-  /** Trigger a VSS backup — returns the new backup version. */
-  vssBackup(config: VssBackupConfig): Promise<number> {
-    return this.manager.vssBackup(config);
+  /** Trigger a VSS backup — returns the new backup version. `config` defaults
+   *  to the one configured at init(). */
+  vssBackup(config?: VssBackupConfig): Promise<number> {
+    const effective = config ?? this.vssAutoConfig;
+    if (!effective) {
+      throw new Error(
+        'UTEXOWallet.vssBackup: VSS is not configured (init() with vssUrl, or pass a config)'
+      );
+    }
+    return this.manager.vssBackup(effective);
   }
 
-  /** Query VSS backup metadata (latest version, etc.). */
-  vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
-    return this.manager.vssBackupInfo(config);
+  /** Query VSS backup metadata (latest version, etc.). `config` defaults to
+   *  the one configured at init(). */
+  vssBackupInfo(config?: VssBackupConfig): Promise<VssBackupInfo> {
+    const effective = config ?? this.vssAutoConfig;
+    if (!effective) {
+      throw new Error(
+        'UTEXOWallet.vssBackupInfo: VSS is not configured (init() with vssUrl, or pass a config)'
+      );
+    }
+    return this.manager.vssBackupInfo(effective);
+  }
+
+  /** Health of the LDK/channel-state VSS replication, or null when there is
+   *  no Lightning node. A configure failure at unlock (VSS down, held fence)
+   *  is surfaced as `configured: false` with `lastError` — detect a held
+   *  fence via `/owned by another/` and recover per CLAUDE.md. */
+  ldkVssBackupInfo(): LdkVssBackupInfo | null {
+    // peek — a health check must not attach the node/start the runtime.
+    const node = this.manager.peekLightningNode();
+    if (!node) return null;
+    try {
+      const info = node.ldkVssBackupInfo();
+      if (!info.configured && !info.lastError) {
+        info.lastError = this.manager.getLdkVssInitError();
+      }
+      return info;
+    } catch (e) {
+      logger.warn('UTEXOWallet.ldkVssBackupInfo failed', e);
+      return null;
+    }
+  }
+
+  /** Clear the stale VSS single-writer fence on the LDK/channel stream —
+   *  call in the locked gap: init() → clearLdkVssFence() → unlock(). Only
+   *  when the previous owner is truly gone (two live writers corrupt each
+   *  other's channel state); refused while replication is active on this
+   *  node. `config` defaults to the identity derived at init(). */
+  clearLdkVssFence(config?: VssBackupConfig): Promise<void> {
+    const effective = config ?? this.vssAutoConfig ?? this.derivedVssConfig;
+    if (!effective) {
+      throw new Error(
+        'UTEXOWallet.clearLdkVssFence: VSS is not configured (init() with vssUrl, or pass a config)'
+      );
+    }
+    // peek — must not attach the node/start the runtime in the locked gap.
+    const node = this.manager.peekLightningNode();
+    if (!node) {
+      throw new Error(
+        'UTEXOWallet.clearLdkVssFence: no Lightning node (init() with transportEndpoint/proxyUrl)'
+      );
+    }
+    return node.clearLdkVssFence(
+      effective.serverUrl,
+      effective.storeId,
+      effective.signingKey
+    );
+  }
+
+  /** Stop LDK/channel-state VSS replication and release the single-writer
+   *  guards (fence + Web Lock). Local channel state is unaffected; makes
+   *  unlock() retryable (re-runs the configure) and is the precondition for
+   *  clearLdkVssFence() on an actively replicating node. */
+  disableLdkVssReplication(): void {
+    this.manager.disableLdkVssReplication();
+    // Allow unlock() to re-run the LDK configure.
+    this.unlockPromise = null;
+  }
+
+  /** RN-parity alias for {@link clearLdkVssFence} — `password` is accepted
+   *  for signature compatibility and ignored (identity comes from init()). */
+  vssClearFence(_password?: string): Promise<void> {
+    return this.clearLdkVssFence();
+  }
+
+  /** Restore the wallet stream (RGB assets, stock, BDK state) from VSS —
+   *  overwrites local wallet state with the cloud snapshot. */
+  vssRestoreBackup(): Promise<void> {
+    if (!this.vssAutoConfig) {
+      throw new Error(
+        'UTEXOWallet.vssRestoreBackup: VSS is not configured (init() with vssUrl, or call configureVssBackup first)'
+      );
+    }
+    return this.manager.vssRestoreBackup();
   }
 
   // ── IWalletManager — Fee Estimation ────────────────────────────────────────
@@ -570,9 +768,11 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
       durationSeconds: params.durationSeconds,
       minConfirmations: params.minConfirmations,
     };
-    return params.witness === false
-      ? this.manager.blindReceive(req)
-      : this.manager.witnessReceive(req);
+    return this.withVssBackup(
+      params.witness === false
+        ? this.manager.blindReceive(req)
+        : this.manager.witnessReceive(req)
+    );
   }
 
   /**
@@ -588,7 +788,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   onchainSendEnd(
     params: SendAssetEndRequestModel
   ): Promise<OnchainSendResponse> {
-    return this.manager.sendEnd(params);
+    return this.withVssBackup(this.manager.sendEnd(params));
   }
 
   /** Atomic RGB send (begin → BDK sign with the stored mnemonic → end). */
@@ -596,7 +796,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     params: SendAssetBeginRequestModel,
     mnemonic?: string
   ): Promise<OnchainSendResponse> {
-    return this.manager.send(params, mnemonic);
+    return this.withVssBackup(this.manager.send(params, mnemonic));
   }
 
   /** Not implemented — track send state via {@link listTransfers} / {@link refreshWallet}. @throws always */
@@ -613,14 +813,14 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /** Issue a CFA asset. Requires a Lightning node (transportEndpoint set). */
   issueAssetCfa(params: IssueAssetCfaRequest) {
-    return this.requireNode().issueAssetCfa(params);
+    return this.withVssBackup(this.requireNode().issueAssetCfa(params));
   }
 
   /** Group-based RGB asset send. */
   sendRgbFromGroups(
     params: SendRgbFromGroupsRequest
   ): Promise<SendRgbFromGroupsResult> {
-    return this.manager.sendRgbFromGroups(params);
+    return this.withVssBackup(this.manager.sendRgbFromGroups(params));
   }
 
   // ── Lightning node extras (RN-like) ────────────────────────────────────────

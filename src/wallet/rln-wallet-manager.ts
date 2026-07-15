@@ -5,13 +5,14 @@
  * the IWalletManager interface, adding Lightning-specific extras.
  */
 
-import { BaseWalletManager, deriveKeysFromMnemonic } from '@utexo/rgb-sdk-core';
+import { BaseWalletManager } from '@utexo/rgb-sdk-core';
 import { ValidationError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
 import type {
   WalletInitParams,
   SendAssetBeginRequestModel,
   SendResult,
   SendBtcBeginRequestModel,
+  VssBackupConfig,
 } from '@utexo/rgb-sdk-core';
 import type {
   IRlnNodeBinding,
@@ -49,6 +50,22 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   /** Skip the indexer consistency check when auto-connecting (recommended on
    *  regtest, where the full check can hang on a fresh esplora wallet). */
   skipConsistencyCheck?: boolean;
+  /** VSS server URL for cloud backup (RN-parity param). Defaults to
+   *  DEFAULT_VSS_SERVER_URL — the wallet-stream backup is configured
+   *  automatically at unlock() with an identity derived from the mnemonic
+   *  (storeId = wallet_<masterFingerprint>). Pass `null` to disable VSS. */
+  vssUrl?: string | null;
+  /** Auto-restore at unlock() (default: true). When the VSS server has a
+   *  backup for this mnemonic, the wallet state is restored automatically —
+   *  overwriting local wallet state with the cloud snapshot (RN-parity
+   *  unlock behavior). Set false to opt out (restore manually via
+   *  vssRestoreBackup()). */
+  vssAutoRestore?: boolean;
+  /** Internal — set by UTEXOWallet.init(): the mnemonic-derived VSS config,
+   *  stored on the binding and applied by unlock() so LDK/channel-state
+   *  replication is configured on the node handle BEFORE its runtime starts
+   *  (the wallet-stream backup is configured separately, after unlock). */
+  vssConfig?: VssBackupConfig | null;
   /** Local directory for wallet DB (default: auto-generated in-memory path) */
   dataDir?: string;
   /** Asset schemas to support (default: ['Nia', 'Ifa']) */
@@ -64,6 +81,11 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
 
 export class RlnWalletManager extends BaseWalletManager {
   private readonly rlnBinding: RlnWasmBinding;
+  /** Resolved indexer target for the unlock-time auto-connect (set by create). */
+  private autoOnline: {
+    indexerUrl: string;
+    skipConsistencyCheck: boolean;
+  } | null = null;
 
   private constructor(params: WalletInitParams, binding: RlnWasmBinding) {
     super(params, binding, new RlnSigner());
@@ -86,9 +108,6 @@ export class RlnWalletManager extends BaseWalletManager {
 
     const network = String(params.network ?? 'utexo');
 
-    // Network-dependent URL defaults: explicit param → DEFAULT_RLN_URLS →
-    // DEFAULT_INDEXER_URLS (indexer only; proxy/transport stay unset on
-    // networks without an RLN default, meaning no Lightning node).
     const urls = getRlnUrls(network);
     const proxyUrl = params.proxyUrl ?? urls?.proxyUrl;
     const transportEndpoint =
@@ -98,16 +117,6 @@ export class RlnWalletManager extends BaseWalletManager {
       urls?.indexerUrl ??
       DEFAULT_INDEXER_URLS[normalizeNetwork(network)] ??
       DEFAULT_INDEXER_URLS.utexo;
-
-    // Derive xpubs so BaseWalletManager gets the required account keys
-    const keys =
-      params.xpubVan && params.xpubCol && params.masterFingerprint
-        ? {
-            accountXpubVanilla: params.xpubVan,
-            accountXpubColored: params.xpubCol,
-            masterFingerprint: params.masterFingerprint,
-          }
-        : await deriveKeysFromMnemonic(network, params.mnemonic);
 
     const bindingParams: RlnBindingCreateParams = {
       mnemonic: params.mnemonic,
@@ -121,7 +130,26 @@ export class RlnWalletManager extends BaseWalletManager {
       nodeRuntimeId: params.nodeRuntimeId,
       supportedSchemas: params.supportedSchemas,
       enableVirtualChannels: params.enableVirtualChannels,
+      vss: params.vssConfig
+        ? {
+            serverUrl: params.vssConfig.serverUrl,
+            storeId: params.vssConfig.storeId,
+            signingKeyHex: params.vssConfig.signingKey,
+          }
+        : null,
     };
+
+    const binding = await RlnWasmBinding.create(bindingParams);
+
+    // Explicit keys win; otherwise reuse the binding's (derived once in wasm).
+    const keys =
+      params.xpubVan && params.xpubCol && params.masterFingerprint
+        ? {
+            accountXpubVanilla: params.xpubVan,
+            accountXpubColored: params.xpubCol,
+            masterFingerprint: params.masterFingerprint,
+          }
+        : binding.getKeys();
 
     const fullParams: WalletInitParams = {
       ...params,
@@ -131,27 +159,44 @@ export class RlnWalletManager extends BaseWalletManager {
       network,
     };
 
-    const binding = await RlnWasmBinding.create(bindingParams);
     const manager = new RlnWalletManager(fullParams, binding);
-
-    // Auto-online (RN-style UX: no separate goOnline call). Safe at this
-    // point: the wallet is not yet attached to the LN node, so goOnlineValue's
-    // held RefCell borrow cannot collide with node runtime ticks (attach is
-    // deferred to first LN use). Non-fatal by design — an unreachable indexer
-    // must not break wallet creation/restore; goOnline() retries.
-    try {
-      await manager.goOnline(indexerUrl, params.skipConsistencyCheck ?? false);
-    } catch (e) {
-      logger.warn(
-        `RlnWalletManager.create: auto goOnline failed (wallet stays offline; call goOnline() to retry). indexer=${indexerUrl}`,
-        e
-      );
-    }
+    manager.autoOnline = {
+      indexerUrl,
+      skipConsistencyCheck: params.skipConsistencyCheck ?? false,
+    };
     return manager;
   }
 
+  /** Phase 2, step 1: sdk.unlock + LDK VSS configure + RGB wallet creation
+   *  (no network) — separate from autoGoOnline() so UTEXOWallet can run the
+   *  wallet-stream VSS restore in between. */
+  async unlockWallet(): Promise<void> {
+    await this.rlnBinding.unlockWallet();
+  }
+
+  /** Phase 2, step 2: non-fatal indexer auto-connect (goOnline() retries a
+   *  failure) + node attach inside connect(). Idempotent. */
+  async autoGoOnline(): Promise<void> {
+    if (this.isOnline()) return;
+    const { indexerUrl, skipConsistencyCheck } = this.autoOnline ?? {};
+    try {
+      await this.goOnline(indexerUrl, skipConsistencyCheck ?? false);
+    } catch (e) {
+      logger.warn(
+        `RlnWalletManager.autoGoOnline: goOnline failed (wallet stays offline; call goOnline() to retry). indexer=${indexerUrl}`,
+        e
+      );
+    }
+  }
+
+  /** Full phase 2 for direct manager users. */
+  async unlock(): Promise<void> {
+    await this.unlockWallet();
+    await this.autoGoOnline();
+  }
+
   async initialize(): Promise<void> {
-    // No-op — wallet is ready after RlnWasmBinding.create()
+    // No-op (abstract in the base) — the real phases are create()/unlock().
   }
 
   async goOnline(
@@ -167,21 +212,39 @@ export class RlnWalletManager extends BaseWalletManager {
     return this.rlnBinding.isOnline();
   }
 
-  // Override BaseWalletManager: it calls binding.syncWallet()/refreshWallet()
-  // WITHOUT awaiting (the IRgbLibBinding signature is `void`). The RLN binding's
-  // sync/refresh hold a wasm RefCell borrow across an await, so they MUST be
-  // awaited or a following wallet op panics ("RefCell already borrowed").
+  // Override: the base doesn't await binding sync/refresh (void interface),
+  // but they MUST be awaited (see the wasm RefCell rules in CLAUDE.md).
   async syncWallet(): Promise<void> {
     await this.rlnBinding.syncWallet();
   }
 
   async refreshWallet(): Promise<void> {
-    await this.rlnBinding.refreshWallet();
+    await this.refreshWalletChanged();
+  }
+
+  /** Like refreshWallet(), but reports whether any transfer changed status
+   *  this pass (the base IWalletManager signature is fixed to Promise<void>,
+   *  so the signal needs its own method). Used by UTEXOWallet to trigger an
+   *  auto VSS backup only when a refresh actually settled something. */
+  async refreshWalletChanged(): Promise<boolean> {
+    return this.rlnBinding.refreshWallet();
   }
 
   /** Returns the Lightning node binding, or null if no proxyUrl was configured. */
   getLightningNode(): IRlnNodeBinding | null {
     return this.rlnBinding.getLightningNode();
+  }
+
+  /** Lightning node binding WITHOUT the lazy attach side effect — safe in the
+   *  locked (pre-unlock) phase (see RlnWasmBinding.peekLightningNode). */
+  peekLightningNode(): IRlnNodeBinding | null {
+    return this.rlnBinding.peekLightningNode();
+  }
+
+  /** Stop LDK VSS replication and release the single-writer guards; resets
+   *  the binding's configured latch so unlock() can re-run the configure. */
+  disableLdkVssReplication(): void {
+    this.rlnBinding.disableLdkVssReplication();
   }
 
   /** Attach the wallet to the LN node (otherwise lazy on first node use).
@@ -191,9 +254,23 @@ export class RlnWalletManager extends BaseWalletManager {
     this.rlnBinding.attachLightningNode();
   }
 
-  /** Returns the node's public key string, or null if no Lightning node is configured. */
+  /** Returns the node's public key string, or null if no Lightning node is
+   *  configured. Uses peek — reading the pubkey must not lazily attach the
+   *  wallet/start the runtime (it works in the locked phase too). */
   getNodePubkey(): string | null {
-    return this.rlnBinding.getLightningNode()?.nodePubkey() ?? null;
+    return this.rlnBinding.peekLightningNode()?.nodePubkey() ?? null;
+  }
+
+  /** Restore the wallet stream from VSS (requires configureVssBackup first).
+   *  Overwrites local wallet state with the cloud snapshot. */
+  vssRestoreBackup(): Promise<void> {
+    return this.rlnBinding.vssRestoreBackup();
+  }
+
+  /** Error from the init-time configureLdkVssReplication attempt, or null
+   *  (see RlnWasmBinding.getLdkVssInitError). */
+  getLdkVssInitError(): string | null {
+    return this.rlnBinding.getLdkVssInitError();
   }
 
   /** Return raw backup bytes from the most recent createBackup call. */

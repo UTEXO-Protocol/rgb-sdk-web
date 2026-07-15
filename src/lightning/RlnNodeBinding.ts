@@ -30,6 +30,7 @@ import type {
   HodlInvoiceResult,
   PaymentStatusUpdate,
   ListRuntimeEventsResult,
+  LdkVssBackupInfo,
   ApayNewResponse,
   ApayHashEntry,
 } from '../rln';
@@ -586,6 +587,36 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   async listRuntimeEvents(): Promise<ListRuntimeEventsResult> {
     const raw = parseJson<unknown[]>(this.nodeHandle.listRuntimeEventsJson());
     return { events: raw };
+  }
+
+  // ── VSS (LDK/channel-state replication) ────────────────────────────────────
+
+  configureLdkVssReplication(
+    serverUrl: string,
+    storeId: string,
+    signingKeyHex: string
+  ): Promise<number> {
+    return this.nodeHandle.configureLdkVssReplication(
+      serverUrl,
+      storeId,
+      signingKeyHex
+    );
+  }
+
+  disableLdkVssReplication(): void {
+    this.nodeHandle.disableLdkVssReplication();
+  }
+
+  ldkVssBackupInfo(): LdkVssBackupInfo {
+    return parseJson<LdkVssBackupInfo>(this.nodeHandle.ldkVssBackupInfoJson());
+  }
+
+  clearLdkVssFence(
+    serverUrl: string,
+    storeId: string,
+    signingKeyHex: string
+  ): Promise<void> {
+    return this.nodeHandle.clearLdkVssFence(serverUrl, storeId, signingKeyHex);
   }
 
   // ── Decoding ───────────────────────────────────────────────────────────────

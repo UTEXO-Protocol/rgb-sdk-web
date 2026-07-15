@@ -11,7 +11,7 @@ self-contained ES module using `import` from `@utexo/rgb-sdk-web`.
 
 | File | What it shows |
 |------|---------------|
-| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()`, get address + BTC balance |
+| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()` + `unlock()`, get address + BTC balance |
 | `read-wallet.mjs` | Offline (xpub, network) and online (address, balance, assets) reads, `isOnline()`/`goOnline()` |
 | `create-utxos-asset.mjs` | Create UTXOs and issue a NIA asset |
 | `transfer.mjs` | Send RGB assets: `onchainReceive()` (witness + blind), `onchainSend()`, `refreshWallet()`, `listTransfers()` |
@@ -20,4 +20,4 @@ self-contained ES module using `import` from `@utexo/rgb-sdk-web`.
 | `lsp-bridge.mjs` | LSP bridges via `createLsp()`: `receiveAsset()` + `awaitReceiveSettlement()` (on-chain RGB → LN), `sendAsset()` (LN → on-chain RGB) |
 | `apay-lightning-address.mjs` | APay offline receive: `enableLightningAddress()` + keepalive/refill, sender `payAddress()`, automatic settlement check |
 | `utexo-file-backup-restore.mjs` | File backup (`createBackup()` → `getLastBackupBytes()`) and restore (`restoreFromBackupBytes()`) |
-| `utexo-vss-backup-restore.mjs` | VSS cloud backup (`configureVssBackup()` + `vssBackup()`) |
+| `utexo-vss-backup-restore.mjs` | VSS cloud backup (automatic) + explicit restore (`restoreFromVss()`) |

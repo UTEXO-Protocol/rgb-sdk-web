@@ -20,12 +20,14 @@ const walletA = new UTEXOWallet({
   network: NETWORK,
 });
 await walletA.init();
+await walletA.unlock();
 const walletB = new UTEXOWallet({
   mnemonic: MNEMONIC_B,
   password: PASSWORD,
   network: NETWORK,
 });
 await walletB.init();
+await walletB.unlock();
 
 // Receiver: create invoices — onchainReceive is witness by default,
 // pass witness: false for a blinded invoice.

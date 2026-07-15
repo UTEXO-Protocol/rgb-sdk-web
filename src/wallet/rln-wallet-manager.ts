@@ -59,7 +59,7 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
    *  stored on the binding and applied by unlock() so LDK/channel-state
    *  replication is configured on the node handle BEFORE its runtime starts
    *  (the wallet-stream backup is configured separately, at init). Restore
-   *  is never automatic — the app calls rlnRestoreVSSBackup() in the
+   *  is never automatic — the app calls restoreFromVss() in the
    *  init→unlock gap (see docs/VSS-BACKUP-RESTORE.md). */
   vssConfig?: VssBackupConfig | null;
   /** Local directory for wallet DB (default: auto-generated in-memory path) */

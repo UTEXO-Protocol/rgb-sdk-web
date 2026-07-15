@@ -21,6 +21,7 @@ const wallet = new UTEXOWallet({
   // lspBaseUrl: 'https://...',  // optional — network default when omitted
 });
 await wallet.init();
+await wallet.unlock();
 
 // Peer discovered from lspBaseUrl; port defaults to 9735
 const lsp = await wallet.createLsp();

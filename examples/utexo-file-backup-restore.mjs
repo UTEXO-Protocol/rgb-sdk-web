@@ -27,6 +27,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 
 await wallet.createBackup({ backupPath: '', password: BACKUP_PASSWORD });
 const bytes = wallet.getLastBackupBytes(); // Uint8Array | null

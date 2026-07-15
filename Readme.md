@@ -48,18 +48,23 @@ import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-web';
 const network = 'utexo';
 const keys = await generateKeys(network);
 
-// Constructor stores params synchronously; init() loads the WASM, creates
-// the wallet and auto-connects to the indexer. indexerUrl /
+// Constructor stores params synchronously; init() does all local setup
+// (WASM, keys, wallet, node handle) and returns the wallet LOCKED;
+// unlock() validates the password and brings it online. indexerUrl /
 // transportEndpoint / proxyUrl default per network when omitted (see
-// Default endpoints). One-call alternative: await UTEXOWallet.create(params).
+// Default endpoints). One-call alternative: await UTEXOWallet.create(params)
+// (constructor + init + unlock).
 const wallet = new UTEXOWallet({
   mnemonic: keys.mnemonic,
   password: 'my-secure-password',
   network,
 });
 await wallet.init();
+// Restoring on a new device? await wallet.restoreFromVss() goes HERE
+// (see "VSS — encrypted cloud backup & restore").
+await wallet.unlock();
 
-// init() connects non-fatally — if the indexer was unreachable the wallet
+// unlock() connects non-fatally — if the indexer was unreachable the wallet
 // comes back offline; retry with goOnline() (idempotent). No-arg retries the
 // network default indexer (https://esplora-api.utexo.com for 'utexo').
 if (!wallet.isOnline()) {
@@ -99,7 +104,7 @@ console.log('RGB invoice:', invoice);
 
 ### Construction
 
-Two-phase, RN-parity lifecycle — the constructor is sync and cheap (params are only stored); `init()` does all the WASM/network work:
+Three-phase, RN-parity lifecycle — the constructor is sync and cheap (params are only stored); `init()` does all the local WASM work (wallet LOCKED); `unlock()` brings it online:
 
 ```typescript
 import { UTEXOWallet, type UTEXOWalletCreateParams } from '@utexo/rgb-sdk-web';
@@ -114,10 +119,11 @@ const wallet = new UTEXOWallet({
   // lspBaseUrl: 'https://...',     // optional — enables createLsp() auto-discovery
   // lspBearerToken: '...',         // optional — required for APay
 });
-await wallet.init();
+await wallet.init();     // locked — the gap here is the VSS restore window
+await wallet.unlock();   // online
 ```
 
-`init()` is idempotent (concurrent calls share one in-flight promise) and retryable after failure. Every other method throws until it resolves. `UTEXOWallet.create(params)` is a one-call convenience doing exactly constructor + `init()`.
+`init()` and `unlock()` are idempotent (concurrent calls share one in-flight promise) and retryable after a thrown failure; `unlock()` throws unless `init()` ran first. Wallet/network methods throw until `unlock()` resolves. `UTEXOWallet.create(params)` is a one-call convenience doing exactly constructor + `init()` + `unlock()`.
 
 #### `UTEXOWalletCreateParams`
 
@@ -126,11 +132,12 @@ await wallet.init();
 | `mnemonic` | `string` | BIP39 mnemonic — required |
 | `password` | `string` | RLN SDK password — required (init/unlock of the local wallet state) |
 | `network` | `string?` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …). Default `'utexo'` |
-| `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `init()` always attempts to connect; failure is non-fatal (wallet returned offline) |
+| `indexerUrl` | `string?` | Esplora/Electrum URL for `goOnline`. Defaults per network. `unlock()` always attempts to connect; failure is non-fatal (wallet returned offline) |
 | `transportEndpoint` | `string?` | RGB proxy for consignment delivery. Defaults per network (utexo) |
 | `proxyUrl` | `string?` | WebSocket LN gateway URL — enables the embedded Lightning node. Defaults per network (utexo); on networks without a default, omitting it means no Lightning |
 | `nodeRuntimeId` | `string?` | Stable runtime ID so node state persists across page reloads |
 | `skipConsistencyCheck` | `boolean?` | Skip the indexer consistency check on connect |
+| `vssUrl` | `string? \| null` | VSS server URL for encrypted cloud backup. Defaults to `DEFAULT_VSS_SERVER_URL`; pass `null` to disable VSS |
 | `dataDir` | `string?` | Local wallet DB directory (default: auto-generated) |
 | `supportedSchemas` | `string[]?` | Asset schemas (default `['Nia', 'Ifa']`) |
 | `enableVirtualChannels` | `boolean?` | Enable virtual channels v0 on the Lightning node (default `true`). Applies node-wide to all peers, persisted per `nodeRuntimeId` |
@@ -139,11 +146,15 @@ await wallet.init();
 
 ### Lifecycle
 
-Like the RN SDK, construction and initialization are split — but there is no separate `unlock()`/`reinit()`: `init()` does everything, RN-unlock style:
+RN-parity three-phase lifecycle — the init→unlock gap is the explicit VSS-restore window:
 
-1. **`new UTEXOWallet(params)` + `await wallet.init()`** — loads the WASM (singleton), creates/unlocks the wallet, wires the Lightning node (when `proxyUrl` resolves) and auto-connects to the indexer non-fatally. (`UTEXOWallet.create(params)` = constructor + `init()` in one call; `initialize()` is an alias for `init()`.)
-2. **`isOnline()` / `goOnline(indexerUrl)`** — check the connection; retry when offline. `goOnline` is idempotent, so legacy create-then-goOnline code keeps working.
-3. **`dispose()`** — release the WASM wallet/node handles. Check with `isDisposed()`.
+1. **`new UTEXOWallet(params)` + `await wallet.init()`** — loads the WASM (singleton), derives keys, creates the wallet from local storage, creates the Lightning node handle (runtime not started, when `proxyUrl` resolves) and configures the VSS backup client. The wallet is **LOCKED**: wallet/network ops throw; key reads (`getXpub`, `getNodePubkey`) and the VSS restore APIs work.
+2. **Optional: `await wallet.restoreFromVss({ takeoverFence? })`** — explicit cloud restore on a new device (see the VSS section below). Restore is never automatic.
+3. **`await wallet.unlock()`** — validates the password, configures LDK/channel VSS replication (guarded channel restore, pre-runtime) and auto-connects to the indexer non-fatally.
+4. **`isOnline()` / `goOnline(indexerUrl)`** — check the connection; retry when offline. `goOnline` is idempotent, so legacy create-then-goOnline code keeps working.
+5. **`dispose()`** — release the WASM wallet/node handles. Check with `isDisposed()`.
+
+`UTEXOWallet.create(params)` = constructor + `init()` + `unlock()` in one call; `initialize()` is an alias for the init + unlock sequence.
 
 ---
 
@@ -217,8 +228,10 @@ Like the RN SDK, construction and initialization are split — but there is no s
 | `createBackup({ backupPath: '', password })` | Encrypted backup — bytes via `getLastBackupBytes()` |
 | `getLastBackupBytes()` | Raw `Uint8Array` of the last backup (web-specific) |
 | `restoreFromBackupBytes(bytes, password)` | Restore wallet state from backup bytes (web-specific) |
-| `configureVssBackup(config)` / `disableVssAutoBackup()` | Configure VSS (cloud) auto-backup |
-| `vssBackup(config)` / `vssBackupInfo(config)` | Trigger / query a VSS backup |
+| `restoreFromVss(opts?)` | Explicit one-call VSS restore — init→unlock gap only (see VSS section) |
+| `configureVssBackup(config)` / `disableVssAutoBackup()` | Override / disable VSS (cloud) auto-backup (on by default) |
+| `vssBackup(config?)` / `vssBackupInfo(config?)` | Trigger / query a VSS backup |
+| `vssClearFence()` / `ldkVssBackupInfo()` | Bare fence clear (locked gap) / channel-replication health |
 | `signMessage(message)` / `verifyMessage(message, signature)` | Schnorr message signing with wallet keys |
 
 #### IUTEXOProtocol — Lightning
@@ -401,21 +414,62 @@ const bytes = wallet.getLastBackupBytes(); // Uint8Array — trigger a download,
 wallet.restoreFromBackupBytes(bytes, 'backup-password');
 ```
 
-### VSS (cloud) backup
+### VSS — encrypted cloud backup & restore
+
+VSS (Versioned Storage Service) keeps an encrypted remote copy of the wallet
+(RGB assets, stock, BDK state) and the node's LDK/channel state. When a device
+is lost or the browser profile is wiped, a fully-functional wallet + node is
+restored from the VSS server using only the **mnemonic** and password.
+
+#### Enabling — zero-config
+
+On by default: the identity (signing key + store id) is derived from the
+mnemonic at `init()`, the server defaults to `DEFAULT_VSS_SERVER_URL`. Backup
+is fully automatic — every state-changing op uploads a wallet snapshot in the
+background, and channel state replicates continuously while the node runs. No
+extra calls needed during normal operation.
 
 ```typescript
-import { deriveVssSigningKeyFromMnemonic, DEFAULT_VSS_SERVER_URL } from '@utexo/rgb-sdk-web';
+new UTEXOWallet({ ..., vssUrl: 'https://vss.example.com' }); // custom server
+new UTEXOWallet({ ..., vssUrl: null });                      // disable VSS
 
-const config = {
-  serverUrl: DEFAULT_VSS_SERVER_URL,
-  storeId: 'my-store',
-  signingKey: deriveVssSigningKeyFromMnemonic(mnemonic), // hex 32-byte key
-};
-
-await wallet.configureVssBackup(config);   // enables auto-backup
-const version = await wallet.vssBackup(config);
-const info    = await wallet.vssBackupInfo(config);
+const info = await wallet.vssBackupInfo(); // { backupExists, serverVersion, … }
+await wallet.vssBackup();                  // force an upload now
 ```
+
+#### Restoring from VSS
+
+Restore is **explicit** — one call in the init→unlock gap, never automatic
+(restoring overwrites local wallet state):
+
+```typescript
+const wallet = new UTEXOWallet({ mnemonic, password, network }); // same mnemonic
+await wallet.init();            // locked
+await wallet.restoreFromVss();  // wallet stream restored now (+ fence takeover)
+await wallet.unlock();          // channels restored here, then online
+```
+
+The call also takes over the old device's VSS single-writer fence **by
+default** (`takeoverFence: true`) — restoring from the mnemonic on a new
+device almost always means the old one is gone (wiped profile / dead device),
+and a wiped device can never release its own fence. Only restore when that is
+actually true: if the old device might still be running, pass
+`{ takeoverFence: false }` (two live writers on one channel store risk fund
+loss — the old owner stops itself only at its next fence check):
+
+```typescript
+await wallet.restoreFromVss({ takeoverFence: false }); // keep the fence
+```
+
+`restoreFromVss()` returns `{ walletRestored, serverVersion }`, throws on
+failure (no silent fresh start) and throws when called after `unlock()`. Plain
+`unlock()` on a fresh device logs a loud warning when an unrestored cloud
+backup exists — the next auto-backup would overwrite it. `vssClearFence()` is
+still available for a bare fence clear (RN parity), and `ldkVssBackupInfo()`
+reports channel-replication health (a held fence shows up in `lastError`).
+
+Full details — the two VSS streams, identity derivation, fence semantics and
+recovery flows: [docs/VSS-BACKUP-RESTORE.md](./docs/VSS-BACKUP-RESTORE.md).
 
 ---
 
@@ -488,7 +542,7 @@ Layering: `UTEXOWallet` → `RlnWalletManager` → `RlnWasmBinding` (RGB wallet)
 
 | File | What it shows |
 |------|---------------|
-| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()`, address + balance |
+| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()` + `unlock()`, address + balance |
 | `read-wallet.mjs` | Read operations and online/offline state |
 | `create-utxos-asset.mjs` | Create UTXOs and issue a NIA asset |
 | `transfer.mjs` | `onchainReceive()` (witness + blind), `onchainSend()`, transfer polling |

@@ -15,6 +15,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 
 await wallet.syncWallet();
 const count = await wallet.createUtxos({ upTo: true, num: 4, feeRate: 2 });

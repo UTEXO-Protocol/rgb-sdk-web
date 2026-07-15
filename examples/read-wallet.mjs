@@ -4,7 +4,7 @@
  * Offline (no indexer): getXpub, getNetwork
  * Online (requires indexer): getAddress, getBtcBalance, listAssets
  *
- * init() auto-connects non-fatally — check isOnline() and retry with
+ * unlock() auto-connects non-fatally — check isOnline() and retry with
  * goOnline() if the indexer was unreachable.
  */
 
@@ -19,6 +19,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 
 // Offline — no indexer needed
 console.log('xpub:', wallet.getXpub());

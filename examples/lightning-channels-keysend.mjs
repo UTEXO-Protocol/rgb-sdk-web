@@ -22,6 +22,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 console.log('Node pubkey:', await wallet.getNodePubkey());
 
 // Connect to the peer over Lightning P2P

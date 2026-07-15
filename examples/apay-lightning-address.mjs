@@ -27,6 +27,7 @@ const recipient = new UTEXOWallet({
   lspBearerToken: LSP_BEARER_TOKEN,
 });
 await recipient.init();
+await recipient.unlock();
 const recipientLsp = await recipient.createLsp();
 
 await recipientLsp.connect();
@@ -59,6 +60,7 @@ const sender = new UTEXOWallet({
   network: NETWORK,
 });
 await sender.init();
+await sender.unlock();
 const senderLsp = await sender.createLsp();
 
 await senderLsp.connect();

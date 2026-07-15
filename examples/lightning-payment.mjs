@@ -19,6 +19,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 
 // ── Receive ──────────────────────────────────────────────────────────────────
 

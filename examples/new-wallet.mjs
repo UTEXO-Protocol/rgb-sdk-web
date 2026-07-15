@@ -20,6 +20,7 @@ const wallet = new UTEXOWallet({
   network: NETWORK,
 });
 await wallet.init();
+await wallet.unlock();
 console.log('online:', wallet.isOnline());
 
 const address = await wallet.getAddress();

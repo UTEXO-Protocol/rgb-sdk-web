@@ -86,7 +86,7 @@ describe('UTEXOWallet API', () => {
       'vssBackup',
       'vssBackupInfo',
       'vssRestoreBackup',
-      'rlnRestoreVSSBackup',
+      'restoreFromVss',
       'ldkVssBackupInfo',
       'clearLdkVssFence',
       'vssClearFence',
@@ -98,13 +98,13 @@ describe('UTEXOWallet API', () => {
   });
 
   describe('explicit restore lifecycle guards', () => {
-    it('rlnRestoreVSSBackup throws before init()', async () => {
+    it('restoreFromVss throws before init()', async () => {
       const wallet = new UTEXOWallet({
         mnemonic: 'test test test test test test test test test test test junk',
         password: 'password',
         network: 'regtest',
       });
-      await expect((wallet as any).rlnRestoreVSSBackup()).rejects.toThrow(
+      await expect((wallet as any).restoreFromVss()).rejects.toThrow(
         /not initialized/
       );
     });

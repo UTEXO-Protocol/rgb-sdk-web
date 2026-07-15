@@ -1,7 +1,12 @@
-# Proposal: explicit one-call VSS restore (`rlnRestoreVSSBackup`)
+# Proposal: explicit one-call VSS restore (`restoreFromVss`)
 
 > Status: **implemented** (2026-07-15) — kept as the design-rationale record;
 > current behavior is documented in docs/VSS-BACKUP-RESTORE.md.
+> Two deviations from the draft below: the method shipped as
+> `restoreFromVss()` (see Naming), and `takeoverFence` defaults to **true**
+> (restoring from the mnemonic on a new device almost always means the old
+> device is gone; `{ takeoverFence: false }` opts out when it might still
+> be running).
 > Verified against the current wasm-sdk source
 > (`bindings/wasm-sdk/src/sdk_facade.rs`, `ln_node.rs`, `ldk_runtime.rs`).
 > **No changes to rgb-lightning-node are needed** — everything below is
@@ -13,9 +18,9 @@
 |---|---|---|
 | Wallet-stream backup | Automatic (per-op background `vssBackup()`) when VSS configured | **Unchanged** — automatic iff VSS is configured |
 | LDK/channel backup | Automatic (continuous replication) when VSS configured | **Unchanged** |
-| Wallet-stream restore | Automatic at `unlock()` (`vssAutoRestore: false` opts out) | **Explicit**: `await wallet.rlnRestoreVSSBackup()` in the init→unlock gap; `vssAutoRestore` param **removed** |
+| Wallet-stream restore | Automatic at `unlock()` (`vssAutoRestore: false` opts out) | **Explicit**: `await wallet.restoreFromVss()` in the init→unlock gap; `vssAutoRestore` param **removed** |
 | LDK/channel restore | Automatic inside the unlock-time `configureLdkVssReplication` (guarded, fresh-store only) | **Unchanged** (see "why channels stay implicit") |
-| Fence takeover | Separate `vssClearFence()` call | Optional: `rlnRestoreVSSBackup({ takeoverFence: true })` folds it in |
+| Fence takeover | Separate `vssClearFence()` call | Optional: `restoreFromVss({ takeoverFence: true })` folds it in |
 | Wallet creation | At `unlock()` | **Moved to `init()`** (makes the restore call direct — see below) |
 
 Backup already follows from "VSS is configured" (both streams), so nothing
@@ -59,7 +64,7 @@ init()                       — sdk.initValue, key derivation, node handle
                                ops throw; only key reads + VSS ops work.
 
    ── the gap ──             — optional, explicit, user-invoked:
-                               await wallet.rlnRestoreVSSBackup()
+                               await wallet.restoreFromVss()
                                (+ { takeoverFence: true } for dead-device
                                takeover — vssClearFence still works here
                                because LDK replication isn't active yet)
@@ -79,14 +84,14 @@ attaches / the indexer connects — which is the actual constraint.
 
 ```ts
 // UTEXOWallet — proposed
-async rlnRestoreVSSBackup(opts?: {
+async restoreFromVss(opts?: {
   takeoverFence?: boolean; // default false — see safety note
 }): Promise<RlnVssRestoreResult> {
   if (!this.initPromise) throw new Error('call init() first');
   await this.initPromise;
   if (this.unlockPromise) {
     throw new Error(
-      'rlnRestoreVSSBackup must run between init() and unlock()'
+      'restoreFromVss must run between init() and unlock()'
     );
   }
   if (!this.derivedVssConfig) throw new Error('VSS is disabled (vssUrl: null)');
@@ -109,7 +114,7 @@ async rlnRestoreVSSBackup(opts?: {
 
 Channel restore is *not* in this function's body — it happens inside
 `unlock()`'s `configureLdkVssReplication` (see the caveat below) — but from
-the app's point of view the sequence `init → rlnRestoreVSSBackup → unlock`
+the app's point of view the sequence `init → restoreFromVss → unlock`
 restores **everything**: wallet stream in the call itself, channels at the
 unlock that follows (the fence takeover in the call is what unblocks it on
 a replaced device).
@@ -135,12 +140,12 @@ await wallet.unlock();            // backups automatic, no restore surprise
 // New device, restore from the mnemonic — ONE extra call:
 const wallet = new UTEXOWallet({ mnemonic, password, network });
 await wallet.init();              // locked, wallet object exists
-await wallet.rlnRestoreVSSBackup();   // wallet stream now, channels at unlock
+await wallet.restoreFromVss();   // wallet stream now, channels at unlock
 await wallet.unlock();            // channel restore + online
 
 // Old device wiped/dead (fence still held) — folded into the same call:
 await wallet.init();
-await wallet.rlnRestoreVSSBackup({ takeoverFence: true }); // after user confirms!
+await wallet.restoreFromVss({ takeoverFence: true }); // after user confirms!
 await wallet.unlock();
 ```
 
@@ -181,13 +186,13 @@ device and calls plain `unlock()` gets a mixed state: channels restored
 would **overwrite the cloud snapshot with the fresh empty wallet**
 (last-write-wins). Mitigation, cheap because the wallet + VSS client now
 exist from init(): `unlock()` checks `vssBackupInfo()` before go-online —
-if `backupExists`, the local wallet is fresh, and `rlnRestoreVSSBackup()`
+if `backupExists`, the local wallet is fresh, and `restoreFromVss()`
 was not called, log a prominent warning (or optionally throw; worth a
 `vssStrictRestore?: boolean` param, default warn-only).
 
 ## Naming
 
-`rlnRestoreVSSBackup()` works; alternatives: `restoreFromVSS()`,
+`restoreFromVss()` works; alternatives: `restoreFromVSS()`,
 `vssRestore()`. Whatever the pick, keep the existing low-level
 `vssRestoreBackup()` (wallet-stream-only force restore) as-is — the new
 method is the orchestrated flow on top of it. Docs should present only the
@@ -202,7 +207,7 @@ new one.
    (src/wallet/rln-wallet-manager.ts).
 3. `UTEXOWallet.unlockInternal()`: drop the auto-restore branch; add the
    unrestored-backup warning (src/utexo/utexo-wallet.ts).
-4. Add `UTEXOWallet.rlnRestoreVSSBackup(opts?)` + `RlnVssRestoreResult`.
+4. Add `UTEXOWallet.restoreFromVss(opts?)` + `RlnVssRestoreResult`.
 5. Update `docs/VSS-BACKUP-RESTORE.md` (flows, RN-comparison table) and
    CLAUDE.md lifecycle description.
 6. Tests: `tests/utexo-flows.test.ts` — new-device restore flow, wrong-order
@@ -218,7 +223,7 @@ matters, keep `vssAutoRestore` one more release (deprecated, default
 ## Rejected alternative: lifecycle-advance trick
 
 An earlier draft kept wallet creation at unlock() and had
-`rlnRestoreVSSBackup()` internally run the idempotent `unlockWallet()` to
+`restoreFromVss()` internally run the idempotent `unlockWallet()` to
 reach an "unlocked but offline" state, restore there, and let the real
 `unlock()` re-enter as a no-op. It works, but the init()-time wallet
 creation is strictly better: no hidden lifecycle side effects inside a

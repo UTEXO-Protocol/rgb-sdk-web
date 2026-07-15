@@ -41,6 +41,11 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   transportEndpoint?: string;
   /** Stable runtime ID for persistent node state across page reloads */
   nodeRuntimeId?: string;
+  /** Relay auth for the WS gateway (production wasm-proxy-gateway rejects
+   *  unauthenticated relay upgrades with 401). Defaults to the network's
+   *  DEFAULT_RLN_URLS entry (utexo); pass `null` to send none. */
+  relayAuthToken?: string | null;
+  relayNodeId?: string | null;
   /** Indexer URL for goOnline. Defaults per network (DEFAULT_RLN_URLS →
    *  DEFAULT_INDEXER_URLS). create() always attempts to go online with the
    *  resolved URL (mirrors the RN SDK's unlock UX); if the indexer is
@@ -107,6 +112,15 @@ export class RlnWalletManager extends BaseWalletManager {
     const proxyUrl = params.proxyUrl ?? urls?.proxyUrl;
     const transportEndpoint =
       params.transportEndpoint ?? urls?.transportEndpoint;
+    // null = explicitly no auth; undefined = network default.
+    const relayAuthToken =
+      params.relayAuthToken === null
+        ? undefined
+        : (params.relayAuthToken ?? urls?.relayAuthToken);
+    const relayNodeId =
+      params.relayNodeId === null
+        ? undefined
+        : (params.relayNodeId ?? urls?.relayNodeId);
     const indexerUrl =
       params.indexerUrl ??
       urls?.indexerUrl ??
@@ -122,6 +136,8 @@ export class RlnWalletManager extends BaseWalletManager {
       vanillaKeychain: params.vanillaKeychain,
       proxyUrl,
       transportEndpoint,
+      relayAuthToken,
+      relayNodeId,
       nodeRuntimeId: params.nodeRuntimeId,
       supportedSchemas: params.supportedSchemas,
       enableVirtualChannels: params.enableVirtualChannels,

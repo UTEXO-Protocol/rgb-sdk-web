@@ -7,6 +7,11 @@ export interface RlnNetworkUrls {
   transportEndpoint: string;
   /** Esplora HTTP URL for chain indexer (goOnline) */
   indexerUrl: string;
+  /** Relay auth for the WS gateway (production wasm-proxy-gateway requires
+   *  auth_token + node_id on every relay URL; without them the WS upgrade is
+   *  rejected with 401 before the socket opens). */
+  relayAuthToken?: string;
+  relayNodeId?: string;
 }
 
 export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
@@ -17,13 +22,21 @@ export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
   },
   utexo: {
     proxyUrl: 'wss://ln-gateway-signet.utexo.com',
-    transportEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc',
+    // http(s) scheme — the wasm SDK's setDefaultRgbProxyTransport rejects
+    // rpc(s)://; the binding converts to rpcs:// where rgb-lib needs it.
+    transportEndpoint: 'https://rgb-proxy.utexo.com/json-rpc',
     indexerUrl: 'https://esplora-api.utexo.com',
+    // Client credentials for the hosted gateway relay (not a secret — they
+    // ship to every browser client; the gateway pins them server-side).
+    relayAuthToken:
+      '2b5410f44057cd19a7b7540981d64823e83f44d1b9412034d3f3b4c28e611067',
+    relayNodeId:
+      '031f1239ab686edaa31971f16eceef4b66a0844d052367f52d3c6cbc8f7a9ca49c',
   },
   signet: {
     // TODO: proxyUrl is a placeholder — replace once the real WS proxy is deployed.
     proxyUrl: 'wss://rln-proxy-utexo.utexo.com/rgb/json-rpc',
-    transportEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc',
+    transportEndpoint: 'https://rgb-proxy.utexo.com/json-rpc',
     indexerUrl: 'ssl://electrum.iriswallet.com:50033',
   },
 };

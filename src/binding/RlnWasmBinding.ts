@@ -104,6 +104,10 @@ export interface RlnBindingCreateParams {
   transportEndpoint?: string;
   /** stable runtime ID for persistent node state across reloads */
   nodeRuntimeId?: string;
+  /** WS gateway relay auth (appended as auth_token/node_id query params on
+   *  every relay URL) — required by production wasm-proxy-gateway deployments */
+  relayAuthToken?: string;
+  relayNodeId?: string;
   /** enable virtual channels v0 (default: true) */
   enableVirtualChannels?: boolean;
   /** asset schemas to support (default: ['Nia', 'Ifa']) */
@@ -490,6 +494,12 @@ export class RlnWasmBinding implements IRlnSdkBinding {
         runtimeId,
         networkStr
       );
+      if (params.relayAuthToken || params.relayNodeId) {
+        nodeHandle.setRelaySessionAuth(
+          params.relayAuthToken ?? null,
+          params.relayNodeId ?? null
+        );
+      }
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
     const normalizedNet = normalizeNetwork(params.network);

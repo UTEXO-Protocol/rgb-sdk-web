@@ -480,9 +480,11 @@ Used automatically when the corresponding create param is omitted.
 
 | Network | LN gateway (`proxyUrl`) | RGB transport (`transportEndpoint`) | Indexer (`indexerUrl`) |
 |---------|------------------------|-------------------------------------|------------------------|
-| utexo   | `wss://ln-gateway-signet.utexo.com` | `rpcs://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
+| utexo   | `wss://ln-gateway-signet.utexo.com` | `https://rgb-proxy.utexo.com/json-rpc` | `https://esplora-api.utexo.com` |
 
 On networks without a `proxyUrl` default, pass one explicitly to enable the Lightning node; without it the wallet is on-chain RGB only.
+
+Production gateway deployments require relay auth: every WS relay URL must carry `auth_token`/`node_id` query params or the upgrade is rejected with 401. The utexo defaults include the hosted gateway's client credentials; override with the `relayAuthToken`/`relayNodeId` create params (pass `null` to send none, e.g. against a local dev gateway).
 
 ---
 

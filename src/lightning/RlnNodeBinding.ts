@@ -134,8 +134,7 @@ function normalizePayment(raw: RlnRawPayment): LightningPayment {
     invoice: (raw.invoice ?? undefined) as string | undefined,
     inbound: Boolean(raw.inbound),
     preimage: (raw.preimage ?? raw.payment_preimage ?? undefined) as
-      | string
-      | undefined,
+      string | undefined,
   };
 }
 
@@ -216,12 +215,10 @@ function normalizeApayResponse(raw: unknown): ApayNewResponse {
     refillBatchSize: Number(r.refill_batch_size ?? 0),
     firstHashIndex: Number(r.first_hash_index ?? 0),
     lastHashIndex: Number(r.last_hash_index ?? 0),
-    hashes: hashes.map(
-      (h): ApayHashEntry => ({
-        hashIndex: Number(h.hash_index ?? 0),
-        paymentHash: String(h.payment_hash ?? ''),
-      })
-    ),
+    hashes: hashes.map((h): ApayHashEntry => ({
+      hashIndex: Number(h.hash_index ?? 0),
+      paymentHash: String(h.payment_hash ?? ''),
+    })),
   };
 }
 

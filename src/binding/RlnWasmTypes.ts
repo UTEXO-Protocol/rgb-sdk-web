@@ -9,12 +9,7 @@
 // ─── Network ──────────────────────────────────────────────────────────────────
 
 export type RlnBitcoinNetwork =
-  | 'Mainnet'
-  | 'Testnet'
-  | 'Testnet4'
-  | 'Signet'
-  | 'Regtest'
-  | string;
+  'Mainnet' | 'Testnet' | 'Testnet4' | 'Signet' | 'Regtest' | string;
 
 export type RlnDatabaseType = 'Sqlite';
 

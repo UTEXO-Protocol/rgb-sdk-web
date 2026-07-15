@@ -1,25 +1,35 @@
 /**
  * Read wallet info: offline and online operations.
  *
- * Offline (no indexer): getXpub, getNetwork, getAddress
- * Online (requires indexer): getBtcBalance, listAssets
+ * Offline (no indexer): getXpub, getNetwork
+ * Online (requires indexer): getAddress, getBtcBalance, listAssets
+ *
+ * unlock() auto-connects non-fatally — check isOnline() and retry with
+ * goOnline() if the indexer was unreachable.
  */
 
 import { UTEXOWallet } from '@utexo/rgb-sdk-web';
 
-const NETWORK = 'testnet';
+const NETWORK = 'regtest';
 const MNEMONIC = 'your twelve word mnemonic phrase here ...';
 
-const wallet = new UTEXOWallet(MNEMONIC, { network: NETWORK });
-await wallet.initialize();
+const wallet = new UTEXOWallet({
+  mnemonic: MNEMONIC,
+  password: 'my-secure-password',
+  network: NETWORK,
+});
+await wallet.init();
+await wallet.unlock();
 
 // Offline — no indexer needed
 console.log('xpub:', wallet.getXpub());
 console.log('network:', wallet.getNetwork());
-console.log('address:', await wallet.getAddress());
 
-// Online — connect to indexer first
-await wallet.goOnline('');
+// Online — retry the connection if the auto-connect failed
+if (!wallet.isOnline()) {
+  await wallet.goOnline('http://127.0.0.1:3002');
+}
+console.log('address:', await wallet.getAddress());
 console.log('BTC balance:', await wallet.getBtcBalance());
 console.log('assets:', await wallet.listAssets());
 

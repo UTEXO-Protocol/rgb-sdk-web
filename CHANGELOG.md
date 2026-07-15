@@ -1,5 +1,82 @@
 # Changelog
 
+## 1.0.0-beta.10
+
+**Breaking — RLN-only architecture.** The SDK now runs entirely in the browser
+through `rln-wasm-sdk` (rgb-lightning-node WASM), covering **native Lightning** in
+addition to RGB on-chain. No external RGB Node server is required. The previous
+`@utexo/rgb-lib-wasm` stack has been removed.
+
+### Added
+
+- **Native Lightning** — invoices, payments, channels, keysend, and HODL invoices
+  via `RlnNodeBinding` (`src/lightning/RlnNodeBinding.ts`) over a direct `RlnWasmNode`
+- **LSP support** — `UtexoLSPClient` / `UtexoLsp` (`src/lsp/`) with typed models and
+  errors for the UTEXO LSP bridge (see `docs/lsp.md`)
+- **Async payments** — documented in `docs/async-payments.md`
+- `RlnWasmBinding` (`src/binding/RlnWasmBinding.ts`) — `IRlnSdkBinding` impl using a
+  single `RlnWasmWallet` for wallet ops plus a direct `RlnWasmNode` for Lightning and
+  NIA/CFA issuance
+- `RlnNodeBinding` — `IRlnNodeBinding` impl wrapping `RlnWasmNode`
+- `RlnWalletManager` (`src/wallet/rln-wallet-manager.ts`) — extends `BaseWalletManager`
+  + `RlnSigner`
+- `RlnSigner` (`src/signer/RlnSigner.ts`) — `ISigner`; delegates PSBT signing to the
+  BDK path (`@bitcoindevkit/bdk-wallet-web`)
+- `initRlnWasm()` (`src/wasm/initRln.ts`) — singleton WASM initializer, called
+  internally by `RlnWasmBinding.create()`
+- Vendored RLN contracts: `src/types/rln-model.ts`, `src/interfaces/IRln*.ts`, and
+  `src/binding/RlnDefaults.ts` (`DEFAULT_RLN_URLS` / `DEFAULT_INDEXER_URLS`),
+  re-exported via the `src/rln` barrel
+- **VSS cloud backup — zero-config, automatic** — identity (signing key +
+  `wallet_<masterFingerprint>` store id) is derived from the mnemonic at `init()`;
+  the server defaults to `DEFAULT_VSS_SERVER_URL` (`vssUrl` param to override,
+  `null` to disable). Every state-changing op uploads an encrypted wallet
+  snapshot in the background, and LDK/channel state (channel monitors/manager,
+  per-channel RGB state) replicates continuously to a separate `-ldk` stream
+  while the node runs
+- **Explicit one-call VSS restore** — `restoreFromVss({ takeoverFence? })` in the
+  init→unlock gap restores the wallet stream immediately (returns
+  `{ walletRestored, serverVersion }`, throws on failure — no silent fresh
+  start); channel state restores at the `unlock()` that follows. Restore is
+  never automatic. `takeoverFence` defaults to `true` (a wiped/dead device can
+  never release its single-writer fence); pass `false` when the old device may
+  still be running. `RlnVssRestoreResult` type exported
+- **VSS safety rails** — `unlock()` on a fresh wallet logs a loud warning when an
+  unrestored cloud backup exists (the next auto-backup would overwrite it);
+  `vssClearFence()` for a bare fence clear (RN parity); `ldkVssBackupInfo()`
+  channel-replication health (a held fence surfaces in `lastError`; recover with
+  `disableLdkVssReplication()` → `vssClearFence()` → `unlock()`)
+- New examples: `apay-lightning-address`, `lightning-payment`,
+  `lightning-channels-keysend`, `lsp-bridge`, `utexo-vss-backup-restore`
+
+### Changed
+
+- Swapped WASM backend: dropped `@utexo/rgb-lib-wasm`, added `rln-wasm-sdk`;
+  `@utexo/rgb-sdk-core` now resolves via a local `file:` link
+- Reworked `UTEXOWallet` (`src/utexo/utexo-wallet.ts`) as the single public API
+  implementing `IWalletManager` + `IUTEXOProtocol`, mirroring `@utexo/rgb-sdk-rn` so
+  app code ports across web ↔ RN
+  - **Three-phase lifecycle (RN parity)**: `new UTEXOWallet(params)` stores params
+    synchronously; `await wallet.init()` does all local setup and returns the
+    wallet LOCKED; the init→unlock gap is the explicit VSS-restore window;
+    `await wallet.unlock()` validates the password and brings it online. Both
+    phases are idempotent and retryable; `UTEXOWallet.create(params)` does all
+    three and `initialize()` aliases init + unlock
+  - **One-call UX**: `indexerUrl` / `transportEndpoint` / `proxyUrl` default per
+    network, and `create` auto-connects to the indexer non-fatally (unreachable
+    indexer → offline wallet + warning; check `isOnline()`, retry with `goOnline()`)
+  - `send` / `onchainSend` / `payLightningInvoice` are atomic — signed with the stored
+    mnemonic via `RlnSigner`
+
+### Removed
+
+- `@utexo/rgb-lib-wasm` dependency and its stack: `WasmRgbLibBinding`, `WasmTypes`,
+  `WasmSigner`, `src/wasm/init.ts`, the old dual-wallet `WalletManager`, and
+  `src/utexo/restore.ts`
+- Legacy tests: `restore.test.ts`, `utexo-mocked.test.ts`,
+  `utexo-wallet-mocked.test.ts`, `wallet-init-params.test.ts`, and the `rgb-lib-wasm`
+  mock. `tests/utexo-flows.test.ts` updated to assert the new `UTEXOWallet` surface
+
 ## 1.0.0-beta.9
 
 ### Added

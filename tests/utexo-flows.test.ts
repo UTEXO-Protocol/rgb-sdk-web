@@ -1,6 +1,9 @@
 /**
  * UTEXOWallet API structure tests.
- * Verifies that UTEXOWallet exposes all expected methods.
+ *
+ * Verifies the RLN-backed UTEXOWallet exposes the IWalletManager + IUTEXOProtocol
+ * surface (mirroring @utexo/rgb-sdk-rn) plus the RLN/Lightning extras. These are
+ * shape-only checks (method presence) — no WASM is instantiated.
  */
 import { UTEXOWallet } from '../dist/index.mjs';
 
@@ -9,99 +12,160 @@ const hasMethod = (name: string) =>
     expect(typeof (UTEXOWallet.prototype as any)[name]).toBe('function');
   });
 
-const hasAsyncMethod = (name: string) =>
-  it(`UTEXOWallet ${name} should be async (return Promise)`, () => {
-    const fn = (UTEXOWallet.prototype as any)[name];
-    expect(typeof fn).toBe('function');
-    expect(fn.constructor?.name).toBe('AsyncFunction');
-  });
-
 describe('UTEXOWallet API', () => {
-  describe('core', () => {
-    hasMethod('initialize');
-    hasAsyncMethod('initialize');
-    hasMethod('dispose');
-    hasAsyncMethod('dispose');
-    hasMethod('isDisposed');
-    hasMethod('goOnline');
-    hasAsyncMethod('goOnline');
-  });
-
-  describe('keys & network', () => {
-    hasMethod('derivePublicKeys');
-    hasMethod('getPubKeys');
-    hasMethod('getXpub');
-    hasMethod('getNetwork');
+  describe('lifecycle', () => {
+    [
+      'init',
+      'unlock',
+      'initialize',
+      'goOnline',
+      'getXpub',
+      'getNetwork',
+      'dispose',
+      'isDisposed',
+    ].forEach(hasMethod);
   });
 
   describe('balance & address', () => {
-    hasMethod('getAddress');
-    hasAsyncMethod('getAddress');
-    hasMethod('getBtcBalance');
-    hasAsyncMethod('getBtcBalance');
-    hasMethod('listUnspents');
-    hasAsyncMethod('listUnspents');
+    [
+      'getBtcBalance',
+      'getAddress',
+      'rotateVanillaAddress',
+      'rotateColoredAddress',
+    ].forEach(hasMethod);
   });
 
   describe('UTXO management', () => {
-    hasMethod('createUtxosBegin');
-    hasMethod('createUtxosEnd');
-    hasMethod('createUtxos');
+    [
+      'listUnspents',
+      'createUtxosBegin',
+      'createUtxosEnd',
+      'createUtxos',
+    ].forEach(hasMethod);
   });
 
   describe('assets', () => {
-    hasMethod('listAssets');
-    hasMethod('getAssetBalance');
-    hasMethod('issueAssetNia');
-    hasMethod('issueAssetIfa');
-    hasMethod('inflateBegin');
-    hasMethod('inflateEnd');
-    hasMethod('inflate');
+    [
+      'listAssets',
+      'getAssetBalance',
+      'issueAssetNia',
+      'issueAssetIfa',
+      'issueAssetCfa',
+      'inflateBegin',
+      'inflateEnd',
+      'inflate',
+    ].forEach(hasMethod);
   });
 
-  describe('transfer', () => {
-    hasMethod('sendBegin');
-    hasAsyncMethod('sendBegin');
-    hasMethod('sendEnd');
-    hasMethod('send');
-    hasMethod('sendBtcBegin');
-    hasMethod('sendBtcEnd');
-    hasMethod('sendBtc');
-    hasMethod('blindReceive');
-    hasAsyncMethod('blindReceive');
-    hasMethod('witnessReceive');
-    hasAsyncMethod('witnessReceive');
-    hasMethod('decodeRGBInvoice');
-    hasMethod('listTransfers');
-    hasAsyncMethod('listTransfers');
-    hasMethod('failTransfers');
+  describe('sending', () => {
+    // RGB sends are exposed only under the RN-parity onchainSend* names
+    // (see "IUTEXOProtocol — onchain" below).
+    ['sendBtcBegin', 'sendBtcEnd', 'sendBtc', 'sendRgbFromGroups'].forEach(
+      hasMethod
+    );
   });
 
-  describe('sync & transactions', () => {
-    hasMethod('refreshWallet');
-    hasAsyncMethod('refreshWallet');
-    hasMethod('syncWallet');
-    hasAsyncMethod('syncWallet');
-    hasMethod('listTransactions');
-    hasAsyncMethod('listTransactions');
+  describe('receiving', () => {
+    ['blindReceive', 'witnessReceive', 'decodeRGBInvoice'].forEach(hasMethod);
   });
 
-  describe('fee estimation', () => {
-    hasMethod('estimateFeeRate');
-    hasMethod('estimateFee');
+  describe('transactions & transfers', () => {
+    [
+      'listTransactions',
+      'listTransfers',
+      'failTransfers',
+      'refreshWallet',
+      'syncWallet',
+    ].forEach(hasMethod);
   });
 
-  describe('backup', () => {
-    hasMethod('createBackup');
-    hasMethod('configureVssBackup');
-    hasMethod('disableVssAutoBackup');
-    hasMethod('vssBackup');
-    hasMethod('vssBackupInfo');
+  describe('backup & vss', () => {
+    [
+      'configureVssBackup',
+      'disableVssAutoBackup',
+      'vssBackup',
+      'vssBackupInfo',
+      'vssRestoreBackup',
+      'restoreFromVss',
+      'ldkVssBackupInfo',
+      'clearLdkVssFence',
+      'vssClearFence',
+      'disableLdkVssReplication',
+      'createBackup',
+      'getLastBackupBytes',
+      'restoreFromBackupBytes',
+    ].forEach(hasMethod);
   });
 
-  describe('signing', () => {
-    hasMethod('signPsbt');
-    hasMethod('signMessage');
-    hasMethod('verifyMessage');
+  describe('explicit restore lifecycle guards', () => {
+    it('restoreFromVss throws before init()', async () => {
+      const wallet = new UTEXOWallet({
+        mnemonic: 'test test test test test test test test test test test junk',
+        password: 'password',
+        network: 'regtest',
+      });
+      await expect((wallet as any).restoreFromVss()).rejects.toThrow(
+        /not initialized/
+      );
+    });
+  });
+
+  describe('fee & crypto', () => {
+    [
+      'estimateFeeRate',
+      'estimateFee',
+      'signPsbt',
+      'signMessage',
+      'verifyMessage',
+    ].forEach(hasMethod);
+  });
+
+  describe('IUTEXOProtocol — lightning', () => {
+    [
+      'createLightningInvoice',
+      'payLightningInvoice',
+      'listLightningPayments',
+      'getLightningReceiveRequest',
+      'getLightningSendRequest',
+    ].forEach(hasMethod);
+  });
+
+  describe('IUTEXOProtocol — onchain', () => {
+    [
+      'onchainReceive',
+      'onchainSend',
+      'onchainSendBegin',
+      'onchainSendEnd',
+      'listOnchainTransfers',
+    ].forEach(hasMethod);
+  });
+
+  describe('lightning node extras', () => {
+    [
+      'getLightningNode',
+      'getNodePubkey',
+      'getNodeInfo',
+      'getNetworkInfo',
+      'connectPeer',
+      'disconnectPeer',
+      'listPeers',
+      'listChannels',
+      'openChannel',
+      'closeChannel',
+      'keysend',
+      'listPayments',
+      'getPayment',
+      'decodeLnInvoice',
+      'invoiceStatus',
+      'createHodlLnInvoice',
+      'claimHodlInvoice',
+      'cancelHodlInvoice',
+    ].forEach(hasMethod);
+  });
+
+  describe('APay + LSP', () => {
+    ['apayNew', 'apayNewWithAddress', 'createLsp', 'getLspConfig'].forEach(
+      hasMethod
+    );
   });
 });

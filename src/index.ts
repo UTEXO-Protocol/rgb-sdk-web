@@ -1,21 +1,15 @@
-import { DEFAULT_INDEXER_URLS } from './binding/WasmRgbLibBinding';
+import { DEFAULT_INDEXER_URLS } from './binding/RlnDefaults';
 
-// Main wallet exports
-export {
-  createWallet,
-  WalletManager,
-  createWalletManager,
-} from './wallet/wallet-manager';
-export type { WalletInitParams } from './wallet/wallet-manager';
-
-// UTEXO wallet exports
+// ── End-user wallet ──────────────────────────────────────────────────────────
+// Single RLN-backed wallet (RGB on-chain + native Lightning). Mirrors
+// @utexo/rgb-sdk-rn's UTEXOWallet surface (IWalletManager + IUTEXOProtocol).
 export { UTEXOWallet } from './utexo/utexo-wallet';
-export {
-  restoreUtxoWalletFromVss,
-  restoreUtxoWalletFromBackup,
-  getBackupStoreId,
-  buildVssConfigFromMnemonic,
-} from './utexo/restore';
+export type {
+  UTEXOWalletCreateParams,
+  RlnVssRestoreResult,
+} from './utexo/utexo-wallet';
+
+// Core protocol interfaces / base classes
 export {
   UTEXOProtocol,
   LightningProtocol,
@@ -24,23 +18,69 @@ export {
 } from '@utexo/rgb-sdk-core';
 export type {
   ConfigOptions,
+  IWalletManager,
   IUTEXOProtocol,
   ILightningProtocol,
   IOnchainProtocol,
 } from '@utexo/rgb-sdk-core';
 
-// WASM initializer — call once before using any wallet APIs
-export { initWasm } from './wasm/init';
+// ── RLN WASM ─────────────────────────────────────────────────────────────────
+// Initializer — call once before using any wallet APIs.
+export { initRlnWasm } from './wasm/initRln';
 
-/** rgb-lib WASM serde JSON shapes (snake_case). Use `WasmJson.Recipient`, etc. */
-export type * as WasmJson from './binding/WasmTypes';
+// RLN binding (low-level)
+export { RlnWasmBinding } from './binding/RlnWasmBinding';
+export type { RlnBindingCreateParams } from './binding/RlnWasmBinding';
 
-// Type exports
+// RLN network defaults
+export { DEFAULT_RLN_URLS, getRlnUrls } from './binding/RlnDefaults';
+export type { RlnNetworkUrls } from './binding/RlnDefaults';
+export { getDefaultLspBaseUrl, resolveLspBaseUrl } from './binding/RlnDefaults';
+
+// RLN wallet manager
+export {
+  RlnWalletManager,
+  createRlnWalletManager,
+} from './wallet/rln-wallet-manager';
+export type { RlnWalletInitParams } from './wallet/rln-wallet-manager';
+
+// RLN Lightning node binding
+export { RlnNodeBinding } from './lightning/RlnNodeBinding';
+
+// RLN interface types + model (vendored locally; see src/rln)
+export type { IRlnWalletBinding, IRlnNodeBinding, IRlnSdkBinding } from './rln';
+export type * from './types/rln-model';
+
+// ── LSP (utexo-lsp) — APay, Lightning Address, RGB↔LN bridge flows ────────────
+export { UtexoLsp } from './lsp/UtexoLsp';
+export type {
+  WaitOptions,
+  ReceiveAssetOptions,
+  ReceiveAssetResult,
+  SendAssetOptions,
+  SendAssetResult,
+  PayAddressOptions,
+  LightningAddressInfo,
+  ClaimResult,
+} from './lsp/UtexoLsp';
+export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
+export {
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+} from './lsp/LspErrors';
+export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+export { peerUri, normalizeReceiveStatus } from './lsp/lsp-types';
+export type * from './lsp/lsp-types';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 export * from './types/rgb-model';
 export type {
   TransferStatus,
   BridgeTransferStatus,
   OnchainSendStatus,
+  VssBackupConfig,
+  VssBackupInfo,
 } from '@utexo/rgb-sdk-core';
 export type {
   Network,
@@ -51,10 +91,7 @@ export type {
 } from './crypto/signer';
 export type { GeneratedKeys, AccountXpubs } from '@utexo/rgb-sdk-core';
 
-// Consignment validation
-export { validateConsignmentOffchain } from './binding/WasmRgbLibBinding';
-
-// Function exports
+// ── Functions ────────────────────────────────────────────────────────────────
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
 export {
   signMessage,
@@ -72,7 +109,7 @@ export {
   bip39,
 } from '@utexo/rgb-sdk-core';
 
-// Error exports
+// ── Errors ───────────────────────────────────────────────────────────────────
 export {
   SDKError,
   NetworkError,
@@ -86,7 +123,7 @@ export {
   RgbNodeError,
 } from '@utexo/rgb-sdk-core';
 
-// Utility exports
+// ── Utilities ────────────────────────────────────────────────────────────────
 export { logger, configureLogging, LogLevel } from '@utexo/rgb-sdk-core';
 export {
   validateNetwork,
@@ -100,7 +137,7 @@ export {
   isNetwork,
 } from '@utexo/rgb-sdk-core';
 
-// Constants
+// ── Constants ────────────────────────────────────────────────────────────────
 export {
   DEFAULT_NETWORK,
   DEFAULT_API_TIMEOUT,

@@ -1,26 +1,15 @@
 /**
- * UTEXOWallet — the single end-user wallet for rgb-sdk-web.
+ * UTEXOWallet — the single end-user wallet for rgb-sdk-web, backed by the
+ * RLN WASM SDK (RGB on-chain + native Lightning). Mirrors the
+ * `@utexo/rgb-sdk-rn` surface so app code ports across web ↔ RN; RGB sends
+ * are exposed only under the RN-parity `onchainSend*` names.
  *
- * Backed entirely by the RLN WASM SDK (RGB on-chain + native Lightning). The
- * public surface mirrors `@utexo/rgb-sdk-rn`'s UTEXOWallet so app code ports
- * across web ↔ React Native with minimal change: it implements `IUTEXOProtocol`
- * plus `IWalletManager` minus the plain RGB send trio — RGB sends are exposed
- * only under the RN-parity names (`onchainSend`, `onchainSendBegin`,
- * `onchainSendEnd`), avoiding duplicate send entry points.
- *
- * Web-specific approaches are preserved:
- *  - RN-parity lifecycle: `new UTEXOWallet(params)` stores params; `init()`
- *    does all local setup (SDK init, keys, node handle, RlnWasmWallet +
- *    wallet-stream VSS configure — wallet reported LOCKED); the init→unlock
- *    gap is the explicit-restore window (`restoreFromVss()`, fence
- *    takeover); `unlock()` runs sdk.unlock → LDK VSS configure (guarded
- *    channel restore) → go-online/attach. `UTEXOWallet.create(params)` does
- *    init + unlock. Restore is never automatic. Full contract in CLAUDE.md.
- *  - PSBT signing via the BDK/mnemonic path (RlnSigner), so `onchainSend` /
- *    `payLightningInvoice` stay atomic without an injected signer.
- *
- * Lower-level building blocks (`RlnWalletManager`, `RlnWasmBinding`,
- * `RlnNodeBinding`) remain available for advanced use.
+ * Lifecycle: `init()` (LOCKED — all local setup) → optional
+ * `restoreFromVss()` in the gap → `unlock()` (online). `create(params)`
+ * does all three; restore is never automatic.
+ * PSBT signing uses the BDK/mnemonic path (RlnSigner), so sends and
+ * Lightning pay stay atomic. Lower layers (`RlnWalletManager`,
+ * `RlnWasmBinding`, `RlnNodeBinding`) remain available for advanced use.
  */
 
 import type {
@@ -159,17 +148,14 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   private _manager: RlnWalletManager | null = null;
   private initPromise: Promise<void> | null = null;
   private unlockPromise: Promise<void> | null = null;
-  /** Mnemonic-derived VSS identity, computed at init() (null = VSS disabled).
-   *  Used by unlock() for the wallet-stream backup/restore and as the default
-   *  identity for clearLdkVssFence() in the locked state. */
+  /** Mnemonic-derived VSS identity (null = VSS disabled). */
   private derivedVssConfig: VssBackupConfig | null = null;
 
   // Auto VSS backup: the wasm wallet-stream backup is manual-only, so every
   // state-changing op schedules a best-effort background vssBackup().
   private vssAutoConfig: VssBackupConfig | null = null;
   private vssBackupRunning = false;
-  /** Whether restoreFromVss() ran — consumed by the unlock()-time
-   *  unrestored-backup warning. */
+  /** Gates the unlock()-time unrestored-backup warning. */
   private vssRestoreRan = false;
 
   /** Construction is sync and cheap — params are only stored. All WASM/network
@@ -211,12 +197,10 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return result;
   }
 
-  /** Phase 1 — all local setup: sdk.initValue, key derivation, node handle
-   *  (runtime not started), RlnWasmWallet creation (loads the local IDB
-   *  snapshot) and wallet-stream VSS configure. The wallet reports LOCKED
-   *  until unlock(); the init→unlock gap is the explicit-restore window —
-   *  restoreFromVss() and/or vssClearFence() run here. Idempotent; a
-   *  thrown failure clears the latch for a retry. */
+  /** Phase 1 — all local setup (SDK init, keys, wallet, node handle; no
+   *  network). Returns the wallet LOCKED; the init→unlock gap is where
+   *  restoreFromVss() / vssClearFence() run. Idempotent; a thrown failure
+   *  clears the latch for a retry. */
   async init(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = this.initInternal().catch((e) => {
@@ -248,15 +232,12 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     }
   }
 
-  /** Phase 2, in order: sdk.unlock (password check + runtime authorization)
-   *  → LDK VSS configure (guarded channel restore, pre-runtime) → auto
-   *  go-online/node attach. Throws unless init() ran first. The wallet
-   *  stream is NEVER restored here — that is the explicit
-   *  restoreFromVss() call in the init→unlock gap.
-   *  Runs once; only a thrown failure clears the latch for a retry — a
-   *  non-fatal LDK-configure failure (e.g. held fence) needs the explicit
-   *  recovery disableLdkVssReplication() → clearLdkVssFence() → unlock().
-   *  Full contract in CLAUDE.md / docs/VSS-BACKUP-RESTORE.md. */
+  /** Phase 2: sdk.unlock (password check) → LDK VSS configure (guarded
+   *  channel restore, pre-runtime) → go-online/node attach. Throws unless
+   *  init() ran first; never restores the wallet stream (that is
+   *  restoreFromVss()). Runs once — a non-fatal LDK-configure failure
+   *  (e.g. held fence) needs disableLdkVssReplication() → vssClearFence()
+   *  → unlock(). */
   async unlock(): Promise<void> {
     if (!this.initPromise) {
       throw new Error(
@@ -279,23 +260,17 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     await this.manager.autoGoOnline();
   }
 
-  /** Explicit one-call VSS restore — the ONLY restore path. Call in the
-   *  init→unlock gap: `init()` → `restoreFromVss()` → `unlock()`.
+  /** Explicit one-call VSS restore — the ONLY restore path: `init()` →
+   *  `restoreFromVss()` → `unlock()`. Restores the wallet stream (RGB
+   *  assets, stock, BDK state) now, overwriting local state with the cloud
+   *  snapshot; channel state restores at the `unlock()` that follows.
    *
-   *  Restores the wallet stream (RGB assets, stock, BDK state) immediately,
-   *  overwriting local wallet state with the cloud snapshot; channel state
-   *  (LDK stream) is then restored by the `unlock()` that follows — its
-   *  `configureLdkVssReplication` performs the guarded fresh-store restore.
-   *
-   *  `takeoverFence` defaults to TRUE: the old device's single-writer fence
-   *  is cleared so the unlock-time channel restore can claim the store —
-   *  restoring from the mnemonic on a new device almost always means the
-   *  old one is gone (wiped profile / dead device). Only call this when
-   *  that is actually the case: if the old device is still running, the
-   *  takeover puts two writers on one channel store until the old owner
-   *  stops itself at its next fence check (stale-state / fund-loss risk).
-   *  Pass `{ takeoverFence: false }` to restore the wallet stream without
-   *  touching the fence. Skipped when there is no Lightning node. */
+   *  `takeoverFence` defaults to TRUE — the old device's single-writer
+   *  fence is cleared so unlock can claim the channel store. Only restore
+   *  when the old device is gone for good: a still-running old device
+   *  means two writers on one channel store (fund-loss risk). Pass
+   *  `{ takeoverFence: false }` to leave the fence alone; skipped when
+   *  there is no Lightning node. */
   async restoreFromVss(opts?: {
     takeoverFence?: boolean;
   }): Promise<RlnVssRestoreResult> {
@@ -609,7 +584,8 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   /** Health of the LDK/channel-state VSS replication, or null when there is
    *  no Lightning node. A configure failure at unlock (VSS down, held fence)
    *  is surfaced as `configured: false` with `lastError` — detect a held
-   *  fence via `/owned by another/` and recover per CLAUDE.md. */
+   *  fence via `/owned by another/` and recover with
+   *  disableLdkVssReplication() → vssClearFence() → unlock(). */
   ldkVssBackupInfo(): LdkVssBackupInfo | null {
     // peek — a health check must not attach the node/start the runtime.
     const node = this.manager.peekLightningNode();

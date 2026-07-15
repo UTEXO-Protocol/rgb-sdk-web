@@ -17,7 +17,7 @@ export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
   },
   utexo: {
     // TODO: proxyUrl is a placeholder — replace once the real WS proxy is deployed.
-    proxyUrl: 'wss://rln-proxy-utexo.utexo.com/rgb/json-rpc',
+    proxyUrl: 'wss://ln-gateway-signet.utexo.com',
     transportEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc',
     indexerUrl: 'https://esplora-api.utexo.com',
   },
@@ -66,7 +66,7 @@ export function resolveLspBaseUrl(
   return resolved;
 }
 
-/** Default Esplora/Electrum indexer URLs per network (used by goOnline). */
+/** Default Esplora/Electrum indexer URLs per network. */
 export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
   mainnet: 'https://esplora-mainnet.utexo.com',
   testnet: 'https://esplora-testnet3.utexo.com',

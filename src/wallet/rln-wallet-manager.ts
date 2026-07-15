@@ -52,15 +52,14 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
   skipConsistencyCheck?: boolean;
   /** VSS server URL for cloud backup (RN-parity param). Defaults to
    *  DEFAULT_VSS_SERVER_URL — the wallet-stream backup is configured
-   *  automatically at unlock() with an identity derived from the mnemonic
-   *  (storeId = wallet_<masterFingerprint>). Pass `null` to disable VSS. */
+   *  automatically at init() with an identity derived from the mnemonic
+   *  (storeId = wallet_<masterFingerprint>). Pass `null` to disable VSS.
+   *  Restore is never automatic — call restoreFromVss() in the init→unlock
+   *  gap. */
   vssUrl?: string | null;
-  /** Internal — set by UTEXOWallet.init(): the mnemonic-derived VSS config,
-   *  stored on the binding and applied by unlock() so LDK/channel-state
-   *  replication is configured on the node handle BEFORE its runtime starts
-   *  (the wallet-stream backup is configured separately, at init). Restore
-   *  is never automatic — the app calls restoreFromVss() in the
-   *  init→unlock gap (see docs/VSS-BACKUP-RESTORE.md). */
+  /** Internal (UTEXOWallet.init() fills this) — the mnemonic-derived VSS
+   *  identity for the binding. The LDK/channel stream must be configured on
+   *  the node handle BEFORE its runtime starts. */
   vssConfig?: VssBackupConfig | null;
   /** Local directory for wallet DB (default: auto-generated in-memory path) */
   dataDir?: string;
@@ -77,7 +76,7 @@ export interface RlnWalletInitParams extends Partial<WalletInitParams> {
 
 export class RlnWalletManager extends BaseWalletManager {
   private readonly rlnBinding: RlnWasmBinding;
-  /** Resolved indexer target for the unlock-time auto-connect (set by create). */
+  /** Resolved indexer target for the unlock-time auto-connect. */
   private autoOnline: {
     indexerUrl: string;
     skipConsistencyCheck: boolean;
@@ -209,7 +208,9 @@ export class RlnWalletManager extends BaseWalletManager {
   }
 
   // Override: the base doesn't await binding sync/refresh (void interface),
-  // but they MUST be awaited (see the wasm RefCell rules in CLAUDE.md).
+  // but they MUST be awaited — a fire-and-forget call can collide with the
+  // next wallet op on the shared wasm RefCell and panic ("RefCell already
+  // borrowed").
   async syncWallet(): Promise<void> {
     await this.rlnBinding.syncWallet();
   }
@@ -220,8 +221,7 @@ export class RlnWalletManager extends BaseWalletManager {
 
   /** Like refreshWallet(), but reports whether any transfer changed status
    *  this pass (the base IWalletManager signature is fixed to Promise<void>,
-   *  so the signal needs its own method). Used by UTEXOWallet to trigger an
-   *  auto VSS backup only when a refresh actually settled something. */
+   *  so the signal needs its own method). */
   async refreshWalletChanged(): Promise<boolean> {
     return this.rlnBinding.refreshWallet();
   }
@@ -264,8 +264,7 @@ export class RlnWalletManager extends BaseWalletManager {
     return this.rlnBinding.vssRestoreBackup();
   }
 
-  /** Error from the init-time configureLdkVssReplication attempt, or null
-   *  (see RlnWasmBinding.getLdkVssInitError). */
+  /** Error from the unlock-time configureLdkVssReplication attempt, or null. */
   getLdkVssInitError(): string | null {
     return this.rlnBinding.getLdkVssInitError();
   }

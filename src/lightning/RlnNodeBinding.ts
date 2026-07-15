@@ -389,8 +389,8 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   /**
-   * The wasm node keeps two payment ledgers that don't see each other (see
-   * WASM_LIVE_INVOICE_STATUS_GAP.md): scaffold maps (read by getPaymentJson /
+   * The wasm node keeps two payment ledgers that don't see each other:
+   * scaffold maps (read by getPaymentJson /
    * invoiceStatusJson / listPaymentsJson) and the live event-stream ledger fed by
    * real LDK events (read by livePaymentValue / livePaymentsValue). Live-API
    * invoices (createLnInvoiceLiveJson) and real HTLC sends exist only in the

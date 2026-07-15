@@ -27,9 +27,27 @@ addition to RGB on-chain. No external RGB Node server is required. The previous
 - Vendored RLN contracts: `src/types/rln-model.ts`, `src/interfaces/IRln*.ts`, and
   `src/binding/RlnDefaults.ts` (`DEFAULT_RLN_URLS` / `DEFAULT_INDEXER_URLS`),
   re-exported via the `src/rln` barrel
+- **VSS cloud backup — zero-config, automatic** — identity (signing key +
+  `wallet_<masterFingerprint>` store id) is derived from the mnemonic at `init()`;
+  the server defaults to `DEFAULT_VSS_SERVER_URL` (`vssUrl` param to override,
+  `null` to disable). Every state-changing op uploads an encrypted wallet
+  snapshot in the background, and LDK/channel state (channel monitors/manager,
+  per-channel RGB state) replicates continuously to a separate `-ldk` stream
+  while the node runs
+- **Explicit one-call VSS restore** — `restoreFromVss({ takeoverFence? })` in the
+  init→unlock gap restores the wallet stream immediately (returns
+  `{ walletRestored, serverVersion }`, throws on failure — no silent fresh
+  start); channel state restores at the `unlock()` that follows. Restore is
+  never automatic. `takeoverFence` defaults to `true` (a wiped/dead device can
+  never release its single-writer fence); pass `false` when the old device may
+  still be running. `RlnVssRestoreResult` type exported
+- **VSS safety rails** — `unlock()` on a fresh wallet logs a loud warning when an
+  unrestored cloud backup exists (the next auto-backup would overwrite it);
+  `vssClearFence()` for a bare fence clear (RN parity); `ldkVssBackupInfo()`
+  channel-replication health (a held fence surfaces in `lastError`; recover with
+  `disableLdkVssReplication()` → `vssClearFence()` → `unlock()`)
 - New examples: `apay-lightning-address`, `lightning-payment`,
-  `lightning-channels-keysend`, `lsp-bridge`
-- RFC `docs/rfcs/001-utexo-wallet-v2-interfaces.md`
+  `lightning-channels-keysend`, `lsp-bridge`, `utexo-vss-backup-restore`
 
 ### Changed
 
@@ -38,10 +56,12 @@ addition to RGB on-chain. No external RGB Node server is required. The previous
 - Reworked `UTEXOWallet` (`src/utexo/utexo-wallet.ts`) as the single public API
   implementing `IWalletManager` + `IUTEXOProtocol`, mirroring `@utexo/rgb-sdk-rn` so
   app code ports across web ↔ RN
-  - **Two-phase lifecycle**: `new UTEXOWallet(params)` stores params synchronously,
-    then `await wallet.init()` does WASM/network setup (idempotent, retryable;
-    `initialize()` is an alias). `UTEXOWallet.create(params)` remains as a one-call
-    convenience
+  - **Three-phase lifecycle (RN parity)**: `new UTEXOWallet(params)` stores params
+    synchronously; `await wallet.init()` does all local setup and returns the
+    wallet LOCKED; the init→unlock gap is the explicit VSS-restore window;
+    `await wallet.unlock()` validates the password and brings it online. Both
+    phases are idempotent and retryable; `UTEXOWallet.create(params)` does all
+    three and `initialize()` aliases init + unlock
   - **One-call UX**: `indexerUrl` / `transportEndpoint` / `proxyUrl` default per
     network, and `create` auto-connects to the indexer non-fatally (unreachable
     indexer → offline wallet + warning; check `isOnline()`, retry with `goOnline()`)

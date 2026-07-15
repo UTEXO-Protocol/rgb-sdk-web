@@ -468,8 +468,25 @@ backup exists — the next auto-backup would overwrite it. `vssClearFence()` is
 still available for a bare fence clear (RN parity), and `ldkVssBackupInfo()`
 reports channel-replication health (a held fence shows up in `lastError`).
 
-Full details — the two VSS streams, identity derivation, fence semantics and
-recovery flows: [docs/VSS-BACKUP-RESTORE.md](./docs/VSS-BACKUP-RESTORE.md).
+#### How it works under the hood
+
+- **Identity** is deterministic from the mnemonic: signing key =
+  HMAC-SHA256 over the mnemonic, store id = `wallet_<masterFingerprint>` —
+  which is why the same mnemonic on any browser reaches the same backup with
+  no extra input.
+- **Two encrypted streams** on the VSS server: the *wallet stream* (RGB
+  assets, stock, BDK state — snapshot uploaded after each state-changing op)
+  and the *LDK/channel stream* (`<storeId>-ldk`: channel monitors/manager,
+  network graph, per-channel RGB state — replicated continuously while the
+  node runs). Values are encrypted client-side; the server never sees keys.
+- **Single-writer fence**: the channel stream is guarded so two devices can
+  never write the same channel state (stale-commitment / fund-loss risk). A
+  page reload re-acquires its own fence; a second browser is refused until
+  the fence is taken over (`restoreFromVss()` default) or released.
+- **Held fence detected after unlock()** (`ldkVssBackupInfo().lastError`
+  matches `owned by another`): recover with `disableLdkVssReplication()` →
+  `vssClearFence()` → `unlock()` — unlock runs once, so the disable is what
+  makes it retryable.
 
 ---
 

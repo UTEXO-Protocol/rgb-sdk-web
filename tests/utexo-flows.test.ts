@@ -125,8 +125,8 @@ describe('UTEXOWallet API', () => {
       'createLightningInvoice',
       'payLightningInvoice',
       'listLightningPayments',
-      'getLightningReceiveRequest',
-      'getLightningSendRequest',
+      'getLightningReceiveStatus',
+      'getLightningSendStatus',
     ].forEach(hasMethod);
   });
 

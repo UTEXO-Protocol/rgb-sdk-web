@@ -52,7 +52,6 @@ import type {
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
   OnchainSendResponse,
-  TransferStatus,
 } from '@utexo/rgb-sdk-core';
 import {
   logger,
@@ -96,37 +95,6 @@ export interface RlnVssRestoreResult {
   walletRestored: boolean;
   /** Server version of the installed snapshot (null when none existed). */
   serverVersion: number | null;
-}
-
-// ── Status mappers (RLN → core TransferStatus) ───────────────────────────────
-
-function mapInvoiceStatus(status: RlnInvoiceStatus): TransferStatus | null {
-  switch (status) {
-    case 'Pending':
-      return 'WaitingCounterparty';
-    case 'Succeeded':
-      return 'Settled';
-    case 'Expired':
-    case 'Failed':
-    case 'Cancelled':
-      return 'Failed';
-    default:
-      // Claimable / Claiming have no TransferStatus equivalent.
-      return null;
-  }
-}
-
-function mapPaymentStatus(status: RlnPaymentStatus): TransferStatus | null {
-  switch (status) {
-    case 'Pending':
-      return 'WaitingCounterparty';
-    case 'Succeeded':
-      return 'Settled';
-    case 'Failed':
-      return 'Failed';
-    default:
-      return null;
-  }
 }
 
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
@@ -744,16 +712,14 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Poll receive status for a Lightning invoice. */
-  getLightningReceiveRequest(id: string): Promise<TransferStatus | null> {
-    return this.requireNode().invoiceStatus(id).then(mapInvoiceStatus);
-  }
 
   /**
    * Canonical inbound LN status — no `TransferStatus` fold.
    *
    * Returns the node's own vocabulary, identical on web and RN. Prefer this
-   * over {@link getLightningReceiveRequest}, which collapses the HODL states
-   * into RGB consignment buckets that have no Lightning meaning.
+   * Lightning and RGB on-chain statuses are deliberately separate — an invoice
+   * is never reported as a TransferStatus (an RGB consignment vocabulary with
+   * no Lightning meaning).
    */
   getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
     return this.requireNode().invoiceStatus(id);
@@ -766,13 +732,6 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
     const payment = await this.requireNode().getPayment(id);
     return payment ? payment.status : null;
-  }
-
-  /** Poll send status by payment hash (`'WaitingCounterparty'` → `'Settled'` | `'Failed'`). */
-  async getLightningSendRequest(id: string): Promise<TransferStatus | null> {
-    const payment = await this.requireNode().getPayment(id);
-    if (!payment) return null;
-    return mapPaymentStatus(payment.status);
   }
 
   /** Not implemented — the local RLN node pays atomically via {@link payLightningInvoice}. @throws always */

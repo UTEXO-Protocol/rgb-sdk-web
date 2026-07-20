@@ -4,7 +4,7 @@ Async payments let a recipient receive Lightning while **offline at payment time
 
 **Protocol spec:** [Async Payments — RGB Lightning Node & Utexo LSP](https://hackmd.io/@xalkan/async-payments)
 
-**Working demo:** [rgb-sdk-web-demo — LSP & APay page](https://github.com/UTEXO-Protocol/rgb-sdk-web-demo) (`src/components/apay/useApayFlow.ts`)
+**Working demo:** [rgb-sdk-web-sandbox — LSP & APay page](https://github.com/UTEXO-Protocol/rgb-sdk-web-sandbox) (`src/components/apay/useApayFlow.ts`)
 
 ---
 

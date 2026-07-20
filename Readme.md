@@ -544,7 +544,7 @@ Layering: `UTEXOWallet` → `RlnWalletManager` → `RlnWasmBinding` (RGB wallet)
 
 ## Demo App
 
-A full working demo is available at **[rgb-sdk-web-demo](https://github.com/UTEXO-Protocol/rgb-sdk-web-demo)**. It demonstrates:
+A full working demo is available at **[rgb-sdk-web-sandbox](https://github.com/UTEXO-Protocol/rgb-sdk-web-sandbox)**. It demonstrates:
 
 - `UTEXOWallet` full lifecycle: create → fund → `createUtxos()` → issue assets → send/receive RGB → Lightning invoices, peers & channels
 - LSP flows: create + connect, receive asset (Lightning → RGB), send asset (RGB → Lightning), Lightning Address, APay
@@ -552,8 +552,8 @@ A full working demo is available at **[rgb-sdk-web-demo](https://github.com/UTEX
 - Low-level `RlnWalletManager` usage for comparison
 
 ```bash
-git clone https://github.com/UTEXO-Protocol/rgb-sdk-web-demo
-cd rgb-sdk-web-demo
+git clone https://github.com/UTEXO-Protocol/rgb-sdk-web-sandbox
+cd rgb-sdk-web-sandbox
 npm install
 npm run dev   # Vite dev server on port 5173
 ```

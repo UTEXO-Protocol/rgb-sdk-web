@@ -17,9 +17,10 @@ import type {
   IssueAssetCfaRequest,
   LightningChannel,
   OpenChannelParams,
+  OpenChannelResult,
   LightningInvoice,
   CreateLnInvoiceParams,
-  CreateHodlLnInvoiceParams,
+  CreateHodlInvoiceParams,
   LightningPayment,
   RlnPaymentStatus,
   SendPaymentParams,
@@ -273,7 +274,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   // ── Channels ───────────────────────────────────────────────────────────────
 
-  async openChannel(params: OpenChannelParams): Promise<string> {
+  async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
     const raw = parseJson<{ channel_id?: string }>(
       this.nodeHandle.openChannelJson(
         params.peerPubkey,
@@ -283,7 +284,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
         params.assetLocalAmount != null ? BigInt(params.assetLocalAmount) : null
       )
     );
-    return String(raw.channel_id ?? '');
+    return { temporaryChannelId: String(raw.channel_id ?? '') };
   }
 
   closeChannel(channelId: string, peerPubkey?: string, force?: boolean): void {
@@ -504,15 +505,15 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
 
-  async createHodlLnInvoice(
-    params: CreateHodlLnInvoiceParams
+  async createHodlInvoice(
+    params: CreateHodlInvoiceParams
   ): Promise<LightningInvoice> {
     const raw = parseJson<RlnRawInvoice>(
       this.nodeHandle.createHodlLnInvoiceJson(
-        params.amtMsat ?? null,
+        params.amtMsat != null ? BigInt(params.amtMsat) : null,
         params.expirySec,
         params.assetId ?? null,
-        params.assetAmount ?? null,
+        params.assetAmount != null ? BigInt(params.assetAmount) : null,
         params.paymentHash
       )
     );

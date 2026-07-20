@@ -157,7 +157,7 @@ describe('UTEXOWallet API', () => {
       'getPayment',
       'decodeLnInvoice',
       'invoiceStatus',
-      'createHodlLnInvoice',
+      'createHodlInvoice',
       'claimHodlInvoice',
       'cancelHodlInvoice',
     ].forEach(hasMethod);

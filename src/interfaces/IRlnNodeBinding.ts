@@ -1,9 +1,10 @@
 import type {
   LightningChannel,
   OpenChannelParams,
+  OpenChannelResult,
   LightningInvoice,
   CreateLnInvoiceParams,
-  CreateHodlLnInvoiceParams,
+  CreateHodlInvoiceParams,
   LightningPayment,
   SendPaymentParams,
   SendPaymentResult,
@@ -37,7 +38,7 @@ export interface IRlnNodeBinding {
   issueAssetCfa(params: IssueAssetCfaRequest): Promise<AssetCFA>;
 
   // ── Channels ───────────────────────────────────────────────────────────────
-  openChannel(params: OpenChannelParams): Promise<string>;
+  openChannel(params: OpenChannelParams): Promise<OpenChannelResult>;
   closeChannel(channelId: string, peerPubkey?: string, force?: boolean): void;
   listChannels(): Promise<LightningChannel[]>;
 
@@ -52,9 +53,7 @@ export interface IRlnNodeBinding {
   updatePaymentStatus(params: PaymentStatusUpdate): Promise<void>;
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
-  createHodlLnInvoice(
-    params: CreateHodlLnInvoiceParams
-  ): Promise<LightningInvoice>;
+  createHodlInvoice(params: CreateHodlInvoiceParams): Promise<LightningInvoice>;
   cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult>;
   claimHodlInvoice(
     paymentHash: string,

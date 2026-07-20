@@ -101,7 +101,14 @@ export type {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export * from './types/rgb-model';
+// Unspent / Utxo / RgbAllocation now come from core — the local copies shadowed
+// them with a different shape than listUnspents() actually returns.
 export type {
+  Unspent,
+  Utxo,
+  RgbAllocation,
+  Assignment,
+  AssignmentType,
   TransferStatus,
   VssBackupConfig,
   VssBackupInfo,

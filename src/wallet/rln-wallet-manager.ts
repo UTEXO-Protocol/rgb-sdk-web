@@ -9,6 +9,8 @@ import { BaseWalletManager } from '@utexo/rgb-sdk-core';
 import { ValidationError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
 import type {
   WalletInitParams,
+  UTEXOWalletCreateParams,
+  BitcoinNetwork,
   SendAssetBeginRequestModel,
   SendResult,
   SendBtcBeginRequestModel,
@@ -24,13 +26,22 @@ import type { RlnBindingCreateParams } from '../binding/RlnWasmBinding';
 import { DEFAULT_INDEXER_URLS, getRlnUrls } from '../binding/RlnDefaults';
 import { RlnSigner } from '../signer/RlnSigner';
 
-export interface RlnWalletInitParams extends Partial<WalletInitParams> {
+/**
+ * Web wallet params.
+ *
+ * Extends the shared contract (`UTEXOWalletCreateParams`) plus the still-used
+ * rgb-lib-era optionals (`xpubVan`/`xpubCol`/`masterFingerprint`/
+ * `maxAllocationsPerUtxo`/`vanillaKeychain`) — the migration plan assumed those
+ * were dead; they are not.
+ */
+export interface RlnWalletInitParams
+  extends UTEXOWalletCreateParams, Partial<WalletInitParams> {
   /** Mnemonic — required */
   mnemonic: string;
   /** SDK password — required for RlnWasmSdk.initValue / unlock */
   password: string;
   /** Bitcoin network (default: 'utexo') */
-  network?: string;
+  network?: BitcoinNetwork;
   /** WebSocket proxy URL for the Lightning node — enables createNodeHandle.
    *  Defaults to the network's DEFAULT_RLN_URLS entry (regtest/utexo); on
    *  networks without a default, omitting it means no Lightning node. */

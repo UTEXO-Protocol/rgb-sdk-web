@@ -14,6 +14,7 @@
 
 import type {
   IWalletManager,
+  IUTEXOWallet,
   IUTEXOProtocol,
   Network,
   BtcBalance,
@@ -47,7 +48,6 @@ import type {
   LightningReceiveRequest,
   LightningSendRequest,
   PayLightningInvoiceRequestModel,
-  GetLightningSendFeeEstimateRequestModel,
   ListLightningPaymentsResponse,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
@@ -69,7 +69,8 @@ import type {
   IssueAssetCfaRequest,
   LightningChannel,
   OpenChannelParams,
-  CreateHodlLnInvoiceParams,
+  OpenChannelResult,
+  CreateHodlInvoiceParams,
   HodlInvoiceResult,
   LightningInvoice,
   LightningPayment,
@@ -109,7 +110,9 @@ type IWalletManagerBase = Omit<
   'send' | 'sendBegin' | 'sendEnd'
 >;
 
-export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
+export class UTEXOWallet
+  implements IWalletManagerBase, IUTEXOProtocol, IUTEXOWallet
+{
   private readonly params: RlnWalletInitParams;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;
@@ -734,27 +737,6 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return payment ? payment.status : null;
   }
 
-  /** Not implemented — the local RLN node pays atomically via {@link payLightningInvoice}. @throws always */
-  getLightningSendFeeEstimate(
-    _params: GetLightningSendFeeEstimateRequestModel
-  ): Promise<number> {
-    throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
-  }
-
-  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
-  payLightningInvoiceBegin(
-    _params: PayLightningInvoiceRequestModel
-  ): Promise<string> {
-    throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
-  }
-
-  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
-  payLightningInvoiceEnd(
-    _params: SendAssetEndRequestModel
-  ): Promise<LightningSendRequest> {
-    throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
-  }
-
   /**
    * Atomic Lightning payment (native LN pay via the RLN node). `amount` is in
    * sats; `assetAmount` is in asset units.
@@ -796,8 +778,8 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
    * receive data (invoice + recipientId + expiration), not just the invoice.
    */
   async onchainReceive(
-    params: OnchainReceiveRequestModel & { witness?: boolean }
-  ): Promise<OnchainReceiveResponse & InvoiceReceiveData> {
+    params: OnchainReceiveRequestModel
+  ): Promise<OnchainReceiveResponse> {
     const req: InvoiceRequest = {
       assetId: params.assetId || undefined,
       amount: params.amount || undefined,
@@ -913,12 +895,16 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Open a channel (`capacitySat`/`assetLocalAmount` are `bigint`) — returns the temporary channel ID. */
-  openChannel(params: OpenChannelParams): Promise<string> {
+  openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
     return this.requireNode().openChannel(params);
   }
 
   /** Close a channel (cooperative unless `force`). */
-  closeChannel(channelId: string, peerPubkey?: string, force = false): void {
+  async closeChannel(
+    channelId: string,
+    peerPubkey?: string,
+    force = false
+  ): Promise<void> {
     this.requireNode().closeChannel(channelId, peerPubkey, force);
   }
 
@@ -960,10 +946,10 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   // ── HODL invoices ──────────────────────────────────────────────────────────
 
   /** Create a HODL invoice tied to a specific payment hash. */
-  createHodlLnInvoice(
-    params: CreateHodlLnInvoiceParams
+  createHodlInvoice(
+    params: CreateHodlInvoiceParams
   ): Promise<LightningInvoice> {
-    return this.requireNode().createHodlLnInvoice(params);
+    return this.requireNode().createHodlInvoice(params);
   }
 
   /** Reveal the preimage to claim an inbound HODL payment. */

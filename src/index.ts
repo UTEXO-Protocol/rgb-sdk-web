@@ -77,8 +77,6 @@ export type * from './lsp/lsp-types';
 export * from './types/rgb-model';
 export type {
   TransferStatus,
-  BridgeTransferStatus,
-  OnchainSendStatus,
   VssBackupConfig,
   VssBackupInfo,
 } from '@utexo/rgb-sdk-core';

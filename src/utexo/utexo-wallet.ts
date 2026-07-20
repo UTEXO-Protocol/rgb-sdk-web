@@ -52,7 +52,6 @@ import type {
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
   OnchainSendResponse,
-  OnchainSendStatus,
   TransferStatus,
 } from '@utexo/rgb-sdk-core';
 import {
@@ -859,11 +858,6 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     mnemonic?: string
   ): Promise<OnchainSendResponse> {
     return this.withVssBackup(this.manager.send(params, mnemonic));
-  }
-
-  /** Not implemented — track send state via {@link listTransfers} / {@link refreshWallet}. @throws always */
-  getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
-    throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
 
   /** Alias of listTransfers() — same data, same filtering (RN-parity name). */

@@ -45,45 +45,17 @@ export function getRlnUrls(network: string): RlnNetworkUrls | undefined {
   return (DEFAULT_RLN_URLS as Record<string, RlnNetworkUrls>)[network];
 }
 
-/**
- * Default utexo-lsp HTTP base URLs per network. Used when the caller omits
- * lspBaseUrl in the wallet params so LSP-backed flows work out of the box.
- * Networks without an entry have no default and must be configured explicitly.
- */
-const DEFAULT_LSP_BASE_URLS: Partial<Record<string, string>> = {
-  utexo: 'https://lsp-signet.utexo.com',
-};
+// ── Moved to @utexo/rgb-sdk-core ─────────────────────────────────────────────
+// DEFAULT_LSP_BASE_URLS / getDefaultLspBaseUrl / resolveLspBaseUrl and
+// DEFAULT_INDEXER_URLS were duplicated here and in rgb-sdk-rn. They now live in
+// core (`constants/lsp`, `constants/endpoints`) so the two SDKs cannot disagree
+// about which endpoint a network points at. Re-exported for import-site
+// compatibility; DEFAULT_RLN_URLS above stays web-only (WS proxy table).
 
-/** Returns the default lspBaseUrl for a network, or undefined if none exists. */
-export function getDefaultLspBaseUrl(network: string): string | undefined {
-  return DEFAULT_LSP_BASE_URLS[network];
-}
-
-/**
- * Resolves the lspBaseUrl to use: the explicit value if provided, otherwise the
- * per-network default. Throws when neither is available so callers fail loudly
- * instead of silently hitting a missing LSP.
- */
-export function resolveLspBaseUrl(
-  network: string,
-  lspBaseUrl?: string | null
-): string {
-  const resolved = lspBaseUrl ?? DEFAULT_LSP_BASE_URLS[network];
-  if (!resolved) {
-    throw new Error(
-      `No lspBaseUrl configured for network "${network}" and no default is available. ` +
-        'Set lspBaseUrl in the wallet params or pass an explicit LspPeer to createLsp().'
-    );
-  }
-  return resolved;
-}
-
-/** Default Esplora/Electrum indexer URLs per network. */
-export const DEFAULT_INDEXER_URLS: Record<Network, string> = {
-  mainnet: 'https://esplora-mainnet.utexo.com',
-  testnet: 'https://esplora-testnet3.utexo.com',
-  testnet4: 'https://esplora-testnet4.utexo.com',
-  signet: 'ssl://electrum.iriswallet.com:50033',
-  utexo: 'https://esplora-api.utexo.com',
-  regtest: 'http://127.0.0.1:3002',
-};
+export {
+  DEFAULT_LSP_BASE_URLS,
+  getDefaultLspBaseUrl,
+  resolveLspBaseUrl,
+  DEFAULT_INDEXER_URLS,
+  resolveIndexerUrl,
+} from '@utexo/rgb-sdk-core';

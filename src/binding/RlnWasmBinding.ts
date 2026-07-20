@@ -1019,7 +1019,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }): Promise<GetFeeEstimationResponse> {
     const online = this.requireOnline();
     const fee = await this.wallet.getFeeEstimation(online, params.blocks);
-    return fee as GetFeeEstimationResponse;
+    return { feeRate: Number(fee) };
   }
 
   async createBackup(params: {

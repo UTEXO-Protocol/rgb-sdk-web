@@ -7,6 +7,10 @@
 
 import type { RlnWasmNode } from '@utexo/rln-wasm';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
+import {
+  tryNormalizeInvoiceStatus,
+  tryNormalizePaymentStatus,
+} from '@utexo/rgb-sdk-core';
 import type { IRlnNodeBinding } from '../rln';
 import type {
   IssueAssetNiaRequest,
@@ -17,7 +21,7 @@ import type {
   CreateLnInvoiceParams,
   CreateHodlLnInvoiceParams,
   LightningPayment,
-  LightningPaymentStatus,
+  RlnPaymentStatus,
   SendPaymentParams,
   SendPaymentResult,
   KeysendParams,
@@ -25,7 +29,7 @@ import type {
   LightningNodeInfo,
   LdkRuntimeStatus,
   LightningNetworkInfo,
-  InvoiceStatus,
+  RlnInvoiceStatus,
   DecodedLnInvoice,
   HodlInvoiceResult,
   PaymentStatusUpdate,
@@ -99,7 +103,7 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
     localBalanceMsat: outboundMsat,
     remoteBalanceMsat: 0,
     isPublic: Boolean(raw.public),
-    isActive: Boolean(raw.ready),
+    ready: Boolean(raw.ready),
     isUsable: Boolean(raw.is_usable),
     outboundBalanceMsat: outboundMsat,
     inboundBalanceMsat: 0,
@@ -111,13 +115,19 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
   };
 }
 
-/** Fold wasm payment statuses (lowercase live-ledger values like "succeeded",
- *  "claimable" — or scaffold strings) into the LightningPaymentStatus union. */
-function foldPaymentStatus(raw: unknown): LightningPaymentStatus {
-  const s = String(raw ?? '').toLowerCase();
-  if (s === 'succeeded' || s === 'settled' || s === 'paid') return 'Succeeded';
-  if (s === 'failed' || s === 'expired') return 'Failed';
-  return 'Pending'; // pending / claimable / claiming / unknown
+/**
+ * Normalize a wasm payment status onto the canonical vocabulary.
+ *
+ * The wasm node emits lowercase live-ledger values (`"succeeded"`,
+ * `"claimable"`). Core's normalizer accepts any casing and preserves every
+ * state — this replaced a local fold that collapsed six states into three,
+ * losing the HODL states (`Claimable`/`Claiming`) and `Cancelled`.
+ *
+ * Unknown values fall back to `'Pending'` rather than throwing, so a scaffold
+ * or newer node string cannot break a list call.
+ */
+function foldPaymentStatus(raw: unknown): RlnPaymentStatus {
+  return tryNormalizePaymentStatus(raw) ?? 'Pending';
 }
 
 function normalizePayment(raw: RlnRawPayment): LightningPayment {
@@ -125,7 +135,6 @@ function normalizePayment(raw: RlnRawPayment): LightningPayment {
     paymentHash: String(raw.payment_hash ?? ''),
     amtMsat: raw.amt_msat != null ? BigInt(raw.amt_msat as number) : undefined,
     status: foldPaymentStatus(raw.status),
-    rawStatus: raw.status != null ? String(raw.status) : undefined,
     assetId: (raw.asset_id ?? undefined) as string | undefined,
     assetAmount:
       raw.asset_amount != null ? BigInt(raw.asset_amount as number) : undefined,
@@ -150,14 +159,23 @@ type LiveRawPayment = {
   expires_at?: number | null;
 };
 
-/** Fold a wasm status string into the InvoiceStatus union. */
+/**
+ * Normalize a wasm invoice status onto the canonical vocabulary.
+ *
+ * Previously returned `'Paid'` — a value that does not exist in the node's
+ * `InvoiceStatus` enum; the real state is `'Succeeded'`. Core's normalizer maps
+ * the legacy spelling for compatibility and preserves the states the old fold
+ * discarded.
+ *
+ * `expiresAt` still applies locally: the ledger can report `pending` for an
+ * invoice whose expiry has passed but has not been reaped yet.
+ */
 function foldInvoiceStatus(
   raw: unknown,
   expiresAt?: number | null
-): InvoiceStatus {
-  const s = String(raw ?? '').toLowerCase();
-  if (s === 'succeeded' || s === 'settled' || s === 'paid') return 'Paid';
-  if (s === 'expired' || s === 'failed') return 'Expired';
+): RlnInvoiceStatus {
+  const normalized = tryNormalizeInvoiceStatus(raw);
+  if (normalized && normalized !== 'Pending') return normalized;
   if (expiresAt && Date.now() / 1000 > expiresAt) return 'Expired';
   return 'Pending';
 }
@@ -259,10 +277,10 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     const raw = parseJson<{ channel_id?: string }>(
       this.nodeHandle.openChannelJson(
         params.peerPubkey,
-        params.capacitySat,
+        BigInt(params.capacitySat),
         params.isPublic,
         params.assetId ?? null,
-        params.assetLocalAmount ?? null
+        params.assetLocalAmount != null ? BigInt(params.assetLocalAmount) : null
       )
     );
     return String(raw.channel_id ?? '');
@@ -356,9 +374,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     const raw = parseJson<{ payment_hash?: string; status?: string }>(
       this.nodeHandle.sendPaymentLiveJson(
         params.invoice,
-        params.amtMsat ?? null,
+        params.amtMsat != null ? BigInt(params.amtMsat) : null,
         params.assetId ?? null,
-        params.assetAmount ?? null
+        params.assetAmount != null ? BigInt(params.assetAmount) : null
       )
     );
     return normalizePayment({
@@ -377,9 +395,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     const raw = parseJson<RlnRawPayment>(
       this.nodeHandle.keysendLiveJson(
         params.destPubkey,
-        params.amtMsat,
+        BigInt(params.amtMsat),
         params.assetId ?? null,
-        params.assetAmount ?? null
+        params.assetAmount != null ? BigInt(params.assetAmount) : null
       )
     );
     return normalizePayment(raw);
@@ -452,7 +470,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     }
   }
 
-  async invoiceStatus(invoice: string): Promise<InvoiceStatus> {
+  async invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
     await this.driveRgbWorkBestEffort();
     // Live-API invoices resolve via payment hash in the live ledger; the scaffold
     // invoiceStatusJson errors "unknown LN invoice" for them.
@@ -502,26 +520,22 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   async cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
-    const raw = parseJson<{ payment_hash?: string; status?: string }>(
+    // The node returns unit for cancel; treat a non-throwing call as a change.
+    const raw = parseJson<{ changed?: boolean }>(
       this.nodeHandle.cancelHodlInvoiceJson(paymentHash)
     );
-    return {
-      paymentHash: String(raw.payment_hash ?? paymentHash),
-      status: String(raw.status ?? ''),
-    };
+    return { changed: raw.changed ?? true };
   }
 
   async claimHodlInvoice(
     paymentHash: string,
     preimage: string
   ): Promise<HodlInvoiceResult> {
-    const raw = parseJson<{ payment_hash?: string; status?: string }>(
+    // Mirrors the node's ClaimHodlInvoiceResponse { changed: bool }.
+    const raw = parseJson<{ changed?: boolean }>(
       this.nodeHandle.claimHodlInvoiceJson(paymentHash, preimage)
     );
-    return {
-      paymentHash: String(raw.payment_hash ?? paymentHash),
-      status: String(raw.status ?? ''),
-    };
+    return { changed: raw.changed ?? true };
   }
 
   // ── Peers ──────────────────────────────────────────────────────────────────

@@ -1,8 +1,5 @@
 import type { IRgbLibBinding } from '@utexo/rgb-sdk-core';
-import type {
-  SendRgbFromGroupsRequest,
-  SendRgbFromGroupsResult,
-} from '../types/rln-model';
+import type { SendRgbFromGroupsRequest, SendRgbFromGroupsResult } from '../rln';
 
 /**
  * Extends IRgbLibBinding with RLN-specific wallet extras.

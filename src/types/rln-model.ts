@@ -1,9 +1,13 @@
-// RLN (RGB Lightning Node) model types.
+// RLN (RGB Lightning Node) model types — web-only remainder.
 //
-// Vendored locally in rgb-sdk-web so the RLN integration is self-contained and
-// does not depend on these being published in @utexo/rgb-sdk-core. If/when the
-// core package ships the equivalent `rln-model.ts`, these can be re-exported
-// from there instead (the shapes are kept identical on purpose).
+// The shared Lightning domain types (LightningChannel, LightningNodeInfo,
+// LightningPayment, DecodedLnInvoice, SendPaymentResult, OpenChannelParams,
+// CreateHodlInvoiceParams, HodlInvoiceResult, ApayNewResponse, LdkVssBackupInfo,
+// …) now live in @utexo/rgb-sdk-core and are re-exported by `src/rln`.
+//
+// What remains here is genuinely web-specific: wasm SDK lifecycle, the JS
+// runtime/swap surfaces, and node-side issuance request shapes the RN binding
+// does not expose.
 
 // ─── Asset Issuance (node-side) ───────────────────────────────────────────────
 
@@ -24,36 +28,14 @@ export interface IssueAssetCfaRequest {
   filePath?: string;
 }
 
-// ─── Channels ─────────────────────────────────────────────────────────────────
+// ─── Invoice params (wasm node) ───────────────────────────────────────────────
 
-export interface LightningChannel {
-  channelId: string;
-  peerPubkey: string;
-  capacitySat: number;
-  localBalanceMsat: number;
-  remoteBalanceMsat: number;
-  isPublic: boolean;
-  isActive: boolean;
-  /** Channel is usable for routing (ready + peer connected). */
-  isUsable?: boolean;
-  /** Spendable outbound liquidity (our side). Falls back to localBalanceMsat. */
-  outboundBalanceMsat?: number;
-  /** Inbound liquidity (peer side). Falls back to remoteBalanceMsat. */
-  inboundBalanceMsat?: number;
-  assetId?: string;
-  assetLocalAmount?: number;
-}
-
-export interface OpenChannelParams {
-  peerPubkey: string;
-  capacitySat: bigint;
-  isPublic: boolean;
-  assetId?: string;
-  assetLocalAmount?: bigint;
-}
-
-// ─── Invoices & Payments ──────────────────────────────────────────────────────
-
+/**
+ * Web's node-level create-invoice params.
+ *
+ * Distinct from core's `CreateLnInvoiceParams`: the wasm node takes `bigint`
+ * for msat/asset amounts and requires `expirySec`.
+ */
 export interface CreateLnInvoiceParams {
   amtMsat?: bigint;
   expirySec: number;
@@ -61,68 +43,9 @@ export interface CreateLnInvoiceParams {
   assetAmount?: bigint;
 }
 
+/** Node-level HODL invoice params (wasm `bigint` amounts). */
 export interface CreateHodlLnInvoiceParams extends CreateLnInvoiceParams {
   paymentHash: string;
-}
-
-export interface LightningInvoice {
-  invoice: string;
-  paymentHash: string;
-  expirySeconds: number;
-  amtMsat?: bigint;
-  assetId?: string;
-  assetAmount?: bigint;
-}
-
-export type LightningPaymentStatus = 'Pending' | 'Succeeded' | 'Failed';
-
-export interface LightningPayment {
-  paymentHash: string;
-  amtMsat?: bigint;
-  status: LightningPaymentStatus;
-  /** Node status before folding into `status` — HODL states like `Claimable`/
-   *  `Claiming` fold to `Pending`, so filter on this for claim flows. */
-  rawStatus?: string;
-  assetId?: string;
-  assetAmount?: bigint;
-  invoice?: string;
-  inbound?: boolean;
-  /** Payment preimage once known (settled sends, claimable HODL receives). */
-  preimage?: string;
-}
-
-export interface SendPaymentParams {
-  invoice: string;
-  amtMsat?: bigint;
-  assetId?: string;
-  assetAmount?: bigint;
-}
-
-export interface SendPaymentResult extends LightningPayment {}
-
-export interface KeysendParams {
-  destPubkey: string;
-  amtMsat: bigint;
-  assetId?: string;
-  assetAmount?: bigint;
-}
-
-export type InvoiceStatus = 'Pending' | 'Expired' | 'Paid';
-
-/**
- * Asset reference for Lightning invoice/pay-address params. `amount` and
- * `assetAmount` are aliases for the asset-unit amount (both shapes appear
- * across the RN-parity and LSP APIs); exactly one must be set.
- */
-export interface LightningAssetParam {
-  assetId: string;
-  amount?: number;
-  assetAmount?: number;
-}
-
-export interface HodlInvoiceResult {
-  paymentHash: string;
-  status: string;
 }
 
 export interface PaymentStatusUpdate {
@@ -131,27 +54,7 @@ export interface PaymentStatusUpdate {
   status: string;
 }
 
-// ─── Peers ────────────────────────────────────────────────────────────────────
-
-export interface LightningPeer {
-  pubkey: string;
-  address?: string;
-  isConnected?: boolean;
-}
-
-// ─── Node Info ────────────────────────────────────────────────────────────────
-
-export interface LightningNodeInfo {
-  pubkey: string;
-  numChannels?: number;
-  numUsableChannels?: number;
-  localBalanceMsat?: number;
-}
-
-export interface LightningNetworkInfo {
-  network: string;
-  blockHeight?: number;
-}
+// ─── LDK runtime (wasm-only) ──────────────────────────────────────────────────
 
 export interface LdkRuntimeStatus {
   isRunning: boolean;
@@ -159,16 +62,6 @@ export interface LdkRuntimeStatus {
 
 export interface ListRuntimeEventsResult {
   events: unknown[];
-}
-
-// ─── Decoded invoices ─────────────────────────────────────────────────────────
-
-export interface DecodedLnInvoice {
-  paymentHash: string;
-  amtMsat?: bigint;
-  description?: string;
-  expirySeconds?: number;
-  payee?: string;
 }
 
 // ─── RLN wallet extras ────────────────────────────────────────────────────────
@@ -182,37 +75,14 @@ export interface SendRgbFromGroupsResult {
   txid?: string;
 }
 
-// ─── SDK lifecycle ────────────────────────────────────────────────────────────
+// ─── SDK lifecycle (wasm-only) ────────────────────────────────────────────────
 
 export interface RlnSdkInitParams {
   password: string;
   mnemonic?: string;
 }
 
-// ─── Async payments (APay) — node-side ────────────────────────────────────────
-
-export interface ApayHashEntry {
-  hashIndex: number;
-  paymentHash: string;
-}
-
-/** Response of node.apayNew / apayNewWithAddress (async_order.new acknowledgement). */
-export interface ApayNewResponse {
-  requestId: string;
-  hostNodeId: string;
-  protocolVersion: number;
-  orderId: string;
-  status: string;
-  acceptedThroughIndex: number;
-  nextIndexExpected: number;
-  unusedHashes: number;
-  refillBatchSize: number;
-  firstHashIndex: number;
-  lastHashIndex: number;
-  hashes: ApayHashEntry[];
-}
-
-// ─── Swaps ────────────────────────────────────────────────────────────────────
+// ─── Swaps (wasm-only) ────────────────────────────────────────────────────────
 
 export interface SwapMakerInitParams {
   requestJson: string;
@@ -225,18 +95,4 @@ export interface SwapMakerInitResult {
 export interface SwapInfo {
   swapString: string;
   status: string;
-}
-
-// ─── VSS (LDK/channel-state replication) ──────────────────────────────────────
-
-/** Health view of the node's LDK VSS replication (ldkVssBackupInfoJson). */
-export interface LdkVssBackupInfo {
-  /** True when configureLdkVssReplication succeeded for this node. */
-  configured: boolean;
-  /** Writes queued but not yet on the VSS server; alert if it stays > 0. */
-  pendingWrites: number;
-  /** Most recent replication error, or null. */
-  lastError: string | null;
-  /** True when the fence was lost to another instance and replication stopped. */
-  disabled: boolean;
 }

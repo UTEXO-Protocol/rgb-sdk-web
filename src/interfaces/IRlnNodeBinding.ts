@@ -12,7 +12,7 @@ import type {
   LightningNodeInfo,
   LdkRuntimeStatus,
   LightningNetworkInfo,
-  InvoiceStatus,
+  RlnInvoiceStatus,
   DecodedLnInvoice,
   HodlInvoiceResult,
   PaymentStatusUpdate,
@@ -21,7 +21,7 @@ import type {
   IssueAssetCfaRequest,
   ApayNewResponse,
   LdkVssBackupInfo,
-} from '../types/rln-model';
+} from '../rln';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 
 /**
@@ -47,7 +47,7 @@ export interface IRlnNodeBinding {
   keysend(params: KeysendParams): Promise<SendPaymentResult>;
   listPayments(): Promise<LightningPayment[]>;
   getPayment(paymentHash: string): Promise<LightningPayment | null>;
-  invoiceStatus(invoice: string): Promise<InvoiceStatus>;
+  invoiceStatus(invoice: string): Promise<RlnInvoiceStatus>;
   failPendingPayments(): Promise<void>;
   updatePaymentStatus(params: PaymentStatusUpdate): Promise<void>;
 

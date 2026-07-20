@@ -1,9 +1,45 @@
-// Local RLN contract barrel.
+// RLN contract barrel.
 //
-// Re-exports the vendored RLN model types and binding interfaces so RLN consumers
-// in this package can import them from a single local path instead of
-// @utexo/rgb-sdk-core (which does not yet publish these). Swap the underlying
-// modules for the core package here if/when it ships the equivalents.
+// Shared Lightning domain types come from @utexo/rgb-sdk-core — one definition
+// for web and RN, so the two SDKs cannot drift. Web-only extras (wasm SDK
+// lifecycle, LDK runtime, swaps, node-side issuance shapes) stay local.
+
+// ── Shared contract (core) ───────────────────────────────────────────────────
+
+export type {
+  LightningChannel,
+  OpenChannelParams,
+  OpenChannelResult,
+  LightningInvoice,
+  CreateHodlInvoiceParams,
+  HodlInvoiceResult,
+  DecodedLnInvoice,
+  LightningPayment,
+  SendPaymentParams,
+  SendPaymentResult,
+  KeysendParams,
+  LightningAssetParam,
+  LightningPeer,
+  LightningNodeInfo,
+  LightningNetworkInfo,
+  ApayHashEntry,
+  ApayNewResponse,
+  LdkVssBackupInfo,
+  RlnInvoiceStatus,
+  RlnPaymentStatus,
+  RlnChannelStatus,
+  WireMapper,
+} from '@utexo/rgb-sdk-core';
+
+export {
+  normalizeInvoiceStatus,
+  normalizePaymentStatus,
+  normalizeChannelStatus,
+  isTerminalPaymentStatus,
+  isClaimablePaymentStatus,
+} from '@utexo/rgb-sdk-core';
+
+// ── Web-only ─────────────────────────────────────────────────────────────────
 
 export type * from '../types/rln-model';
 export type { IRlnWalletBinding } from '../interfaces/IRlnWalletBinding';

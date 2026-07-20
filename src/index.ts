@@ -52,7 +52,18 @@ export type { IRlnWalletBinding, IRlnNodeBinding, IRlnSdkBinding } from './rln';
 export type * from './types/rln-model';
 
 // ── LSP (utexo-lsp) — APay, Lightning Address, RGB↔LN bridge flows ────────────
-export { UtexoLsp } from './lsp/UtexoLsp';
+// Re-exported from @utexo/rgb-sdk-core (the module lived here until it was
+// consolidated; the public API of this package is unchanged).
+export {
+  UtexoLsp,
+  UtexoLSPClient,
+  LspError,
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+  peerUri,
+  normalizeReceiveStatus,
+} from '@utexo/rgb-sdk-core';
 export type {
   WaitOptions,
   ReceiveAssetOptions,
@@ -62,16 +73,31 @@ export type {
   PayAddressOptions,
   LightningAddressInfo,
   ClaimResult,
-} from './lsp/UtexoLsp';
-export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
-export {
-  LspChannelTimeoutError,
-  LspLiquidityTimeoutError,
-  LspSettlementError,
-} from './lsp/LspErrors';
-export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
-export { peerUri, normalizeReceiveStatus } from './lsp/lsp-types';
-export type * from './lsp/lsp-types';
+  IUtexoLSPClient,
+  ILspWallet,
+  LspClientConfig,
+  LspGetInfoResponse,
+  LspGetInfoWire,
+  LspLnParams,
+  LspOnchainSendRequest,
+  LspOnchainSendResponse,
+  LspOnchainSendWire,
+  LspRgbParams,
+  LspLightningReceiveRequest,
+  LspLightningReceiveResponse,
+  LspLightningReceiveWire,
+  LspLnurlpCallbackResponse,
+  LspLnurlpCallbackWire,
+  LspLightningAddressByPubkeyResponse,
+  LspLightningAddressByPubkeyWire,
+  LspApayInvoiceProofWire,
+  ApayInvoiceProof,
+  ApayMerkleProofElement,
+  LspPeer,
+  ReceiveStatus,
+  ReceiveSettlementOutcome,
+  ChannelReadyInfo,
+} from '@utexo/rgb-sdk-core';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export * from './types/rgb-model';

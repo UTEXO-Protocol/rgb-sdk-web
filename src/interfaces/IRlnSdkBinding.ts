@@ -5,7 +5,7 @@ import type {
   SwapMakerInitParams,
   SwapMakerInitResult,
   SwapInfo,
-} from '../types/rln-model';
+} from '../rln';
 
 /**
  * Top-level contract for the full RLN SDK capability set.

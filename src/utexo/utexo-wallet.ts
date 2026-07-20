@@ -61,9 +61,9 @@ import {
 } from '@utexo/rgb-sdk-core';
 import { RlnWalletManager } from '../wallet/rln-wallet-manager';
 import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
-import { UtexoLsp } from '../lsp/UtexoLsp';
-import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
-import type { LspPeer } from '../lsp/lsp-types';
+import { UtexoLsp } from '@utexo/rgb-sdk-core';
+import { UtexoLSPClient } from '@utexo/rgb-sdk-core';
+import type { LspPeer } from '@utexo/rgb-sdk-core';
 import { resolveLspBaseUrl } from '../binding/RlnDefaults';
 import type {
   IRlnNodeBinding,
@@ -74,12 +74,12 @@ import type {
   HodlInvoiceResult,
   LightningInvoice,
   LightningPayment,
-  LightningPaymentStatus,
+  RlnPaymentStatus,
   LightningPeer,
   LightningNodeInfo,
   LightningNetworkInfo,
   DecodedLnInvoice,
-  InvoiceStatus,
+  RlnInvoiceStatus,
   LightningAssetParam,
   SendPaymentResult,
   SendRgbFromGroupsRequest,
@@ -100,22 +100,23 @@ export interface RlnVssRestoreResult {
 
 // ── Status mappers (RLN → core TransferStatus) ───────────────────────────────
 
-function mapInvoiceStatus(status: InvoiceStatus): TransferStatus | null {
+function mapInvoiceStatus(status: RlnInvoiceStatus): TransferStatus | null {
   switch (status) {
     case 'Pending':
       return 'WaitingCounterparty';
-    case 'Paid':
+    case 'Succeeded':
       return 'Settled';
     case 'Expired':
+    case 'Failed':
+    case 'Cancelled':
       return 'Failed';
     default:
+      // Claimable / Claiming have no TransferStatus equivalent.
       return null;
   }
 }
 
-function mapPaymentStatus(
-  status: LightningPaymentStatus
-): TransferStatus | null {
+function mapPaymentStatus(status: RlnPaymentStatus): TransferStatus | null {
   switch (status) {
     case 'Pending':
       return 'WaitingCounterparty';
@@ -747,6 +748,26 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.requireNode().invoiceStatus(id).then(mapInvoiceStatus);
   }
 
+  /**
+   * Canonical inbound LN status — no `TransferStatus` fold.
+   *
+   * Returns the node's own vocabulary, identical on web and RN. Prefer this
+   * over {@link getLightningReceiveRequest}, which collapses the HODL states
+   * into RGB consignment buckets that have no Lightning meaning.
+   */
+  getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
+    return this.requireNode().invoiceStatus(id);
+  }
+
+  /**
+   * Canonical outbound LN status — no `TransferStatus` fold.
+   * `null` when the payment hash is unknown to the node.
+   */
+  async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
+    const payment = await this.requireNode().getPayment(id);
+    return payment ? payment.status : null;
+  }
+
   /** Poll send status by payment hash (`'WaitingCounterparty'` → `'Settled'` | `'Failed'`). */
   async getLightningSendRequest(id: string): Promise<TransferStatus | null> {
     const payment = await this.requireNode().getPayment(id);
@@ -777,18 +798,13 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
 
   /**
    * Atomic Lightning payment (native LN pay via the RLN node). `amount` is in
-   * sats; `assetAmount` is in asset units. The core model's `maxFee` is not
-   * supported by the wasm node (LDK route limits apply) — passing it throws
-   * rather than silently ignoring a fee cap.
+   * sats; `assetAmount` is in asset units.
+   *
+   * Note: there is no fee-cap parameter — LDK route limits apply.
    */
   async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel & { assetAmount?: number }
+    params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
-    if (params.maxFee != null) {
-      throw new Error(
-        'UTEXOWallet.payLightningInvoice: maxFee is not supported by the local RLN node — remove it (LDK route limits apply)'
-      );
-    }
     const amtMsat =
       params.amount != null ? BigInt(params.amount * 1000) : undefined;
     const assetAmount =
@@ -909,7 +925,16 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Connect to a peer (`peerAddr` = `'host:port'`, plus its pubkey). */
-  connectPeer(peerAddr: string, peerPubkey: string): Promise<void> {
+  connectPeer(peerUri: string): Promise<void> {
+    // Aligned signature: `pubkey@host:port` (core's `peerUri()` helper builds it).
+    const at = peerUri.lastIndexOf('@');
+    if (at <= 0) {
+      throw new Error(
+        `UTEXOWallet.connectPeer: expected "pubkey@host:port", received "${peerUri}"`
+      );
+    }
+    const peerPubkey = peerUri.slice(0, at);
+    const peerAddr = peerUri.slice(at + 1);
     return this.requireNode().connectPeer(peerAddr, peerPubkey);
   }
 
@@ -969,7 +994,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Raw invoice status (`'Pending'` | `'Paid'` | `'Expired'`). */
-  invoiceStatus(invoice: string): Promise<InvoiceStatus> {
+  invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
     return this.requireNode().invoiceStatus(invoice);
   }
 

@@ -1,27 +1,41 @@
 import { DEFAULT_INDEXER_URLS } from './binding/RlnDefaults';
 
 // ── End-user wallet ──────────────────────────────────────────────────────────
-// Single RLN-backed wallet (RGB on-chain + native Lightning). Mirrors
-// @utexo/rgb-sdk-rn's UTEXOWallet surface (IWalletManager + IUTEXOProtocol).
+// Single RLN-backed wallet (RGB on-chain + native Lightning), implementing the
+// shared `IUTEXOWallet` contract. Platform-specific surface (PSBT signing,
+// begin/end flows, imperative VSS) is reached through optional carriers —
+// `wallet.psbt`, `wallet.beginEnd`, `wallet.vss` — rather than being flat
+// methods that throw where unsupported. See MIGRATION-PLAN-v3.md.
 export { UTEXOWallet } from './utexo/utexo-wallet';
 export type {
   UTEXOWalletCreateParams,
   RlnVssRestoreResult,
 } from './utexo/utexo-wallet';
 
-// Core protocol interfaces / base classes
-export {
-  UTEXOProtocol,
-  LightningProtocol,
-  OnchainProtocol,
-  DEFAULT_VSS_SERVER_URL,
-} from '@utexo/rgb-sdk-core';
+// VSS defaults
+//
+// The `UTEXOProtocol`/`LightningProtocol`/`OnchainProtocol` base classes and
+// the `IUTEXOProtocol` interface family were deleted from core in step 6c:
+// nothing implemented or extended them once both wallets moved to
+// `IUTEXOWallet`, and the domain-group interfaces below supersede them.
+export { DEFAULT_VSS_SERVER_URL } from '@utexo/rgb-sdk-core';
+
+// The wallet contract — shared surface plus the optional carrier types.
 export type {
-  ConfigOptions,
-  IWalletManager,
-  IUTEXOProtocol,
-  ILightningProtocol,
-  IOnchainProtocol,
+  IUTEXOWallet,
+  IUTEXOWalletCore,
+  IWalletLifecycle,
+  WalletCapabilities,
+  IPsbtSigning,
+  IBeginEndFlows,
+  IVssBackup,
+  CreateLnInvoiceRequest,
+  ILightningNode,
+  ILightningPayments,
+  ILightningAddress,
+  IOnchainTransfers,
+  IRgbAssets,
+  IBitcoinWallet,
 } from '@utexo/rgb-sdk-core';
 
 // ── RLN WASM ─────────────────────────────────────────────────────────────────
@@ -185,18 +199,10 @@ export {
   COIN_BITCOIN_TESTNET,
   NETWORK_MAP,
   BIP32_VERSIONS,
-  utexoNetworkMap,
-  utexoNetworkIdMap,
-  getDestinationAsset,
-  getUtxoNetworkConfig,
 } from '@utexo/rgb-sdk-core';
-export type {
-  NetworkAsset,
-  UtxoNetworkId,
-  UtxoNetworkPreset,
-  UtxoNetworkMap,
-  UtxoNetworkIdMap,
-  UtxoNetworkPresetConfig,
-} from '@utexo/rgb-sdk-core';
+// The UTEXO network-config table (`utexoNetworkMap`, `getUtxoNetworkConfig`,
+// presets, …) was deleted in step 6c — re-exported by both SDKs, used by
+// neither. Endpoint resolution lives in `binding/RlnDefaults.ts`.
+export type { UtxoNetworkPreset } from '@utexo/rgb-sdk-core';
 
 export { DEFAULT_INDEXER_URLS };

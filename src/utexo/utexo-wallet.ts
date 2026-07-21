@@ -13,9 +13,12 @@
  */
 
 import type {
-  IWalletManager,
   IUTEXOWallet,
-  IUTEXOProtocol,
+  IPsbtSigning,
+  IBeginEndFlows,
+  IVssBackup,
+  WalletCapabilities,
+  CreateLnInvoiceRequest,
   Network,
   BtcBalance,
   Unspent,
@@ -44,7 +47,6 @@ import type {
   VssBackupInfo,
   GetFeeEstimationResponse,
   EstimateFeeResult,
-  CreateLightningInvoiceRequestModel,
   LightningReceiveRequest,
   LightningSendRequest,
   PayLightningInvoiceRequestModel,
@@ -80,7 +82,6 @@ import type {
   LightningNetworkInfo,
   DecodedLnInvoice,
   RlnInvoiceStatus,
-  LightningAssetParam,
   SendPaymentResult,
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
@@ -101,18 +102,14 @@ export interface RlnVssRestoreResult {
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
 
 /**
- * IWalletManager minus the plain RGB send trio — UTEXOWallet exposes only the
- * RN-parity `onchainSend`/`onchainSendBegin`/`onchainSendEnd` names for RGB
- * sends (same manager implementation underneath, full param model).
+ * An `Omit<IWalletManager, 'send' | 'sendBegin' | 'sendEnd'>` alias used to sit
+ * here. Having to *subtract* from a contract in order to implement it was the
+ * clearest signal that the contract was wrong — see MIGRATION-PLAN-v3.md §0.
+ * `IUTEXOWallet` is implemented whole, with the platform-specific surface moved
+ * onto carriers instead of being omitted; `IWalletManager` itself was deleted
+ * in step 5.
  */
-type IWalletManagerBase = Omit<
-  IWalletManager,
-  'send' | 'sendBegin' | 'sendEnd'
->;
-
-export class UTEXOWallet
-  implements IWalletManagerBase, IUTEXOProtocol, IUTEXOWallet
-{
+export class UTEXOWallet implements IUTEXOWallet<void> {
   private readonly params: RlnWalletInitParams;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;
@@ -144,6 +141,69 @@ export class UTEXOWallet
       );
     }
     return this._manager;
+  }
+
+  // ── Optional capability carriers ────────────────────────────────────────────
+  //
+  // web supports all three, so every carrier is present. They exist as separate
+  // objects (rather than flat methods behind a boolean) so that on a platform
+  // that cannot perform a group, the property is simply absent and there is
+  // nothing to call — replacing the old "declare it and throw" pattern.
+  //
+  // web can do all of this because it runs TWO engines: an rgb-lib wallet in
+  // wasm *plus* the RLN node. rn has only the node, hence no PSBT to hand out
+  // and no begin/end flows. See MIGRATION-PLAN-v3.md §2.7a.
+  //
+  // Arrow functions capture `this` lazily, so `this.manager` is not touched
+  // until a carrier method is actually called — construction stays cheap.
+
+  /** PSBT signing — backed by the rgb-lib wallet (RlnSigner / BDK path). */
+  readonly psbt: IPsbtSigning = {
+    signPsbt: (psbt: string, mnemonic?: string) =>
+      this.manager.signPsbt(psbt, mnemonic),
+    estimateFee: (psbtBase64: string) => this.manager.estimateFee(psbtBase64),
+  };
+
+  /** Externally-signed begin/end flows — the rgb-lib wallet hands out PSBTs. */
+  readonly beginEnd: IBeginEndFlows = {
+    createUtxosBegin: (params) => this.manager.createUtxosBegin(params),
+    createUtxosEnd: (params) =>
+      this.withVssBackup(this.manager.createUtxosEnd(params)),
+    onchainSendBegin: (params) => this.manager.sendBegin(params),
+    onchainSendEnd: (params) =>
+      this.withVssBackup(this.manager.sendEnd(params)),
+    sendBtcBegin: (params) => this.manager.sendBtcBegin(params),
+    sendBtcEnd: (params) => this.withVssBackup(this.manager.sendBtcEnd(params)),
+    inflateBegin: (params) => this.manager.inflateBegin(params),
+    inflateEnd: (params) => this.withVssBackup(this.manager.inflateEnd(params)),
+  };
+
+  /**
+   * Imperative VSS replication.
+   *
+   * @deprecated Temporary — this shape exists because web has *two* state
+   * stores to replicate (the rgb-lib wallet and the node), while rn has one and
+   * backs it up automatically inside the node. The target is an intent-based
+   * contract (`backupNow()` / `backupStatus()`); see plan §2.7. Do not build new
+   * application code against this carrier.
+   */
+  readonly vss: IVssBackup = {
+    configureVssBackup: (config) => this.configureVssBackup(config),
+    disableVssAutoBackup: () => this.disableVssAutoBackup(),
+    vssBackup: (config) => this.vssBackup(config),
+    vssBackupInfo: (config) => this.vssBackupInfo(config),
+  };
+
+  /**
+   * Derived from carrier presence — never stored independently, so the flags
+   * cannot drift from what the object can actually do.
+   */
+  get capabilities(): WalletCapabilities {
+    return {
+      psbtSigning: this.psbt !== undefined,
+      beginEndFlows: this.beginEnd !== undefined,
+      vssBackup: this.vss !== undefined,
+    };
   }
 
   /** Fire-and-forget VSS backup after a state-changing op. No-op until VSS is
@@ -318,7 +378,7 @@ export class UTEXOWallet
     return wallet;
   }
 
-  // ── IWalletManager — Lifecycle ─────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────
 
   /** Backward-compat alias for the full init() + unlock() sequence (older
    *  code expects a ready wallet after this call). */
@@ -359,7 +419,7 @@ export class UTEXOWallet
     return this.manager.isDisposed();
   }
 
-  // ── IWalletManager — Balance & Address ─────────────────────────────────────
+  // ── Balance & Address ─────────────────────────────────────
 
   /** BTC balance (vanilla + colored). */
   getBtcBalance(): Promise<BtcBalance> {
@@ -381,7 +441,7 @@ export class UTEXOWallet
     return this.manager.rotateColoredAddress();
   }
 
-  // ── IWalletManager — UTXO Management ───────────────────────────────────────
+  // ── UTXO Management ───────────────────────────────────────
 
   /** List unspent UTXOs with their RGB allocations. */
   listUnspents(): Promise<Unspent[]> {
@@ -408,7 +468,7 @@ export class UTEXOWallet
     return this.withVssBackup(this.manager.createUtxos(params));
   }
 
-  // ── IWalletManager — Asset Operations ──────────────────────────────────────
+  // ── Asset Operations ──────────────────────────────────────
 
   /** List all RGB assets held by the wallet. */
   listAssets(): Promise<ListAssets> {
@@ -448,7 +508,7 @@ export class UTEXOWallet
     return this.withVssBackup(this.manager.inflate(params, mnemonic));
   }
 
-  // ── IWalletManager — Sending BTC ───────────────────────────────────────────
+  // ── Sending BTC ───────────────────────────────────────────
 
   /** Begin an on-chain BTC send — returns an unsigned PSBT for external signing. */
   sendBtcBegin(params: SendBtcBeginRequestModel): Promise<string> {
@@ -465,7 +525,7 @@ export class UTEXOWallet
     return this.withVssBackup(this.manager.sendBtc(params));
   }
 
-  // ── IWalletManager — Receiving Assets ──────────────────────────────────────
+  // ── Receiving Assets ──────────────────────────────────────
 
   /** Create a blinded-UTXO RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
@@ -482,7 +542,7 @@ export class UTEXOWallet
     return this.manager.decodeRGBInvoice(params);
   }
 
-  // ── IWalletManager — Transactions & Transfers ──────────────────────────────
+  // ── Transactions & Transfers ──────────────────────────────
 
   /** On-chain transaction history. */
   listTransactions(): Promise<Transaction[]> {
@@ -512,7 +572,7 @@ export class UTEXOWallet
     return this.manager.syncWallet();
   }
 
-  // ── IWalletManager — VSS Backup ────────────────────────────────────────────
+  // ── VSS Backup ────────────────────────────────────────────
 
   /** Enable VSS (cloud) auto-backup — called automatically by init();
    *  only needed to override the mnemonic-derived config. Every
@@ -628,7 +688,7 @@ export class UTEXOWallet
     return this.manager.vssRestoreBackup();
   }
 
-  // ── IWalletManager — Fee Estimation ────────────────────────────────────────
+  // ── Fee Estimation ────────────────────────────────────────
 
   /** Fee-rate estimate (sat/vB) for a target confirmation in `blocks`. */
   estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
@@ -640,7 +700,7 @@ export class UTEXOWallet
     return this.manager.estimateFee(psbtBase64);
   }
 
-  // ── IWalletManager — Backup ────────────────────────────────────────────────
+  // ── Backup ────────────────────────────────────────────────
 
   /** Create an encrypted backup — read the bytes with {@link getLastBackupBytes}. */
   createBackup(params: {
@@ -660,7 +720,7 @@ export class UTEXOWallet
     this.manager.restoreFromBackupBytes(bytes, password);
   }
 
-  // ── IWalletManager — Cryptographic Operations ──────────────────────────────
+  // ── Cryptographic Operations ──────────────────────────────
 
   /** Sign a PSBT with the wallet mnemonic (BDK path). */
   signPsbt(psbt: string, mnemonic?: string): Promise<string> {
@@ -691,25 +751,16 @@ export class UTEXOWallet
    * silently issuing an amount-less invoice.
    */
   async createLightningInvoice(
-    params: Omit<CreateLightningInvoiceRequestModel, 'asset'> & {
-      asset?: LightningAssetParam;
-      paymentHash?: string | null;
-    }
+    params: CreateLnInvoiceRequest
   ): Promise<LightningReceiveRequest> {
     const amtMsat =
       params.amountSats != null ? BigInt(params.amountSats * 1000) : undefined;
     const assetId = params.asset?.assetId || undefined;
-    const assetUnits = params.asset?.amount ?? params.asset?.assetAmount;
-    if (assetId && assetUnits == null) {
-      throw new Error(
-        'UTEXOWallet.createLightningInvoice: asset.amount (or its alias asset.assetAmount) is required when asset.assetId is set'
-      );
-    }
     const resp = await this.requireNode().createLnInvoice({
       amtMsat,
       expirySec: params.expirySeconds ?? 3600,
       assetId,
-      assetAmount: assetId != null ? BigInt(assetUnits!) : undefined,
+      assetAmount: assetId != null ? BigInt(params.asset!.amount) : undefined,
     });
     return { lnInvoice: resp.invoice };
   }

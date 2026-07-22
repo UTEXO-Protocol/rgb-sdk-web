@@ -19,7 +19,12 @@ import {
   rgbRestoreKeysValue,
 } from '@utexo/rln-wasm';
 import { initRlnWasm } from '../wasm/initRln';
-import { WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
+import {
+  WalletError,
+  logger,
+  normalizeNetwork,
+  normalizeRlnNetwork,
+} from '@utexo/rgb-sdk-core';
 import { DEFAULT_INDEXER_URLS } from './RlnDefaults';
 import type { IRlnSdkBinding } from '../rln';
 import type { IRlnNodeBinding } from '../rln';
@@ -283,6 +288,28 @@ function normalizeReceiveData(
     recipientId: String(raw.recipient_id ?? ''),
     expirationTimestamp: (raw.expiration_timestamp ?? null) as number | null,
     batchTransferIdx: Number(raw.batch_transfer_idx ?? 0),
+  };
+}
+
+/** The decoders return the wire shape (snake_case, `network: "Regtest"`);
+ *  the decoded payload does not echo the invoice string, so it is passed in. */
+function normalizeInvoiceData(
+  invoice: string,
+  raw: Record<string, unknown>
+): InvoiceData {
+  return {
+    invoice,
+    recipientId: String(raw.recipient_id ?? ''),
+    assetSchema: (raw.asset_schema ?? undefined) as
+      InvoiceData['assetSchema'] | undefined,
+    assetId: (raw.asset_id ?? undefined) as string | undefined,
+    network: normalizeRlnNetwork(raw.network),
+    assignment: parseAssignment(raw.assignment),
+    assignmentName: (raw.assignment_name ?? undefined) as string | undefined,
+    expirationTimestamp: (raw.expiration_timestamp ?? null) as number | null,
+    transportEndpoints: ((raw.transport_endpoints ?? []) as unknown[]).map(
+      String
+    ),
   };
 }
 
@@ -955,12 +982,12 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       const raw = parseJson<Record<string, unknown>>(
         this.nodeHandle.decodeRgbInvoiceJson(params.invoice)
       );
-      return raw as unknown as InvoiceData;
+      return normalizeInvoiceData(params.invoice, raw);
     }
     // Fallback: use standalone RlnWasmInvoice parser (no node needed)
     const invoiceObj = new RlnWasmInvoice(params.invoice);
     const raw = invoiceObj.invoiceDataValue() as Record<string, unknown>;
-    return raw as unknown as InvoiceData;
+    return normalizeInvoiceData(params.invoice, raw);
   }
 
   // ── Transactions & Transfers ───────────────────────────────────────────────

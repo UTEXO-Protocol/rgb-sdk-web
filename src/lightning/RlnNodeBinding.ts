@@ -10,6 +10,7 @@ import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 import {
   tryNormalizeInvoiceStatus,
   tryNormalizePaymentStatus,
+  tryNormalizeRlnNetwork,
 } from '@utexo/rgb-sdk-core';
 import type { IRlnNodeBinding } from '../rln';
 import type {
@@ -213,7 +214,9 @@ function normalizeNodeInfo(raw: RlnRawNodeInfo): LightningNodeInfo {
 
 function normalizeNetworkInfo(raw: RlnRawNetworkInfo): LightningNetworkInfo {
   return {
-    network: String(raw.network ?? ''),
+    // `try…`: an unrecognised network stays visible rather than throwing
+    // inside a read-only info call.
+    network: tryNormalizeRlnNetwork(raw.network) ?? String(raw.network ?? ''),
     blockHeight: Number(raw.height ?? 0),
   };
 }

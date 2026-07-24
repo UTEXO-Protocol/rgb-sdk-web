@@ -1,8 +1,7 @@
 # Changelog
 
-## Unreleased
 
-### Breaking
+## 1.0.0-beta.11
 
 All four align the web surface with `@utexo/rgb-sdk-rn` (RN parity), so app code
 ports across web ↔ RN unchanged.

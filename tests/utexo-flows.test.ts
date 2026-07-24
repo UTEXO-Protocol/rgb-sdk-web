@@ -1,8 +1,8 @@
 /**
  * UTEXOWallet API structure tests.
  *
- * Verifies the RLN-backed UTEXOWallet exposes the IWalletManager + IUTEXOProtocol
- * surface (mirroring @utexo/rgb-sdk-rn) plus the RLN/Lightning extras. These are
+ * Verifies the RLN-backed UTEXOWallet exposes the IUTEXOProtocol surface
+ * (mirroring @utexo/rgb-sdk-rn) plus the RLN/Lightning extras. These are
  * shape-only checks (method presence) — no WASM is instantiated.
  */
 import { UTEXOWallet } from '../dist/index.mjs';
@@ -125,8 +125,8 @@ describe('UTEXOWallet API', () => {
       'createLightningInvoice',
       'payLightningInvoice',
       'listLightningPayments',
-      'getLightningReceiveRequest',
-      'getLightningSendRequest',
+      'getLightningReceiveStatus',
+      'getLightningSendStatus',
     ].forEach(hasMethod);
   });
 
@@ -157,7 +157,7 @@ describe('UTEXOWallet API', () => {
       'getPayment',
       'decodeLnInvoice',
       'invoiceStatus',
-      'createHodlLnInvoice',
+      'createHodlInvoice',
       'claimHodlInvoice',
       'cancelHodlInvoice',
     ].forEach(hasMethod);

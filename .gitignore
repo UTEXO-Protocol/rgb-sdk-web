@@ -12,3 +12,5 @@ CLAUDE.md
 dist/
 scripts/
 .rgb-wallet/
+test-results/
+playwright-report/

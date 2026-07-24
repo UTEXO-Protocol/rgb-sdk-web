@@ -4,6 +4,8 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  // tests/e2e is Playwright's (npm run test:e2e) — jest must not collect it.
+  testPathIgnorePatterns: ['<rootDir>/tests/e2e/'],
   // Use ESM for tests since we have experimental flags
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

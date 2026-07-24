@@ -1,27 +1,35 @@
 import { DEFAULT_INDEXER_URLS } from './binding/RlnDefaults';
 
 // ── End-user wallet ──────────────────────────────────────────────────────────
-// Single RLN-backed wallet (RGB on-chain + native Lightning). Mirrors
-// @utexo/rgb-sdk-rn's UTEXOWallet surface (IWalletManager + IUTEXOProtocol).
+// Single RLN-backed wallet (RGB on-chain + native Lightning), implementing the
+// shared `IUTEXOProtocol` contract. Platform-specific surface (PSBT signing,
+// begin/end flows, imperative VSS) is reached through optional carriers —
+// `wallet.psbt`, `wallet.beginEnd` — rather than being flat methods that throw
+// where unsupported.
 export { UTEXOWallet } from './utexo/utexo-wallet';
 export type {
   UTEXOWalletCreateParams,
   RlnVssRestoreResult,
 } from './utexo/utexo-wallet';
 
-// Core protocol interfaces / base classes
-export {
-  UTEXOProtocol,
-  LightningProtocol,
-  OnchainProtocol,
-  DEFAULT_VSS_SERVER_URL,
-} from '@utexo/rgb-sdk-core';
+// VSS defaults
+export { DEFAULT_VSS_SERVER_URL } from '@utexo/rgb-sdk-core';
+
+// The UTEXO protocol contract — shared surface plus the optional carrier types.
 export type {
-  ConfigOptions,
-  IWalletManager,
   IUTEXOProtocol,
-  ILightningProtocol,
-  IOnchainProtocol,
+  IUTEXOProtocolCore,
+  IWalletLifecycle,
+  WalletCapabilities,
+  IPsbtSigning,
+  IBeginEndFlows,
+  CreateLnInvoiceRequest,
+  ILightningNode,
+  ILightningPayments,
+  IAsyncPayments,
+  IOnchainTransfers,
+  IRgbAssets,
+  IBitcoinWallet,
 } from '@utexo/rgb-sdk-core';
 
 // ── RLN WASM ─────────────────────────────────────────────────────────────────
@@ -52,7 +60,17 @@ export type { IRlnWalletBinding, IRlnNodeBinding, IRlnSdkBinding } from './rln';
 export type * from './types/rln-model';
 
 // ── LSP (utexo-lsp) — APay, Lightning Address, RGB↔LN bridge flows ────────────
-export { UtexoLsp } from './lsp/UtexoLsp';
+// Re-exported from @utexo/rgb-sdk-core.
+export {
+  UtexoLsp,
+  UtexoLSPClient,
+  LspError,
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+  peerUri,
+  normalizeReceiveStatus,
+} from '@utexo/rgb-sdk-core';
 export type {
   WaitOptions,
   ReceiveAssetOptions,
@@ -62,23 +80,43 @@ export type {
   PayAddressOptions,
   LightningAddressInfo,
   ClaimResult,
-} from './lsp/UtexoLsp';
-export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
-export {
-  LspChannelTimeoutError,
-  LspLiquidityTimeoutError,
-  LspSettlementError,
-} from './lsp/LspErrors';
-export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
-export { peerUri, normalizeReceiveStatus } from './lsp/lsp-types';
-export type * from './lsp/lsp-types';
+  IUtexoLSPClient,
+  ILspWallet,
+  LspClientConfig,
+  LspGetInfoResponse,
+  LspGetInfoWire,
+  LspLnParams,
+  LspOnchainSendRequest,
+  LspOnchainSendResponse,
+  LspOnchainSendWire,
+  LspRgbParams,
+  LspLightningReceiveRequest,
+  LspLightningReceiveResponse,
+  LspLightningReceiveWire,
+  LspLnurlpCallbackResponse,
+  LspLnurlpCallbackWire,
+  LspLightningAddressByPubkeyResponse,
+  LspLightningAddressByPubkeyWire,
+  LspApayInvoiceProofWire,
+  ApayInvoiceProof,
+  ApayMerkleProofElement,
+  LspPeer,
+  ReceiveStatus,
+  ReceiveSettlementOutcome,
+  ChannelReadyInfo,
+} from '@utexo/rgb-sdk-core';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export * from './types/rgb-model';
+// Unspent / Utxo / RgbAllocation come from core — the shape listUnspents()
+// actually returns.
 export type {
+  Unspent,
+  Utxo,
+  RgbAllocation,
+  Assignment,
+  AssignmentType,
   TransferStatus,
-  BridgeTransferStatus,
-  OnchainSendStatus,
   VssBackupConfig,
   VssBackupInfo,
 } from '@utexo/rgb-sdk-core';
@@ -154,18 +192,8 @@ export {
   COIN_BITCOIN_TESTNET,
   NETWORK_MAP,
   BIP32_VERSIONS,
-  utexoNetworkMap,
-  utexoNetworkIdMap,
-  getDestinationAsset,
-  getUtxoNetworkConfig,
 } from '@utexo/rgb-sdk-core';
-export type {
-  NetworkAsset,
-  UtxoNetworkId,
-  UtxoNetworkPreset,
-  UtxoNetworkMap,
-  UtxoNetworkIdMap,
-  UtxoNetworkPresetConfig,
-} from '@utexo/rgb-sdk-core';
+// Endpoint resolution lives in `binding/RlnDefaults.ts`.
+export type { UtxoNetworkPreset } from '@utexo/rgb-sdk-core';
 
 export { DEFAULT_INDEXER_URLS };

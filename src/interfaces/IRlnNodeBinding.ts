@@ -1,9 +1,10 @@
 import type {
   LightningChannel,
   OpenChannelParams,
+  OpenChannelResult,
   LightningInvoice,
   CreateLnInvoiceParams,
-  CreateHodlLnInvoiceParams,
+  CreateHodlInvoiceParams,
   LightningPayment,
   SendPaymentParams,
   SendPaymentResult,
@@ -12,7 +13,7 @@ import type {
   LightningNodeInfo,
   LdkRuntimeStatus,
   LightningNetworkInfo,
-  InvoiceStatus,
+  RlnInvoiceStatus,
   DecodedLnInvoice,
   HodlInvoiceResult,
   PaymentStatusUpdate,
@@ -21,7 +22,7 @@ import type {
   IssueAssetCfaRequest,
   ApayNewResponse,
   LdkVssBackupInfo,
-} from '../types/rln-model';
+} from '../rln';
 import type { AssetNIA, AssetCFA } from '@utexo/rgb-sdk-core';
 
 /**
@@ -37,7 +38,7 @@ export interface IRlnNodeBinding {
   issueAssetCfa(params: IssueAssetCfaRequest): Promise<AssetCFA>;
 
   // ── Channels ───────────────────────────────────────────────────────────────
-  openChannel(params: OpenChannelParams): Promise<string>;
+  openChannel(params: OpenChannelParams): Promise<OpenChannelResult>;
   closeChannel(channelId: string, peerPubkey?: string, force?: boolean): void;
   listChannels(): Promise<LightningChannel[]>;
 
@@ -47,14 +48,12 @@ export interface IRlnNodeBinding {
   keysend(params: KeysendParams): Promise<SendPaymentResult>;
   listPayments(): Promise<LightningPayment[]>;
   getPayment(paymentHash: string): Promise<LightningPayment | null>;
-  invoiceStatus(invoice: string): Promise<InvoiceStatus>;
+  invoiceStatus(invoice: string): Promise<RlnInvoiceStatus>;
   failPendingPayments(): Promise<void>;
   updatePaymentStatus(params: PaymentStatusUpdate): Promise<void>;
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
-  createHodlLnInvoice(
-    params: CreateHodlLnInvoiceParams
-  ): Promise<LightningInvoice>;
+  createHodlInvoice(params: CreateHodlInvoiceParams): Promise<LightningInvoice>;
   cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult>;
   claimHodlInvoice(
     paymentHash: string,

@@ -19,7 +19,13 @@ import {
   rgbRestoreKeysValue,
 } from '@utexo/rln-wasm';
 import { initRlnWasm } from '../wasm/initRln';
-import { WalletError, logger, normalizeNetwork } from '@utexo/rgb-sdk-core';
+import {
+  WalletError,
+  ValidationError,
+  logger,
+  normalizeNetwork,
+  normalizeRlnNetwork,
+} from '@utexo/rgb-sdk-core';
 import { DEFAULT_INDEXER_URLS } from './RlnDefaults';
 import type { IRlnSdkBinding } from '../rln';
 import type { IRlnNodeBinding } from '../rln';
@@ -67,12 +73,19 @@ import type {
   SwapInfo,
 } from '../rln';
 import type {
+  PendingFundingRequest,
+  BuildFundingTxParams,
+  FundingTx,
+  SubmitFundingParams,
+} from '../rln';
+import type {
   RlnWalletData,
   RlnOnline,
   RlnRawBtcBalance,
   RlnRawBalance,
   RlnRawAssetNia,
   RlnRawAssetCfa,
+  RlnRawAssetIfa,
   RlnRawListAssets,
   RlnRawTransfer,
   RlnRawTransaction,
@@ -81,6 +94,7 @@ import type {
   RlnRawSendResult,
   RlnRawAssetBalance,
   RlnRawTransportEndpoint,
+  RlnRawPendingFunding,
 } from './RlnWasmTypes';
 
 // ─── Params ───────────────────────────────────────────────────────────────────
@@ -193,13 +207,32 @@ function normalizeAssetCfa(a: RlnRawAssetCfa): AssetCFA {
   };
 }
 
+function normalizeAssetIfa(a: RlnRawAssetIfa): AssetIfa {
+  return {
+    assetId: String(a.asset_id ?? ''),
+    ticker: String(a.ticker ?? ''),
+    name: String(a.name ?? ''),
+    details: (a.details ?? undefined) as string | undefined,
+    precision: Number(a.precision ?? 0),
+    initialSupply: Number(a.initial_supply ?? 0),
+    maxSupply: Number(a.max_supply ?? 0),
+    knownCirculatingSupply: Number(a.known_circulating_supply ?? 0),
+    timestamp: Number(a.timestamp ?? 0),
+    addedAt: Number(a.added_at ?? 0),
+    balance: normalizeBalance(a.balance),
+    rejectListUrl: (a.reject_list_url ?? undefined) as string | undefined,
+  };
+}
+
 function normalizeListAssets(raw: unknown): ListAssets {
   const r = raw as RlnRawListAssets;
   return {
     nia: (r.nia ?? []).map(normalizeAssetNia),
     cfa: (r.cfa ?? []).map(normalizeAssetCfa),
     uda: [],
-    ifa: [],
+    // `listAssetsJson(['Nia', 'Ifa'])` asks for IFA — dropping them here would
+    // make an issued IFA invisible to listAssets on web.
+    ifa: (r.ifa ?? []).map(normalizeAssetIfa),
   };
 }
 
@@ -283,6 +316,28 @@ function normalizeReceiveData(
     recipientId: String(raw.recipient_id ?? ''),
     expirationTimestamp: (raw.expiration_timestamp ?? null) as number | null,
     batchTransferIdx: Number(raw.batch_transfer_idx ?? 0),
+  };
+}
+
+/** The decoders return the wire shape (snake_case, `network: "Regtest"`);
+ *  the decoded payload does not echo the invoice string, so it is passed in. */
+function normalizeInvoiceData(
+  invoice: string,
+  raw: Record<string, unknown>
+): InvoiceData {
+  return {
+    invoice,
+    recipientId: String(raw.recipient_id ?? ''),
+    assetSchema: (raw.asset_schema ?? undefined) as
+      InvoiceData['assetSchema'] | undefined,
+    assetId: (raw.asset_id ?? undefined) as string | undefined,
+    network: normalizeRlnNetwork(raw.network),
+    assignment: parseAssignment(raw.assignment),
+    assignmentName: (raw.assignment_name ?? undefined) as string | undefined,
+    expirationTimestamp: (raw.expiration_timestamp ?? null) as number | null,
+    transportEndpoints: ((raw.transport_endpoints ?? []) as unknown[]).map(
+      String
+    ),
   };
 }
 
@@ -687,6 +742,96 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     }
   }
 
+  // ── Channel funding (web-only) ─────────────────────────────────────────────
+  //
+  // `openChannel` is phase one: LDK answers with FundingGenerationReady and
+  // waits. The app owns phase two, because the wasm node has no wallet of its
+  // own to fund from — list what is pending, build+sign the funding tx with
+  // the BDK wallet, hand the raw hex back to LDK. rn needs none of this: its
+  // node funds channels internally.
+
+  async listPendingFundingRequests(): Promise<PendingFundingRequest[]> {
+    const node = this.requireNodeHandle();
+    // Read paths double as the drive beat — the wasm node has no background
+    // executor, so without this LDK never emits FundingGenerationReady and the
+    // queue this reads stays empty forever.
+    try {
+      await node.chainSyncTickValue();
+    } catch {
+      /* no sync session yet, or a transient indexer error */
+    }
+    try {
+      node.processNativeRuntimeQueueValue();
+    } catch {
+      /* nothing queued */
+    }
+    const raw = parseJson<RlnRawPendingFunding[]>(
+      node.listPendingFundingRequestsJson()
+    );
+    return (raw ?? []).map((r) => ({
+      temporaryChannelId: String(r.temporary_channel_id ?? ''),
+      counterpartyNodeId: String(r.counterparty_node_id ?? ''),
+      outputScriptHex: String(r.output_script_hex ?? ''),
+      channelValueSat: Number(r.channel_value_satoshis ?? 0),
+    }));
+  }
+
+  async buildLightningFundingTx(
+    params: BuildFundingTxParams
+  ): Promise<FundingTx> {
+    const online = this.requireOnline();
+    const raw = parseJson<{
+      funding_tx_hex?: string;
+      txid?: string;
+      address?: string;
+      signed_psbt?: string;
+    }>(
+      await this.wallet.buildLightningFundingTxJson(
+        online,
+        params.outputScriptHex,
+        BigInt(params.amountSat),
+        BigInt(params.feeRate ?? 1)
+      )
+    );
+    return {
+      fundingTxHex: String(raw.funding_tx_hex ?? ''),
+      txid: String(raw.txid ?? ''),
+      address: raw.address ?? undefined,
+      signedPsbt: raw.signed_psbt ?? undefined,
+    };
+  }
+
+  async submitFundingTransaction(params: SubmitFundingParams): Promise<void> {
+    const node = this.requireNodeHandle();
+    node.submitFundingTransactionValue({
+      temporary_channel_id: params.temporaryChannelId,
+      counterparty_node_id: params.counterpartyNodeId,
+      funding_tx_hex: params.fundingTxHex,
+    });
+    // `buildLightningFundingTx` signs but deliberately does not broadcast, and
+    // handing the hex to LDK does not broadcast it either — the channel would
+    // sit at "pending awaiting funding lock-in" forever. Queue it on the
+    // chain-sync session, which the drive beat flushes.
+    if (params.txid) {
+      try {
+        node.chainSyncEnqueueRebroadcastTx(params.txid, params.fundingTxHex);
+      } catch {
+        /* no sync session yet; the next tick re-queues */
+      }
+    }
+  }
+
+  private requireNodeHandle(): RlnWasmNode {
+    if (!this.nodeHandle) {
+      throw new WalletError(
+        'Channel funding requires a Lightning node (proxyUrl must be configured)',
+        'funding'
+      );
+    }
+    this.ensureNodeAttached();
+    return this.nodeHandle;
+  }
+
   private requireOnline(): RlnOnline {
     if (!this.online) {
       throw new WalletError(
@@ -782,27 +927,32 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       );
     }
     this.ensureNodeAttached();
-    // IFA → CFA mapping (RLN uses CFA schema for fungible assets with inflation)
-    const raw = this.nodeHandle.issueAssetCfaValue({
+    const raw = this.nodeHandle.issueAssetIfaValue({
+      ticker: params.ticker,
       name: params.name,
       precision: params.precision,
       amounts: params.amounts.map(BigInt),
-    });
-    const cfa = normalizeAssetCfa(raw as RlnRawAssetCfa);
-    // Return as AssetIfa shape (best-effort mapping)
+      inflation_amounts: params.inflationAmounts.map(BigInt),
+      reject_list_url: params.rejectListUrl ?? null,
+    }) as RlnRawAssetIfa;
     return {
-      assetId: cfa.assetId,
-      ticker: params.ticker,
-      name: cfa.name,
-      details: cfa.details,
-      precision: cfa.precision,
-      initialSupply: cfa.issuedSupply,
-      maxSupply: cfa.issuedSupply,
-      knownCirculatingSupply: cfa.issuedSupply,
-      timestamp: cfa.timestamp,
-      addedAt: cfa.addedAt,
-      balance: cfa.balance,
-    } as AssetIfa;
+      assetId: String(raw.asset_id ?? ''),
+      ticker: String(raw.ticker ?? params.ticker),
+      name: String(raw.name ?? params.name),
+      details: (raw.details ?? undefined) as string | undefined,
+      precision: Number(raw.precision ?? params.precision),
+      initialSupply: Number(raw.initial_supply ?? 0),
+      maxSupply: Number(raw.max_supply ?? 0),
+      knownCirculatingSupply: Number(raw.known_circulating_supply ?? 0),
+      timestamp: Number(raw.timestamp ?? 0),
+      addedAt: Number(raw.added_at ?? 0),
+      balance: {
+        settled: Number(raw.balance?.settled ?? 0),
+        future: Number(raw.balance?.future ?? 0),
+        spendable: Number(raw.balance?.spendable ?? 0),
+      },
+      rejectListUrl: (raw.reject_list_url ?? undefined) as string | undefined,
+    };
   }
 
   async inflateBegin(_params: InflateAssetIfaRequestModel): Promise<string> {
@@ -840,6 +990,26 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     const assetId = String(
       invoiceData.asset_id ?? invoiceData.assetId ?? params.assetId ?? ''
     );
+    // A blank invoice (blinded/witness) names no asset — the payer must. Fail
+    // with a clear message instead of rgb-lib's "Asset with id  not found".
+    if (!assetId) {
+      throw new ValidationError(
+        'onchainSend: the invoice names no asset, so `assetId` is required. ' +
+          'Blinded and witness invoices are blank — the payer names the asset ' +
+          'and amount.',
+        'assetId'
+      );
+    }
+    // rgb-lib marks a witness recipient with a `wvout:` id; paying one needs
+    // `witnessData.amountSat` (the sat value of the output being created).
+    if (recipientId.includes('wvout:') && !params.witnessData) {
+      throw new ValidationError(
+        'onchainSend: this is a witness invoice — `witnessData.amountSat` is ' +
+          'required (the sat value of the output being created). Blinded ' +
+          'invoices must omit it.',
+        'witnessData'
+      );
+    }
     const endpoints = (invoiceData.transport_endpoints ??
       invoiceData.transportEndpoints ?? [
         this._transportEndpoint(),
@@ -955,12 +1125,12 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       const raw = parseJson<Record<string, unknown>>(
         this.nodeHandle.decodeRgbInvoiceJson(params.invoice)
       );
-      return raw as unknown as InvoiceData;
+      return normalizeInvoiceData(params.invoice, raw);
     }
     // Fallback: use standalone RlnWasmInvoice parser (no node needed)
     const invoiceObj = new RlnWasmInvoice(params.invoice);
     const raw = invoiceObj.invoiceDataValue() as Record<string, unknown>;
-    return raw as unknown as InvoiceData;
+    return normalizeInvoiceData(params.invoice, raw);
   }
 
   // ── Transactions & Transfers ───────────────────────────────────────────────
@@ -1019,7 +1189,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }): Promise<GetFeeEstimationResponse> {
     const online = this.requireOnline();
     const fee = await this.wallet.getFeeEstimation(online, params.blocks);
-    return fee as GetFeeEstimationResponse;
+    return { feeRate: Number(fee) };
   }
 
   async createBackup(params: {
@@ -1063,10 +1233,20 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   async vssBackup(_config: VssBackupConfig): Promise<number> {
-    const raw = parseJson<{ version?: number }>(
-      await this.walletPreUnlock.vssBackupJson()
-    );
-    return raw.version ?? 0;
+    // `vssBackupJson()` serializes a bare number, not `{ version }`.
+    const raw = parseJson<unknown>(await this.walletPreUnlock.vssBackupJson());
+    const version =
+      typeof raw === 'number'
+        ? raw
+        : typeof (raw as { version?: unknown } | null)?.version === 'number'
+          ? (raw as { version: number }).version
+          : null;
+    if (version === null) {
+      throw new WalletError(
+        `vssBackup: unexpected response from the runtime: ${JSON.stringify(raw)}`
+      );
+    }
+    return version;
   }
 
   async vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {

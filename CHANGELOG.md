@@ -1,5 +1,46 @@
 # Changelog
 
+
+## 1.0.0-beta.11
+
+All four align the web surface with `@utexo/rgb-sdk-rn` (RN parity), so app code
+ports across web ↔ RN unchanged.
+
+- **`openChannel` now opens _and funds_ the channel** — `openChannel(params, opts?)`
+  returns `Promise<WebOpenChannelResult>` (`{ temporaryChannelId, fundingTxid?,
+  fundingTxHex? }`) instead of `Promise<string>` (bare temporary channel id).
+  It polls for the funding request, builds and signs the funding tx (BDK) and
+  submits it, resolving once the funding tx is submitted (poll `listChannels()`
+  for readiness). Previously it only opened the channel and left it unfunded.
+  `opts` accepts `{ fundingTimeoutMs?, pollIntervalMs? }`. RN's node funds
+  channels internally and returns the shared `OpenChannelResult`;
+  `WebOpenChannelResult` is a superset that adds the web-only funding fields.
+  Migration: `const { temporaryChannelId } = await wallet.openChannel(params)`
+- **`connectPeer(peerUri)` takes a single `'pubkey@host:port'` string** instead
+  of `connectPeer(peerAddr, peerPubkey)`. Matches RN's `connectPeer(peerPubkeyAndAddr)`.
+  Migration: `wallet.connectPeer('<pubkey>@<host>:<port>')`
+- **`closeChannel(...)` is now `async` (`Promise<void>`)** — was synchronous (`void`)
+- **`invoiceStatus()` / `getLightningReceiveStatus()` return `RlnInvoiceStatus`**
+  (`'Pending' | 'Claimable' | 'Claiming' | 'Succeeded' | 'Cancelled' | 'Failed' |
+  'Expired'`) instead of the legacy `InvoiceStatus` (`'Paid'`). Send-side
+  `getLightningSendStatus()` likewise returns `RlnPaymentStatus | null`
+
+### Changed
+
+- **`RlnWalletManager` is now standalone** — it no longer extends
+  `BaseWalletManager` (removed). `binding` and `signer` are required and
+  non-null; every public method stays `async` so validation/disposal failures
+  surface as promise rejections
+- **Wallet contract consolidated on `IUTEXOWallet`** — the `IWalletManager` /
+  `IUTEXOProtocol` interface family is gone. `UTEXOWallet` implements the shared
+  `IUTEXOWallet` contract whole, with platform-specific surface (PSBT signing,
+  begin/end flows) on the optional `psbt` / `beginEnd` carriers
+- **LSP moved to core** — `UtexoLsp` / `UtexoLSPClient` and the LSP types are now
+  re-exported from `@utexo/rgb-sdk-core` (previously `src/lsp/`); the public API
+  of this package is unchanged
+- Source comments and JSDoc trimmed to state contracts and invariants only;
+  README method-reference headings no longer name the removed interfaces
+
 ## 1.0.0-beta.10
 
 **Breaking — RLN-only architecture.** The SDK now runs entirely in the browser

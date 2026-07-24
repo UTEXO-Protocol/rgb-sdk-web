@@ -13,14 +13,18 @@
  */
 
 import type {
-  IWalletManager,
   IUTEXOProtocol,
+  IPsbtSigning,
+  IBeginEndFlows,
+  WalletCapabilities,
+  CreateLnInvoiceRequest,
   Network,
   BtcBalance,
   Unspent,
   ListAssets,
   AssetBalance,
   AssetNIA,
+  AssetIfa,
   Transaction,
   Transfer,
   InvoiceRequest,
@@ -43,50 +47,50 @@ import type {
   VssBackupInfo,
   GetFeeEstimationResponse,
   EstimateFeeResult,
-  CreateLightningInvoiceRequestModel,
   LightningReceiveRequest,
   LightningSendRequest,
   PayLightningInvoiceRequestModel,
-  GetLightningSendFeeEstimateRequestModel,
   ListLightningPaymentsResponse,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
   OnchainSendResponse,
-  OnchainSendStatus,
-  TransferStatus,
 } from '@utexo/rgb-sdk-core';
 import {
   logger,
   buildVssConfigFromMnemonic,
   DEFAULT_VSS_SERVER_URL,
 } from '@utexo/rgb-sdk-core';
-import { RlnWalletManager } from '../wallet/rln-wallet-manager';
+import {
+  RlnWalletManager,
+  DEFAULT_FEE_RATE_SAT_VB,
+} from '../wallet/rln-wallet-manager';
 import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
-import { UtexoLsp } from '../lsp/UtexoLsp';
-import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
-import type { LspPeer } from '../lsp/lsp-types';
+import { UtexoLsp } from '@utexo/rgb-sdk-core';
+import { UtexoLSPClient } from '@utexo/rgb-sdk-core';
+import type { LspPeer } from '@utexo/rgb-sdk-core';
 import { resolveLspBaseUrl } from '../binding/RlnDefaults';
 import type {
   IRlnNodeBinding,
   IssueAssetCfaRequest,
   LightningChannel,
   OpenChannelParams,
-  CreateHodlLnInvoiceParams,
+  CreateHodlInvoiceParams,
   HodlInvoiceResult,
   LightningInvoice,
   LightningPayment,
-  LightningPaymentStatus,
+  RlnPaymentStatus,
   LightningPeer,
   LightningNodeInfo,
   LightningNetworkInfo,
   DecodedLnInvoice,
-  InvoiceStatus,
-  LightningAssetParam,
+  RlnInvoiceStatus,
   SendPaymentResult,
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
   ApayNewResponse,
   LdkVssBackupInfo,
+  PendingFundingRequest,
+  WebOpenChannelResult,
 } from '../rln';
 
 export type { RlnWalletInitParams as UTEXOWalletCreateParams };
@@ -99,49 +103,14 @@ export interface RlnVssRestoreResult {
   serverVersion: number | null;
 }
 
-// ── Status mappers (RLN → core TransferStatus) ───────────────────────────────
-
-function mapInvoiceStatus(status: InvoiceStatus): TransferStatus | null {
-  switch (status) {
-    case 'Pending':
-      return 'WaitingCounterparty';
-    case 'Paid':
-      return 'Settled';
-    case 'Expired':
-      return 'Failed';
-    default:
-      return null;
-  }
-}
-
-function mapPaymentStatus(
-  status: LightningPaymentStatus
-): TransferStatus | null {
-  switch (status) {
-    case 'Pending':
-      return 'WaitingCounterparty';
-    case 'Succeeded':
-      return 'Settled';
-    case 'Failed':
-      return 'Failed';
-    default:
-      return null;
-  }
-}
-
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
 
 /**
- * IWalletManager minus the plain RGB send trio — UTEXOWallet exposes only the
- * RN-parity `onchainSend`/`onchainSendBegin`/`onchainSendEnd` names for RGB
- * sends (same manager implementation underneath, full param model).
+ * Implements the shared `IUTEXOProtocol` contract whole; platform-specific
+ * surface (PSBT signing, begin/end flows) lives on optional carriers rather
+ * than flat methods that throw where unsupported.
  */
-type IWalletManagerBase = Omit<
-  IWalletManager,
-  'send' | 'sendBegin' | 'sendEnd'
->;
-
-export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
+export class UTEXOWallet implements IUTEXOProtocol<void> {
   private readonly params: RlnWalletInitParams;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;
@@ -154,7 +123,12 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   // Auto VSS backup: the wasm wallet-stream backup is manual-only, so every
   // state-changing op schedules a best-effort background vssBackup().
   private vssAutoConfig: VssBackupConfig | null = null;
-  private vssBackupRunning = false;
+  /** Serializes every backup, automatic or explicit — concurrent uploads race
+   *  the server's version and fail with "VSS version conflict". */
+  private vssBackupInFlight: Promise<number> | null = null;
+  private autoBackupDisabled = false;
+  /** The runtime forgets its VSS config on disable; explicit backups restore it. */
+  private runtimeVssConfigured = false;
   /** Gates the unlock()-time unrestored-backup warning. */
   private vssRestoreRan = false;
 
@@ -175,19 +149,77 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this._manager;
   }
 
+  // ── Optional capability carriers ────────────────────────────────────────────
+  //
+  // web runs two engines — an rgb-lib wallet in wasm plus the RLN node — so it
+  // supports all three carrier groups and every carrier is present. They are
+  // separate objects (not flat methods behind a boolean) so that a platform
+  // that cannot perform a group simply omits the property: nothing to call.
+  //
+  // Arrow functions capture `this` lazily, so `this.manager` is untouched until
+  // a carrier method is actually called — construction stays cheap.
+
+  /** PSBT signing — backed by the rgb-lib wallet (RlnSigner / BDK path). */
+  readonly psbt: IPsbtSigning = {
+    signPsbt: (psbt: string, mnemonic?: string) =>
+      this.manager.signPsbt(psbt, mnemonic),
+    estimateFee: (psbtBase64: string) => this.manager.estimateFee(psbtBase64),
+  };
+
+  /** Externally-signed begin/end flows — the rgb-lib wallet hands out PSBTs. */
+  readonly beginEnd: IBeginEndFlows = {
+    createUtxosBegin: (params) => this.manager.createUtxosBegin(params),
+    createUtxosEnd: (params) =>
+      this.withVssBackup(this.manager.createUtxosEnd(params)),
+    onchainSendBegin: (params) => this.manager.sendBegin(params),
+    onchainSendEnd: (params) =>
+      this.withVssBackup(this.manager.sendEnd(params)),
+    sendBtcBegin: (params) => this.manager.sendBtcBegin(params),
+    sendBtcEnd: (params) => this.withVssBackup(this.manager.sendBtcEnd(params)),
+    inflateBegin: (params) => this.manager.inflateBegin(params),
+    inflateEnd: (params) => this.withVssBackup(this.manager.inflateEnd(params)),
+  };
+
+  /**
+   * Derived from carrier presence — never stored independently, so the flags
+   * cannot drift from what the object can actually do.
+   */
+  get capabilities(): WalletCapabilities {
+    return {
+      psbtSigning: this.psbt !== undefined,
+      beginEndFlows: this.beginEnd !== undefined,
+    };
+  }
+
   /** Fire-and-forget VSS backup after a state-changing op. No-op until VSS is
    *  configured or while an upload is already in flight (no queue/retry — the
    *  next state-changing op triggers the next backup anyway). Never throws —
    *  a failed backup must not fail the operation itself. */
   private triggerAutoVssBackup(): void {
-    if (!this.vssAutoConfig || this.vssBackupRunning) return;
-    this.vssBackupRunning = true;
-    this.manager
-      .vssBackup(this.vssAutoConfig)
-      .catch((e) => logger.warn('UTEXOWallet: auto VSS backup failed', e))
-      .finally(() => {
-        this.vssBackupRunning = false;
+    if (this.autoBackupDisabled || !this.vssAutoConfig) return;
+    if (this.vssBackupInFlight) return;
+    this.queueVssBackup(this.vssAutoConfig).catch((e) =>
+      logger.warn('UTEXOWallet: auto VSS backup failed', e)
+    );
+  }
+
+  /** Run a backup once the previous one has settled. */
+  private queueVssBackup(config: VssBackupConfig): Promise<number> {
+    const next = (this.vssBackupInFlight ?? Promise.resolve(0))
+      .catch(() => 0)
+      .then(async () => {
+        if (!this.runtimeVssConfigured) {
+          await this.manager.configureVssBackup(config);
+          this.runtimeVssConfigured = true;
+        }
+        return this.manager.vssBackup(config);
       });
+    this.vssBackupInFlight = next;
+    const settle = () => {
+      if (this.vssBackupInFlight === next) this.vssBackupInFlight = null;
+    };
+    next.then(settle, settle);
+    return next;
   }
 
   /** Await a state-changing op, then schedule an auto VSS backup. */
@@ -347,7 +379,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return wallet;
   }
 
-  // ── IWalletManager — Lifecycle ─────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────
 
   /** Backward-compat alias for the full init() + unlock() sequence (older
    *  code expects a ready wallet after this call). */
@@ -388,7 +420,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.isDisposed();
   }
 
-  // ── IWalletManager — Balance & Address ─────────────────────────────────────
+  // ── Balance & Address ─────────────────────────────────────
 
   /** BTC balance (vanilla + colored). */
   getBtcBalance(): Promise<BtcBalance> {
@@ -410,7 +442,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.rotateColoredAddress();
   }
 
-  // ── IWalletManager — UTXO Management ───────────────────────────────────────
+  // ── UTXO Management ───────────────────────────────────────
 
   /** List unspent UTXOs with their RGB allocations. */
   listUnspents(): Promise<Unspent[]> {
@@ -437,7 +469,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.withVssBackup(this.manager.createUtxos(params));
   }
 
-  // ── IWalletManager — Asset Operations ──────────────────────────────────────
+  // ── Asset Operations ──────────────────────────────────────
 
   /** List all RGB assets held by the wallet. */
   listAssets(): Promise<ListAssets> {
@@ -455,7 +487,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Issue an Inflatable Fungible Asset (IFA). Requires the Lightning node. */
-  issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<any> {
+  issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
     return this.withVssBackup(this.manager.issueAssetIfa(params));
   }
 
@@ -477,7 +509,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.withVssBackup(this.manager.inflate(params, mnemonic));
   }
 
-  // ── IWalletManager — Sending BTC ───────────────────────────────────────────
+  // ── Sending BTC ───────────────────────────────────────────
 
   /** Begin an on-chain BTC send — returns an unsigned PSBT for external signing. */
   sendBtcBegin(params: SendBtcBeginRequestModel): Promise<string> {
@@ -494,7 +526,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.withVssBackup(this.manager.sendBtc(params));
   }
 
-  // ── IWalletManager — Receiving Assets ──────────────────────────────────────
+  // ── Receiving Assets ──────────────────────────────────────
 
   /** Create a blinded-UTXO RGB invoice. Underlying receive primitive of {@link onchainReceive}. */
   blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
@@ -511,7 +543,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.decodeRGBInvoice(params);
   }
 
-  // ── IWalletManager — Transactions & Transfers ──────────────────────────────
+  // ── Transactions & Transfers ──────────────────────────────
 
   /** On-chain transaction history. */
   listTransactions(): Promise<Transaction[]> {
@@ -541,7 +573,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.syncWallet();
   }
 
-  // ── IWalletManager — VSS Backup ────────────────────────────────────────────
+  // ── VSS Backup ────────────────────────────────────────────
 
   /** Enable VSS (cloud) auto-backup — called automatically by init();
    *  only needed to override the mnemonic-derived config. Every
@@ -549,30 +581,44 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   async configureVssBackup(config: VssBackupConfig): Promise<void> {
     await this.manager.configureVssBackup(config);
     this.vssAutoConfig = config;
+    this.autoBackupDisabled = false;
+    this.runtimeVssConfigured = true;
   }
 
-  /** Disable VSS auto-backup (also stops the automatic per-op backups). */
+  /** Stop the automatic per-op backups. Explicit `vssBackup()` keeps working:
+   *  disabling the schedule is not the same as disabling backup. */
   async disableVssAutoBackup(): Promise<void> {
-    this.vssAutoConfig = null;
+    this.autoBackupDisabled = true;
     await this.manager.disableVssAutoBackup();
+    this.runtimeVssConfigured = false;
   }
 
-  /** Trigger a VSS backup — returns the new backup version. `config` defaults
-   *  to the one configured at init(). */
+  /**
+   * Replicate wallet state to the remote store now; returns the new backup
+   * version. Only the rgb-lib wallet snapshot is uploaded — the node's channel
+   * stream replicates continuously on its own.
+   */
+  backupNow(): Promise<number> {
+    return this.vssBackup();
+  }
+
+  /** Trigger a VSS backup — returns the new backup version. Queues behind any
+   *  backup already running. `config` defaults to the one configured at
+   *  init(). */
   vssBackup(config?: VssBackupConfig): Promise<number> {
-    const effective = config ?? this.vssAutoConfig;
+    const effective = config ?? this.vssAutoConfig ?? this.derivedVssConfig;
     if (!effective) {
       throw new Error(
         'UTEXOWallet.vssBackup: VSS is not configured (init() with vssUrl, or pass a config)'
       );
     }
-    return this.manager.vssBackup(effective);
+    return this.queueVssBackup(effective);
   }
 
   /** Query VSS backup metadata (latest version, etc.). `config` defaults to
    *  the one configured at init(). */
   vssBackupInfo(config?: VssBackupConfig): Promise<VssBackupInfo> {
-    const effective = config ?? this.vssAutoConfig;
+    const effective = config ?? this.vssAutoConfig ?? this.derivedVssConfig;
     if (!effective) {
       throw new Error(
         'UTEXOWallet.vssBackupInfo: VSS is not configured (init() with vssUrl, or pass a config)'
@@ -657,7 +703,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.vssRestoreBackup();
   }
 
-  // ── IWalletManager — Fee Estimation ────────────────────────────────────────
+  // ── Fee Estimation ────────────────────────────────────────
 
   /** Fee-rate estimate (sat/vB) for a target confirmation in `blocks`. */
   estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
@@ -669,7 +715,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.manager.estimateFee(psbtBase64);
   }
 
-  // ── IWalletManager — Backup ────────────────────────────────────────────────
+  // ── Backup ────────────────────────────────────────────────
 
   /** Create an encrypted backup — read the bytes with {@link getLastBackupBytes}. */
   createBackup(params: {
@@ -689,7 +735,7 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     this.manager.restoreFromBackupBytes(bytes, password);
   }
 
-  // ── IWalletManager — Cryptographic Operations ──────────────────────────────
+  // ── Cryptographic Operations ──────────────────────────────
 
   /** Sign a PSBT with the wallet mnemonic (BDK path). */
   signPsbt(psbt: string, mnemonic?: string): Promise<string> {
@@ -720,76 +766,47 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
    * silently issuing an amount-less invoice.
    */
   async createLightningInvoice(
-    params: Omit<CreateLightningInvoiceRequestModel, 'asset'> & {
-      asset?: LightningAssetParam;
-      paymentHash?: string | null;
-    }
+    params: CreateLnInvoiceRequest
   ): Promise<LightningReceiveRequest> {
     const amtMsat =
       params.amountSats != null ? BigInt(params.amountSats * 1000) : undefined;
     const assetId = params.asset?.assetId || undefined;
-    const assetUnits = params.asset?.amount ?? params.asset?.assetAmount;
-    if (assetId && assetUnits == null) {
-      throw new Error(
-        'UTEXOWallet.createLightningInvoice: asset.amount (or its alias asset.assetAmount) is required when asset.assetId is set'
-      );
-    }
     const resp = await this.requireNode().createLnInvoice({
       amtMsat,
       expirySec: params.expirySeconds ?? 3600,
       assetId,
-      assetAmount: assetId != null ? BigInt(assetUnits!) : undefined,
+      assetAmount: assetId != null ? BigInt(params.asset!.amount) : undefined,
     });
     return { lnInvoice: resp.invoice };
   }
 
-  /** Poll receive status for a Lightning invoice. */
-  getLightningReceiveRequest(id: string): Promise<TransferStatus | null> {
-    return this.requireNode().invoiceStatus(id).then(mapInvoiceStatus);
+  /**
+   * Canonical inbound LN status — the node's own vocabulary, identical on web
+   * and RN. Lightning and RGB on-chain statuses are deliberately separate: an
+   * invoice is never reported as a `TransferStatus`.
+   */
+  getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
+    return this.requireNode().invoiceStatus(id);
   }
 
-  /** Poll send status by payment hash (`'WaitingCounterparty'` → `'Settled'` | `'Failed'`). */
-  async getLightningSendRequest(id: string): Promise<TransferStatus | null> {
+  /**
+   * Canonical outbound LN status — no `TransferStatus` fold.
+   * `null` when the payment hash is unknown to the node.
+   */
+  async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
     const payment = await this.requireNode().getPayment(id);
-    if (!payment) return null;
-    return mapPaymentStatus(payment.status);
-  }
-
-  /** Not implemented — the local RLN node pays atomically via {@link payLightningInvoice}. @throws always */
-  getLightningSendFeeEstimate(
-    _params: GetLightningSendFeeEstimateRequestModel
-  ): Promise<number> {
-    throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
-  }
-
-  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
-  payLightningInvoiceBegin(
-    _params: PayLightningInvoiceRequestModel
-  ): Promise<string> {
-    throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
-  }
-
-  /** Not implemented — Lightning pay is atomic; use {@link payLightningInvoice}. @throws always */
-  payLightningInvoiceEnd(
-    _params: SendAssetEndRequestModel
-  ): Promise<LightningSendRequest> {
-    throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
+    return payment ? payment.status : null;
   }
 
   /**
    * Atomic Lightning payment (native LN pay via the RLN node). `amount` is in
-   * sats; `assetAmount` is in asset units. The core model's `maxFee` is not
-   * supported by the wasm node (LDK route limits apply) — passing it throws
-   * rather than silently ignoring a fee cap.
+   * sats; `assetAmount` is in asset units.
+   *
+   * Note: there is no fee-cap parameter — LDK route limits apply.
    */
   async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel & { assetAmount?: number }
+    params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
-    if (params.maxFee != null) {
-      throw new Error(
-        'UTEXOWallet.payLightningInvoice: maxFee is not supported by the local RLN node — remove it (LDK route limits apply)'
-      );
-    }
     const amtMsat =
       params.amount != null ? BigInt(params.amount * 1000) : undefined;
     const assetAmount =
@@ -822,8 +839,8 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
    * receive data (invoice + recipientId + expiration), not just the invoice.
    */
   async onchainReceive(
-    params: OnchainReceiveRequestModel & { witness?: boolean }
-  ): Promise<OnchainReceiveResponse & InvoiceReceiveData> {
+    params: OnchainReceiveRequestModel
+  ): Promise<OnchainReceiveResponse> {
     const req: InvoiceRequest = {
       assetId: params.assetId || undefined,
       amount: params.amount || undefined,
@@ -859,11 +876,6 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     mnemonic?: string
   ): Promise<OnchainSendResponse> {
     return this.withVssBackup(this.manager.send(params, mnemonic));
-  }
-
-  /** Not implemented — track send state via {@link listTransfers} / {@link refreshWallet}. @throws always */
-  getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
-    throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
 
   /** Alias of listTransfers() — same data, same filtering (RN-parity name). */
@@ -915,7 +927,16 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Connect to a peer (`peerAddr` = `'host:port'`, plus its pubkey). */
-  connectPeer(peerAddr: string, peerPubkey: string): Promise<void> {
+  connectPeer(peerUri: string): Promise<void> {
+    // Aligned signature: `pubkey@host:port` (core's `peerUri()` helper builds it).
+    const at = peerUri.lastIndexOf('@');
+    if (at <= 0) {
+      throw new Error(
+        `UTEXOWallet.connectPeer: expected "pubkey@host:port", received "${peerUri}"`
+      );
+    }
+    const peerPubkey = peerUri.slice(0, at);
+    const peerAddr = peerUri.slice(at + 1);
     return this.requireNode().connectPeer(peerAddr, peerPubkey);
   }
 
@@ -934,13 +955,96 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
     return this.requireNode().listChannels();
   }
 
-  /** Open a channel (`capacitySat`/`assetLocalAmount` are `bigint`) — returns the temporary channel ID. */
-  openChannel(params: OpenChannelParams): Promise<string> {
-    return this.requireNode().openChannel(params);
+  /**
+   * Open a channel and fund it.
+   *
+   * The wasm node has no wallet inside it, so LDK answers the open with
+   * `FundingGenerationReady` and waits for someone to pay the 2-of-2 output.
+   * Here the wallet lives beside the node, so this method does it — waiting for
+   * the funding request, building and signing the tx with BDK, and handing it
+   * back to LDK:
+   *
+   * ```text
+   * openChannel → listPendingFundingRequests → buildLightningFundingTx
+   *             → submitFundingTransaction
+   * ```
+   *
+   * Returns once the funding tx is submitted — **not** once the channel is
+   * ready, which needs on-chain confirmations. Poll `listChannels()` for that
+   * (it also doubles as the drive beat the wasm node needs to notice them).
+   *
+   * The fee rate comes from the wallet's `feeRateSatVb`
+   * ({@link DEFAULT_FEE_RATE_SAT_VB}), mirroring the daemon's
+   * `[rgb] fee_rate_sat_vb` — `OpenChannelParams` carries no fee field on
+   * either platform.
+   *
+   * A caller that must own the handshake (review the funding tx before signing,
+   * fund from elsewhere) can drop to the binding and drive the three public
+   * methods itself:
+   *
+   * ```ts
+   * const opened = await wallet.getLightningNode()!.openChannel(params);
+   * // → listPendingFundingRequests → buildLightningFundingTx → submitFundingTransaction
+   * ```
+   *
+   * @throws if LDK never asks for funding within `fundingTimeoutMs`.
+   */
+  async openChannel(
+    params: OpenChannelParams,
+    opts: { fundingTimeoutMs?: number; pollIntervalMs?: number } = {}
+  ): Promise<WebOpenChannelResult> {
+    const node = this.requireNode();
+    const opened = await node.openChannel(params);
+
+    const timeout = opts.fundingTimeoutMs ?? 180_000;
+    const interval = opts.pollIntervalMs ?? 3_000;
+    const deadline = Date.now() + timeout;
+
+    // The read is also the drive beat: the wasm node has no background
+    // executor, so a path that never pumps never sees the event.
+    let pending: PendingFundingRequest | undefined;
+    while (Date.now() < deadline) {
+      const requests = await this.manager.listPendingFundingRequests();
+      pending = requests.find(
+        (r) => r.temporaryChannelId === opened.temporaryChannelId
+      );
+      if (pending) break;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    if (!pending) {
+      throw new Error(
+        `openChannel: LDK did not request funding for ${opened.temporaryChannelId} ` +
+          `within ${timeout}ms — the channel is open but unfunded. Close it, or ` +
+          'retry the open once the peer responds.'
+      );
+    }
+
+    const tx = await this.manager.buildLightningFundingTx({
+      outputScriptHex: pending.outputScriptHex,
+      amountSat: pending.channelValueSat,
+      feeRate: this.params.feeRateSatVb ?? DEFAULT_FEE_RATE_SAT_VB,
+    });
+
+    await this.manager.submitFundingTransaction({
+      temporaryChannelId: pending.temporaryChannelId,
+      counterpartyNodeId: pending.counterpartyNodeId,
+      fundingTxHex: tx.fundingTxHex,
+      txid: tx.txid,
+    });
+
+    return {
+      ...opened,
+      fundingTxid: tx.txid,
+      fundingTxHex: tx.fundingTxHex,
+    };
   }
 
   /** Close a channel (cooperative unless `force`). */
-  closeChannel(channelId: string, peerPubkey?: string, force = false): void {
+  async closeChannel(
+    channelId: string,
+    peerPubkey?: string,
+    force = false
+  ): Promise<void> {
     this.requireNode().closeChannel(channelId, peerPubkey, force);
   }
 
@@ -975,17 +1079,17 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   /** Raw invoice status (`'Pending'` | `'Paid'` | `'Expired'`). */
-  invoiceStatus(invoice: string): Promise<InvoiceStatus> {
+  invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
     return this.requireNode().invoiceStatus(invoice);
   }
 
   // ── HODL invoices ──────────────────────────────────────────────────────────
 
   /** Create a HODL invoice tied to a specific payment hash. */
-  createHodlLnInvoice(
-    params: CreateHodlLnInvoiceParams
+  createHodlInvoice(
+    params: CreateHodlInvoiceParams
   ): Promise<LightningInvoice> {
-    return this.requireNode().createHodlLnInvoice(params);
+    return this.requireNode().createHodlInvoice(params);
   }
 
   /** Reveal the preimage to claim an inbound HODL payment. */
@@ -1049,6 +1153,13 @@ export class UTEXOWallet implements IWalletManagerBase, IUTEXOProtocol {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  // Channel funding is driven inside openChannel via `this.manager`, so the
+  // wallet exposes one way to open a channel — the same one rn exposes. The
+  // lower-level funding methods (listPendingFundingRequests /
+  // buildLightningFundingTx / submitFundingTransaction) stay on
+  // `RlnWalletManager` / `RlnWasmBinding` for callers that reach those layers
+  // deliberately.
 
   private requireNode(): IRlnNodeBinding {
     const node = this.manager.getLightningNode();

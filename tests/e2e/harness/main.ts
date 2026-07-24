@@ -12,12 +12,20 @@
  *   get(path)            — read a property ('capabilities', 'vss')
  *   conformance()        — runConformanceChecks against the LIVE wallet with a
  *                          collector runner; closes the §6.0f createWallet gap
+ *   lspCreate(cfgJson)   — build a UtexoLsp and keep it here
+ *   lspCall(m, argsJson) — invoke a method on that UtexoLsp
+ *
+ * `lspCreate`/`lspCall` exist because `createLsp()` returns a live object with
+ * methods, and only JSON crosses the page boundary — a spec cannot hold the
+ * instance, so the harness holds it and the spec addresses it by name.
  */
 import { UTEXOWallet, initRlnWasm, generateKeys } from '@utexo/rgb-sdk-web';
+import type { UtexoLsp } from '@utexo/rgb-sdk-core';
 import { runConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
 
 let wallet: UTEXOWallet | null = null;
 let bootMnemonic = '';
+let lsp: UtexoLsp | null = null;
 
 const statusEl = document.getElementById('status')!;
 
@@ -43,6 +51,13 @@ interface BootConfig {
   password?: string;
   /** Restore in the init→unlock gap — the only window the wallet allows it. */
   restore?: boolean;
+  /**
+   * Storage identity. Fresh per boot by default (a full chain scan instead of
+   * a stale checkpoint); pass the previous boot's value to model the same app
+   * coming back on a new device — the browser profile is empty either way, but
+   * the LN node identity follows these.
+   */
+  runId?: string;
 }
 
 function live(): UTEXOWallet {
@@ -76,7 +91,7 @@ const harness = {
       bootMnemonic = cfg.mnemonic ?? (await generateKeys('regtest')).mnemonic;
       // Fresh dataDir + nodeRuntimeId per boot: a full chain scan instead of a
       // stale checkpoint from a previous regtest run (same trick as the demo).
-      const runId = Date.now().toString(16);
+      const runId = cfg.runId ?? Date.now().toString(16);
       wallet = new UTEXOWallet({
         network: 'regtest',
         mnemonic: bootMnemonic,
@@ -93,7 +108,12 @@ const harness = {
       const restored = cfg.restore ? await wallet.restoreFromVss() : null;
       await wallet.unlock();
       statusEl.textContent = `wallet booted (online=${wallet.isOnline()})`;
-      return { mnemonic: bootMnemonic, online: wallet.isOnline(), restored };
+      return {
+        mnemonic: bootMnemonic,
+        online: wallet.isOnline(),
+        restored,
+        runId,
+      };
     }),
 
   call: (path: string, argsJson: string) =>
@@ -113,6 +133,40 @@ const harness = {
     run(() => {
       const { recv, last } = resolvePath(path);
       return (recv as Record<string, unknown> | undefined)?.[last];
+    }),
+
+  /** Build the UtexoLsp for this wallet and keep it for later `lspCall`s. */
+  lspCreate: (cfgJson: string) =>
+    run(async () => {
+      const peer = JSON.parse(cfgJson) as {
+        baseUrl: string;
+        peerPubkey: string;
+        peerHost: string;
+        peerPort: number;
+      };
+      lsp = await live().createLsp(peer);
+      return { peerPubkey: peer.peerPubkey, baseUrl: peer.baseUrl };
+    }),
+
+  /**
+   * Invoke a method on the stored UtexoLsp.
+   *
+   * Progress callbacks (`onProgress`/`onEachPoll`) are not forwarded: they are
+   * functions, so they cannot arrive as JSON. Long waits are therefore driven
+   * from the spec, which polls and mines between calls — that also keeps the
+   * drive beat visible in the test rather than hidden in a callback.
+   */
+  lspCall: (method: string, argsJson: string) =>
+    run(async () => {
+      if (!lsp) throw new Error('harness.lspCreate() first');
+      const args = JSON.parse(argsJson) as unknown[];
+      const fn = (lsp as unknown as Record<string, unknown>)[method];
+      if (typeof fn !== 'function') {
+        throw new Error(
+          `harness.lspCall: ${method} is not a method on UtexoLsp`
+        );
+      }
+      return await (fn as (...a: unknown[]) => unknown).apply(lsp, args);
     }),
 
   conformance: () =>

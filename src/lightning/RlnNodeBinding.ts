@@ -277,6 +277,12 @@ export class RlnNodeBinding implements IRlnNodeBinding {
 
   // ── Channels ───────────────────────────────────────────────────────────────
 
+  /**
+   * The wasm node takes exactly these arguments — there is no `push_msat`,
+   * `with_anchors`, fee override, `temporary_channel_id` or per-channel virtual
+   * mode to pass (virtual channels are a node-wide setting chosen at init),
+   * which is why `OpenChannelParams` does not declare them (§6.0r).
+   */
   async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
     const raw = parseJson<{ channel_id?: string }>(
       this.nodeHandle.openChannelJson(
@@ -327,6 +333,15 @@ export class RlnNodeBinding implements IRlnNodeBinding {
     } catch {
       // Transient (indexer catch-up, proxy hiccup); the work item is re-queued
       // internally and retried on the next poll.
+    }
+    try {
+      // Drain LDK's native runtime queue — this is what actually broadcasts a
+      // funding transaction through the BroadcasterInterface. Without it a
+      // channel sits at "pending awaiting funding lock-in" forever and the
+      // funding tx never reaches the mempool (§6.0r).
+      this.nodeHandle.processNativeRuntimeQueueValue();
+    } catch {
+      /* nothing queued */
     }
   }
 

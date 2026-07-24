@@ -5,6 +5,26 @@
  * The point is field verification: balances as numbers on both sides, unspents
  * with a PARSED outpoint (txid + numeric vout), never the raw "txid:vout"
  * string the binding returns.
+ *
+ * For a real user this is "receive bitcoin, then get ready to hold assets":
+ *
+ * ```ts
+ * const address = await wallet.getAddress();   // show as QR; send BTC here
+ *
+ * // …wait for the transfer to confirm. Nothing to trigger — poll:
+ * await wallet.syncWallet();
+ * const btc = await wallet.getBtcBalance();
+ * //   btc.vanilla.spendable — plain BTC, usable for fees and channels
+ * //   btc.colored           — reserved for the UTXOs that carry RGB
+ *
+ * // RGB allocations each need their own UTXO. Without these, issuing or
+ * // receiving an asset later fails for lack of a colourable output — so an
+ * // app usually does this once, right after the wallet is first funded.
+ * await wallet.createUtxos({ upTo: false, num: 5, feeRate: 7 });
+ *
+ * const unspents = await wallet.listUnspents();
+ * //   u.utxo.colorable — can carry RGB;  u.utxo.outpoint.{txid,vout}
+ * ```
  */
 import { test, expect } from '@playwright/test';
 import {

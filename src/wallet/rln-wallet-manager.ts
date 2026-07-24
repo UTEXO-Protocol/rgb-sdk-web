@@ -56,6 +56,10 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import type {
   IRlnNodeBinding,
+  PendingFundingRequest,
+  BuildFundingTxParams,
+  FundingTx,
+  SubmitFundingParams,
   SendRgbFromGroupsRequest,
   SendRgbFromGroupsResult,
 } from '../rln';
@@ -63,6 +67,15 @@ import { RlnWasmBinding } from '../binding/RlnWasmBinding';
 import type { RlnBindingCreateParams } from '../binding/RlnWasmBinding';
 import { DEFAULT_INDEXER_URLS, getRlnUrls } from '../binding/RlnDefaults';
 import { RlnSigner } from '../signer/RlnSigner';
+
+/**
+ * Default on-chain fee rate (sat/vB) for SDK-built transactions.
+ *
+ * Mirrors the native daemon's `FEE_RATE` (`rgb-lightning-node/src/core_types.rs`,
+ * the default for `[rgb] fee_rate_sat_vb`), so a channel funded from the browser
+ * pays what a channel funded by the node would.
+ */
+export const DEFAULT_FEE_RATE_SAT_VB = 7;
 
 /**
  * Web wallet params.
@@ -122,6 +135,19 @@ export interface RlnWalletInitParams extends UTEXOWalletCreateParams {
   /** Skip the indexer consistency check when auto-connecting (recommended on
    *  regtest, where the full check can hang on a fresh esplora wallet). */
   skipConsistencyCheck?: boolean;
+  /**
+   * On-chain fee rate (sat/vB) for transactions this SDK builds on the
+   * wallet's behalf — today, the Lightning channel funding transaction.
+   *
+   * This is the web analogue of the native daemon's `[rgb] fee_rate_sat_vb`
+   * (`config/mod.rs`, default `FEE_RATE = 7`), and it is a **wallet-level**
+   * setting for the same reason it is node-level there: `openChannel` takes no
+   * fee argument on either platform, and adding one to `OpenChannelParams`
+   * would put a field in the shared contract that rn cannot honour (§2.5).
+   * The native node funds channels from its own config; web has no node, so
+   * the wallet holds it instead. Default {@link DEFAULT_FEE_RATE_SAT_VB}.
+   */
+  feeRateSatVb?: number;
   /** VSS server URL for cloud backup (RN-parity param). Defaults to
    *  DEFAULT_VSS_SERVER_URL — the wallet-stream backup is configured
    *  automatically at init() with an identity derived from the mnemonic
@@ -359,6 +385,28 @@ export class RlnWalletManager {
   async disableVssAutoBackup(): Promise<void> {
     this.ensureNotDisposed();
     this.rlnBinding.disableVssAutoBackup();
+  }
+
+  // ── Channel funding (web-only, §6.0r) ───────────────────────────────────
+  //
+  // `openChannel` only gets LDK to FundingGenerationReady; the app funds the
+  // channel itself. rn's node does this internally and needs none of it.
+
+  async listPendingFundingRequests(): Promise<PendingFundingRequest[]> {
+    this.ensureNotDisposed();
+    return this.rlnBinding.listPendingFundingRequests();
+  }
+
+  async buildLightningFundingTx(
+    params: BuildFundingTxParams
+  ): Promise<FundingTx> {
+    this.ensureNotDisposed();
+    return this.rlnBinding.buildLightningFundingTx(params);
+  }
+
+  async submitFundingTransaction(params: SubmitFundingParams): Promise<void> {
+    this.ensureNotDisposed();
+    return this.rlnBinding.submitFundingTransaction(params);
   }
 
   async vssBackup(config: VssBackupConfig): Promise<number> {

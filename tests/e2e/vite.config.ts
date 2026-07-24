@@ -21,6 +21,19 @@ const distEntry = path.resolve(pkgRoot, 'dist/index.mjs');
 const coreRoot = fs.realpathSync(
   path.resolve(pkgRoot, 'node_modules/@utexo/rgb-sdk-core')
 );
+// Same for the wasm package: when it is a `file:` dep pointing at a local
+// wasm-pack build, its .wasm lives outside pkgRoot and vite refuses to serve it
+// ("outside of Vite serving allow list"). Resolved, not hardcoded, so testing a
+// build from any directory needs no config change.
+const rlnWasmRoot = (() => {
+  try {
+    return [
+      fs.realpathSync(path.resolve(pkgRoot, 'node_modules/@utexo/rln-wasm')),
+    ];
+  } catch {
+    return [];
+  }
+})();
 
 export default defineConfig({
   root: path.resolve(here, 'harness'),
@@ -41,9 +54,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:8081',
         changeOrigin: true,
       },
+      // utexo-lsp has no CORS either, and the gateway's allowlist does not
+      // cover it — scenario J's `createLsp` would fail on /get_info without
+      // this. Same-origin via the proxy, exactly as the demo does with
+      // VITE_LSP_BASE_URL="/lsp".
+      '/lsp': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/lsp/, ''),
+      },
     },
     fs: {
-      allow: [pkgRoot, coreRoot],
+      allow: [pkgRoot, coreRoot, ...rlnWasmRoot],
     },
   },
   optimizeDeps: {

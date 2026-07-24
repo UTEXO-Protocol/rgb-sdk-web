@@ -28,7 +28,7 @@ void w.listChannels();
 void w.createLightningInvoice({ amountSats: 1000 });
 
 // 2. Carrier access — must compile.
-void w.vss?.vssBackup();
+void w.backupNow();
 void w.psbt?.signPsbt('psbt');
 void w.beginEnd?.sendBtcBegin({ address: 'a', amount: 1, feeRate: 1 });
 

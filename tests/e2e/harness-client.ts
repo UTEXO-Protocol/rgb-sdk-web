@@ -21,6 +21,8 @@ export interface BootResult {
   mnemonic: string;
   online: boolean;
   restored: { walletRestored: boolean; serverVersion: number | null } | null;
+  /** Storage identity of this boot — pass back in to restore as the same node. */
+  runId: string;
 }
 
 /** Pipe browser console + page errors into the test output. */
@@ -36,7 +38,12 @@ export function wirePageLogging(page: Page): void {
 export async function bootWallet(
   page: Page,
   f: WebFixtures,
-  opts: { vss?: boolean; mnemonic?: string; restore?: boolean } = {}
+  opts: {
+    vss?: boolean;
+    mnemonic?: string;
+    restore?: boolean;
+    runId?: string;
+  } = {}
 ): Promise<BootResult> {
   await page.goto('/');
   // First load transforms dist + compiles wasm — allow generous time.
@@ -60,6 +67,7 @@ export async function bootWallet(
     vssUrl: opts.vss ? '/vss' : null,
     mnemonic: opts.mnemonic,
     restore: opts.restore ?? false,
+    runId: opts.runId,
   };
   const res = await page.evaluate(
     (cfgJson) =>
@@ -89,6 +97,46 @@ export async function wcall<T>(
     [path, JSON.stringify(args)] as const
   );
   return unwrap<T>(res, path);
+}
+
+/** Build the page's UtexoLsp (kept in the harness — it cannot cross as JSON). */
+export async function lspCreate(
+  page: Page,
+  peer: {
+    baseUrl: string;
+    peerPubkey: string;
+    peerHost: string;
+    peerPort: number;
+  }
+): Promise<{ peerPubkey: string; baseUrl: string }> {
+  const res = await page.evaluate(
+    (cfgJson) =>
+      (
+        window as unknown as {
+          harness: { lspCreate: (c: string) => Promise<string> };
+        }
+      ).harness.lspCreate(cfgJson),
+    JSON.stringify(peer)
+  );
+  return unwrap(res, 'lspCreate');
+}
+
+/** Call a method on the page's UtexoLsp. */
+export async function lspCall<T>(
+  page: Page,
+  method: string,
+  ...args: unknown[]
+): Promise<T> {
+  const res = await page.evaluate(
+    ([m, argsJson]) =>
+      (
+        window as unknown as {
+          harness: { lspCall: (m: string, a: string) => Promise<string> };
+        }
+      ).harness.lspCall(m, argsJson),
+    [method, JSON.stringify(args)] as const
+  );
+  return unwrap<T>(res, `lsp.${method}`);
 }
 
 /** Read a wallet property in the page (e.g. 'capabilities'). */

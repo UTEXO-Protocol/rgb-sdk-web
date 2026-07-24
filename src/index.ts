@@ -4,7 +4,7 @@ import { DEFAULT_INDEXER_URLS } from './binding/RlnDefaults';
 // Single RLN-backed wallet (RGB on-chain + native Lightning), implementing the
 // shared `IUTEXOWallet` contract. Platform-specific surface (PSBT signing,
 // begin/end flows, imperative VSS) is reached through optional carriers —
-// `wallet.psbt`, `wallet.beginEnd`, `wallet.vss` — rather than being flat
+// `wallet.psbt`, `wallet.beginEnd` — rather than being flat
 // methods that throw where unsupported. See MIGRATION-PLAN-v3.md.
 export { UTEXOWallet } from './utexo/utexo-wallet';
 export type {
@@ -28,7 +28,6 @@ export type {
   WalletCapabilities,
   IPsbtSigning,
   IBeginEndFlows,
-  IVssBackup,
   CreateLnInvoiceRequest,
   ILightningNode,
   ILightningPayments,

@@ -6,14 +6,44 @@
  * mutate → backup → mutate → backup → fresh wallet → restoreFromVss → state
  * equality.
  *
- * Backups here are the automatic ones every mutation triggers, observed
- * through `vssBackupInfo`. Calling `vss.vssBackup()` alongside them fails with
- * "VSS version conflict" (§6.0o) — explicit backup is covered by the F-vss
- * spec, on a wallet that is not mutating.
+ * Both backup paths are exercised: the automatic one every mutation triggers
+ * (observed through `vssBackupInfo`) and an explicit `backupNow()` alongside
+ * it, which must queue rather than race the version.
  *
  * `configureVssBackup` is not called explicitly: `init()` runs it with the
  * config derived from the mnemonic, and every call below would fail with
  * "VSS is not configured" if it had not.
+ *
+ * For a real user this is the safety net behind "I still have my 12 words":
+ *
+ * ```ts
+ * // Backups are configured from the mnemonic at init() — the storeId is
+ * // derived, so the same seed always finds its own backup.
+ * const wallet = new UTEXOWallet({
+ *   network: 'utexo', mnemonic, password,
+ *   vssUrl: DEFAULT_VSS_SERVER_URL,   // pass null to opt out entirely
+ * });
+ * await wallet.init();
+ * await wallet.unlock();
+ *
+ * // Every state-changing call schedules a background upload. To be sure a
+ * // particular moment is saved — before a risky step, or on app background:
+ * await wallet.backupNow();
+ * await wallet.vssBackupInfo();       // { exists, version, updatedAt }
+ *
+ * // On a new device, same seed. Restore is NEVER automatic, and the window
+ * // for it is the gap between init() and unlock() — nowhere else:
+ * const restored = new UTEXOWallet({ network: 'utexo', mnemonic, password,
+ *                                    vssUrl: DEFAULT_VSS_SERVER_URL });
+ * await restored.init();
+ * await restored.restoreFromVss();    // ← here, or the backup is ignored
+ * await restored.unlock();
+ * ```
+ *
+ * Two things worth knowing before shipping this: unlocking without restoring
+ * starts a *fresh* wallet on the same seed, which is how a backup gets silently
+ * abandoned; and concurrent uploads race the server's version, which is why
+ * `backupNow()` queues rather than firing immediately.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { report, expectFields } from '@utexo/rgb-sdk-core/conformance';
@@ -21,7 +51,6 @@ import { loadFixtures, gatewayFund } from './fixtures';
 import {
   bootWallet,
   wcall,
-  wget,
   fundAndCreateUtxos,
   waitForColorable,
   wirePageLogging,
@@ -56,7 +85,7 @@ async function waitForBackup(
 ): Promise<BackupInfo> {
   const t0 = Date.now();
   for (;;) {
-    const info = await wcall<BackupInfo>(page, 'vss.vssBackupInfo');
+    const info = await wcall<BackupInfo>(page, 'vssBackupInfo');
     if (info.backupExists && (info.serverVersion ?? -1) > after) return info;
     if (Date.now() - t0 > timeoutMs) {
       throw new Error(
@@ -74,9 +103,6 @@ test('G: backup, mutate, restore into a fresh wallet', async ({ page }) => {
 
   const boot = await bootWallet(page, f, { vss: true });
   const mnemonic = boot.mnemonic;
-  expect(
-    await wget<Record<string, boolean>>(page, 'capabilities')
-  ).toMatchObject({ vssBackup: true });
 
   const address = await wcall<string>(page, 'getAddress');
   await fundAndCreateUtxos(page, f, address, 3);
@@ -114,7 +140,21 @@ test('G: backup, mutate, restore into a fresh wallet', async ({ page }) => {
   const info2 = await waitForBackup(page, v1);
   report('vssBackupInfo (after second issuance)', info2);
   const v2 = info2.serverVersion!;
-  expect(v2, 'a state change must advance the backup version').toBeGreaterThan(v1);
+  expect(v2, 'a state change must advance the backup version').toBeGreaterThan(
+    v1
+  );
+
+  // Explicit backup right after a mutation: it queues behind the automatic one
+  // instead of racing it into a "VSS version conflict".
+  const forced = await wcall<number>(page, 'backupNow');
+  report('backupNow (explicit, after mutation)', forced);
+  expect(forced).toBeGreaterThanOrEqual(v2);
+
+  // Turning off the schedule must not turn off backup itself.
+  await wcall(page, 'disableVssAutoBackup');
+  const afterDisable = await wcall<number>(page, 'backupNow');
+  report('backupNow (auto-backup disabled)', afterDisable);
+  expect(afterDisable).toBeGreaterThanOrEqual(forced);
 
   const before = await wcall<ListAssets>(page, 'listAssets');
   expect(ids(before)).toEqual([firstId, secondId].sort());
@@ -160,7 +200,7 @@ test('G: backup, mutate, restore into a fresh wallet', async ({ page }) => {
   report('getAssetBalance (restored)', balanceAfter);
   expect(balanceAfter.settled).toBe(balanceBefore.settled);
 
-  const infoAfter = await wcall<BackupInfo>(page, 'vss.vssBackupInfo');
+  const infoAfter = await wcall<BackupInfo>(page, 'vssBackupInfo');
   expect(infoAfter.backupExists).toBe(true);
   expect(infoAfter.serverVersion).toBeGreaterThanOrEqual(v2);
 

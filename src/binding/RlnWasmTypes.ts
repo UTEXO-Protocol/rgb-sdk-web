@@ -76,9 +76,25 @@ export interface RlnRawAssetCfa {
   details?: string | null;
 }
 
+export interface RlnRawAssetIfa {
+  asset_id?: string;
+  ticker?: string;
+  name?: string;
+  precision?: number;
+  initial_supply?: number | bigint;
+  max_supply?: number | bigint;
+  known_circulating_supply?: number | bigint;
+  timestamp?: number;
+  added_at?: number;
+  balance?: RlnRawBalance;
+  details?: string | null;
+  reject_list_url?: string | null;
+}
+
 export interface RlnRawListAssets {
   nia?: RlnRawAssetNia[];
   cfa?: RlnRawAssetCfa[];
+  ifa?: RlnRawAssetIfa[];
   uda?: unknown[];
 }
 
@@ -264,3 +280,11 @@ export interface RlnRawRecipient {
 }
 
 export type RlnRawRecipientMap = Record<string, RlnRawRecipient[]>;
+
+/** `listPendingFundingRequestsJson()` — LDK's FundingGenerationReady queue. */
+export interface RlnRawPendingFunding {
+  temporary_channel_id?: string;
+  counterparty_node_id?: string;
+  output_script_hex?: string;
+  channel_value_satoshis?: number | bigint;
+}

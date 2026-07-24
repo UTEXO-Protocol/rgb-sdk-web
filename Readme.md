@@ -228,9 +228,10 @@ RN-parity three-phase lifecycle — the init→unlock gap is the explicit VSS-re
 | `createBackup({ backupPath: '', password })` | Encrypted backup — bytes via `getLastBackupBytes()` |
 | `getLastBackupBytes()` | Raw `Uint8Array` of the last backup (web-specific) |
 | `restoreFromBackupBytes(bytes, password)` | Restore wallet state from backup bytes (web-specific) |
+| `backupNow()` | Replicate state to VSS now; returns the new backup version (the shared-contract call) |
 | `restoreFromVss(opts?)` | Explicit one-call VSS restore — init→unlock gap only (see VSS section) |
-| `configureVssBackup(config)` / `disableVssAutoBackup()` | Override / disable VSS (cloud) auto-backup (on by default) |
-| `vssBackup(config?)` / `vssBackupInfo(config?)` | Trigger / query a VSS backup |
+| `configureVssBackup(config)` / `disableVssAutoBackup()` | Override / disable the automatic per-op backup (on by default) |
+| `vssBackup(config?)` / `vssBackupInfo(config?)` | Web-specific: back up to / query a chosen store |
 | `vssClearFence()` / `ldkVssBackupInfo()` | Bare fence clear (locked gap) / channel-replication health |
 | `signMessage(message)` / `verifyMessage(message, signature)` | Schnorr message signing with wallet keys |
 
@@ -416,8 +417,13 @@ new UTEXOWallet({ ..., vssUrl: 'https://vss.example.com' }); // custom server
 new UTEXOWallet({ ..., vssUrl: null });                      // disable VSS
 
 const info = await wallet.vssBackupInfo(); // { backupExists, serverVersion, … }
-await wallet.vssBackup();                  // force an upload now
+await wallet.backupNow();                  // force an upload now → new version
 ```
+
+Backups are serialized: `backupNow()` queues behind an automatic backup already
+in flight rather than racing it into a version conflict.
+`disableVssAutoBackup()` stops the *schedule* only — `backupNow()` keeps
+working and reconfigures the runtime if needed.
 
 #### Restoring from VSS
 

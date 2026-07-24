@@ -4,6 +4,35 @@
  * init → unlock → getNodeInfo → getNetworkInfo → isDisposed → dispose, with
  * every field named (§7a.2), capabilities asserted against the live object,
  * and runConformanceChecks fed the live wallet — the run §6.0f could not do.
+ *
+ * For a real user on the UTEXO network this is simply opening the app:
+ *
+ * ```ts
+ * const wallet = new UTEXOWallet({
+ *   network: 'utexo',
+ *   mnemonic,          // generateKeys() on first run, then stored by the app
+ *   password,
+ * });
+ * await wallet.init();      // LOCKED: local setup, no network
+ * await wallet.unlock();    // online — everything below needs this
+ *
+ * // unlock() returns even when the indexer was unreachable — check, don't assume
+ * if (!wallet.isOnline()) await wallet.goOnline();
+ *
+ * // No attach step: unlock() → goOnline() attaches the Lightning node itself
+ * // once the wallet is online ("RN-style UX — no separate attach step"), and
+ * // LN entry points attach lazily as a fallback for a wallet that came up
+ * // offline. `attachLightningNode()` exists for callers that need to pin the
+ * // timing — it is idempotent, and not part of an ordinary startup.
+ * await wallet.getNodeInfo();            // our pubkey, channel counts
+ * await wallet.getNetworkInfo();         // what the node sees of the graph
+ *
+ * // On the way out — closing the tab is not enough, the node holds sockets:
+ * await wallet.dispose();
+ * ```
+ *
+ * `init()` and `unlock()` are separate on purpose: the gap between them is the
+ * only place a VSS restore may run (scenario G/H).
  */
 import { test, expect } from '@playwright/test';
 import {
@@ -38,17 +67,16 @@ test('A: lifecycle, node info, capabilities, live conformance', async ({
   const network = await wcall<string>(page, 'getNetwork');
   expect(network).toBe('regtest');
 
-  // Capabilities against the LIVE object: web implements all three carriers.
+  // Capabilities against the LIVE object: web implements both carriers.
   const caps = await wget<Record<string, boolean>>(page, 'capabilities');
   report('capabilities', caps);
   expect(caps).toEqual({
     psbtSigning: true,
     beginEndFlows: true,
-    vssBackup: true,
   });
 
-  // Node info needs the LN node attached; runtime spin-up is async, so retry.
-  await wcall(page, 'attachLightningNode');
+  // No explicit attach: unlock() went online, which attaches the node. The
+  // runtime still spins up asynchronously, so retry.
   const nodeInfo = await retry(() =>
     wcall<Record<string, unknown>>(page, 'getNodeInfo')
   );

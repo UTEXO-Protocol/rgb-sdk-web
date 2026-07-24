@@ -16,7 +16,6 @@ import type {
   IUTEXOWallet,
   IPsbtSigning,
   IBeginEndFlows,
-  IVssBackup,
   WalletCapabilities,
   CreateLnInvoiceRequest,
   Network,
@@ -60,7 +59,10 @@ import {
   buildVssConfigFromMnemonic,
   DEFAULT_VSS_SERVER_URL,
 } from '@utexo/rgb-sdk-core';
-import { RlnWalletManager } from '../wallet/rln-wallet-manager';
+import {
+  RlnWalletManager,
+  DEFAULT_FEE_RATE_SAT_VB,
+} from '../wallet/rln-wallet-manager';
 import type { RlnWalletInitParams } from '../wallet/rln-wallet-manager';
 import { UtexoLsp } from '@utexo/rgb-sdk-core';
 import { UtexoLSPClient } from '@utexo/rgb-sdk-core';
@@ -71,7 +73,6 @@ import type {
   IssueAssetCfaRequest,
   LightningChannel,
   OpenChannelParams,
-  OpenChannelResult,
   CreateHodlInvoiceParams,
   HodlInvoiceResult,
   LightningInvoice,
@@ -87,6 +88,8 @@ import type {
   SendRgbFromGroupsResult,
   ApayNewResponse,
   LdkVssBackupInfo,
+  PendingFundingRequest,
+  WebOpenChannelResult,
 } from '../rln';
 
 export type { RlnWalletInitParams as UTEXOWalletCreateParams };
@@ -122,7 +125,12 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
   // Auto VSS backup: the wasm wallet-stream backup is manual-only, so every
   // state-changing op schedules a best-effort background vssBackup().
   private vssAutoConfig: VssBackupConfig | null = null;
-  private vssBackupRunning = false;
+  /** Serializes every backup, automatic or explicit — concurrent uploads race
+   *  the server's version and fail with "VSS version conflict". */
+  private vssBackupInFlight: Promise<number> | null = null;
+  private autoBackupDisabled = false;
+  /** The runtime forgets its VSS config on disable; explicit backups restore it. */
+  private runtimeVssConfigured = false;
   /** Gates the unlock()-time unrestored-backup warning. */
   private vssRestoreRan = false;
 
@@ -179,22 +187,6 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
   };
 
   /**
-   * Imperative VSS replication.
-   *
-   * @deprecated Temporary — this shape exists because web has *two* state
-   * stores to replicate (the rgb-lib wallet and the node), while rn has one and
-   * backs it up automatically inside the node. The target is an intent-based
-   * contract (`backupNow()` / `backupStatus()`); see plan §2.7. Do not build new
-   * application code against this carrier.
-   */
-  readonly vss: IVssBackup = {
-    configureVssBackup: (config) => this.configureVssBackup(config),
-    disableVssAutoBackup: () => this.disableVssAutoBackup(),
-    vssBackup: (config) => this.vssBackup(config),
-    vssBackupInfo: (config) => this.vssBackupInfo(config),
-  };
-
-  /**
    * Derived from carrier presence — never stored independently, so the flags
    * cannot drift from what the object can actually do.
    */
@@ -202,7 +194,6 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
     return {
       psbtSigning: this.psbt !== undefined,
       beginEndFlows: this.beginEnd !== undefined,
-      vssBackup: this.vss !== undefined,
     };
   }
 
@@ -211,14 +202,32 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
    *  next state-changing op triggers the next backup anyway). Never throws —
    *  a failed backup must not fail the operation itself. */
   private triggerAutoVssBackup(): void {
-    if (!this.vssAutoConfig || this.vssBackupRunning) return;
-    this.vssBackupRunning = true;
-    this.manager
-      .vssBackup(this.vssAutoConfig)
-      .catch((e) => logger.warn('UTEXOWallet: auto VSS backup failed', e))
-      .finally(() => {
-        this.vssBackupRunning = false;
+    if (this.autoBackupDisabled || !this.vssAutoConfig) return;
+    // No queue: a backup already in flight will carry this change, and the
+    // next state-changing op triggers the next one anyway.
+    if (this.vssBackupInFlight) return;
+    this.queueVssBackup(this.vssAutoConfig).catch((e) =>
+      logger.warn('UTEXOWallet: auto VSS backup failed', e)
+    );
+  }
+
+  /** Run a backup once the previous one has settled. */
+  private queueVssBackup(config: VssBackupConfig): Promise<number> {
+    const next = (this.vssBackupInFlight ?? Promise.resolve(0))
+      .catch(() => 0)
+      .then(async () => {
+        if (!this.runtimeVssConfigured) {
+          await this.manager.configureVssBackup(config);
+          this.runtimeVssConfigured = true;
+        }
+        return this.manager.vssBackup(config);
       });
+    this.vssBackupInFlight = next;
+    const settle = () => {
+      if (this.vssBackupInFlight === next) this.vssBackupInFlight = null;
+    };
+    next.then(settle, settle);
+    return next;
   }
 
   /** Await a state-changing op, then schedule an auto VSS backup. */
@@ -580,30 +589,47 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
   async configureVssBackup(config: VssBackupConfig): Promise<void> {
     await this.manager.configureVssBackup(config);
     this.vssAutoConfig = config;
+    this.autoBackupDisabled = false;
+    this.runtimeVssConfigured = true;
   }
 
-  /** Disable VSS auto-backup (also stops the automatic per-op backups). */
+  /** Stop the automatic per-op backups. Explicit `vssBackup()` keeps working:
+   *  disabling the schedule is not the same as disabling backup. */
   async disableVssAutoBackup(): Promise<void> {
-    this.vssAutoConfig = null;
+    this.autoBackupDisabled = true;
     await this.manager.disableVssAutoBackup();
+    this.runtimeVssConfigured = false;
   }
 
-  /** Trigger a VSS backup — returns the new backup version. `config` defaults
-   *  to the one configured at init(). */
+  /**
+   * Replicate wallet state to the remote store now; returns the new backup
+   * version. The contract call (§2.7) — `vssBackup(config?)` below is the
+   * web-specific form that can target a different store.
+   *
+   * Only the rgb-lib wallet snapshot is uploaded here: the node's channel
+   * stream replicates continuously on its own.
+   */
+  backupNow(): Promise<number> {
+    return this.vssBackup();
+  }
+
+  /** Trigger a VSS backup — returns the new backup version. Queues behind any
+   *  backup already running. `config` defaults to the one configured at
+   *  init(). */
   vssBackup(config?: VssBackupConfig): Promise<number> {
-    const effective = config ?? this.vssAutoConfig;
+    const effective = config ?? this.vssAutoConfig ?? this.derivedVssConfig;
     if (!effective) {
       throw new Error(
         'UTEXOWallet.vssBackup: VSS is not configured (init() with vssUrl, or pass a config)'
       );
     }
-    return this.manager.vssBackup(effective);
+    return this.queueVssBackup(effective);
   }
 
   /** Query VSS backup metadata (latest version, etc.). `config` defaults to
    *  the one configured at init(). */
   vssBackupInfo(config?: VssBackupConfig): Promise<VssBackupInfo> {
-    const effective = config ?? this.vssAutoConfig;
+    const effective = config ?? this.vssAutoConfig ?? this.derivedVssConfig;
     if (!effective) {
       throw new Error(
         'UTEXOWallet.vssBackupInfo: VSS is not configured (init() with vssUrl, or pass a config)'
@@ -945,9 +971,97 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
     return this.requireNode().listChannels();
   }
 
-  /** Open a channel (`capacitySat`/`assetLocalAmount` are `bigint`) — returns the temporary channel ID. */
-  openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
-    return this.requireNode().openChannel(params);
+  /**
+   * Open a channel and fund it.
+   *
+   * The wasm node has no wallet inside it, so LDK answers the open with
+   * `FundingGenerationReady` and waits for someone to pay the 2-of-2 output.
+   * The native node does that from its own rgb-lib wallet; here the wallet
+   * lives beside the node, so this method does it — waiting for the funding
+   * request, building and signing the tx with BDK, and handing it back to LDK:
+   *
+   * ```text
+   * openChannel → listPendingFundingRequests → buildLightningFundingTx
+   *             → submitFundingTransaction
+   * ```
+   *
+   * This used to be phase one only, leaving the caller with a channel that
+   * hung forever unless it made three more calls (§6.0r). The signature is
+   * identical on both platforms, so the *behaviour* has to be too: rn's
+   * `openChannel` returns a channel that will reach ready, and now web's does.
+   *
+   * Returns once the funding tx is submitted — **not** once the channel is
+   * ready, which needs on-chain confirmations. Poll `listChannels()` for that,
+   * exactly as on rn. `listChannels` doubles as the drive beat the wasm node
+   * needs to notice those confirmations.
+   *
+   * The fee rate comes from the wallet's `feeRateSatVb`
+   * ({@link DEFAULT_FEE_RATE_SAT_VB}), mirroring the daemon's
+   * `[rgb] fee_rate_sat_vb` — `OpenChannelParams` carries no fee field on
+   * either platform.
+   *
+   * Funding is not optional here, deliberately: an `openChannel` that funds
+   * only sometimes would reintroduce the very thing this fixes — one signature
+   * with two behaviours. A caller that must own the handshake (to review the
+   * funding tx before signing, to fund from elsewhere, or to measure the steps
+   * as the §6.0s repro does) drops to the binding, the documented advanced-use
+   * layer, and drives the three public methods itself:
+   *
+   * ```ts
+   * const opened = await wallet.getLightningNode()!.openChannel(params);
+   * // → listPendingFundingRequests → buildLightningFundingTx → submitFundingTransaction
+   * ```
+   *
+   * @throws if LDK never asks for funding within `fundingTimeoutMs`.
+   */
+  async openChannel(
+    params: OpenChannelParams,
+    opts: { fundingTimeoutMs?: number; pollIntervalMs?: number } = {}
+  ): Promise<WebOpenChannelResult> {
+    const node = this.requireNode();
+    const opened = await node.openChannel(params);
+
+    const timeout = opts.fundingTimeoutMs ?? 180_000;
+    const interval = opts.pollIntervalMs ?? 3_000;
+    const deadline = Date.now() + timeout;
+
+    // The read is also the drive beat: the wasm node has no background
+    // executor, so a path that never pumps never sees the event.
+    let pending: PendingFundingRequest | undefined;
+    while (Date.now() < deadline) {
+      const requests = await this.manager.listPendingFundingRequests();
+      pending = requests.find(
+        (r) => r.temporaryChannelId === opened.temporaryChannelId
+      );
+      if (pending) break;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    if (!pending) {
+      throw new Error(
+        `openChannel: LDK did not request funding for ${opened.temporaryChannelId} ` +
+          `within ${timeout}ms — the channel is open but unfunded. Close it, or ` +
+          'retry the open once the peer responds.'
+      );
+    }
+
+    const tx = await this.manager.buildLightningFundingTx({
+      outputScriptHex: pending.outputScriptHex,
+      amountSat: pending.channelValueSat,
+      feeRate: this.params.feeRateSatVb ?? DEFAULT_FEE_RATE_SAT_VB,
+    });
+
+    await this.manager.submitFundingTransaction({
+      temporaryChannelId: pending.temporaryChannelId,
+      counterpartyNodeId: pending.counterpartyNodeId,
+      fundingTxHex: tx.fundingTxHex,
+      txid: tx.txid,
+    });
+
+    return {
+      ...opened,
+      fundingTxid: tx.txid,
+      fundingTxHex: tx.fundingTxHex,
+    };
   }
 
   /** Close a channel (cooperative unless `force`). */
@@ -1064,6 +1178,14 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  // Channel funding (§6.0r) is not on this class. `listPendingFundingRequests`
+  // / `buildLightningFundingTx` / `submitFundingTransaction` were public
+  // delegations to the manager, which meant every caller had to know that
+  // `openChannel` was only half an operation. `openChannel` now drives them
+  // through `this.manager`, so the wallet exposes one way to open a channel and
+  // it is the same one rn exposes. The methods remain on `RlnWalletManager` /
+  // `RlnWasmBinding` for callers that reach the lower layers deliberately.
 
   private requireNode(): IRlnNodeBinding {
     const node = this.manager.getLightningNode();

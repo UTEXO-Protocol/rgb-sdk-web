@@ -25,6 +25,10 @@ export interface WebFixtures {
   INDEXER_URL: string;
   LSP_PEER_PORT: number;
   FAUCET_PEER_PORT: number;
+  /** A daemon started WITHOUT virtual channels — see scenario I. */
+  REGULAR_PUBKEY?: string;
+  REGULAR_URL?: string;
+  REGULAR_PEER_PORT?: number;
   /** Present only when the stack was started with VSS=1. */
   VSS_URL?: string;
 }
@@ -52,6 +56,44 @@ export function loadFixtures(): WebFixtures {
     );
   }
   return f;
+}
+
+/**
+ * Mine blocks without paying anyone.
+ *
+ * `gatewayFund` is the only mining route the gateway exposes, and it always
+ * sends coins as well — fine as a drive beat, wrong when a test is watching a
+ * wallet's own balance or which UTXOs it selected. This goes straight to
+ * bitcoind (Node side, so no CORS) and generates to bitcoind's own address,
+ * leaving every wallet under test untouched. Same primitive the demo uses for
+ * its ⛏ Mine button.
+ */
+export async function mineBlocks(blocks = 1): Promise<void> {
+  const url =
+    process.env.RGB_E2E_BITCOIND ?? 'http://127.0.0.1:18444/wallet/bdk-test';
+  const auth =
+    'Basic ' +
+    Buffer.from(
+      `${process.env.RGB_E2E_BITCOIND_USER ?? 'admin'}:${
+        process.env.RGB_E2E_BITCOIND_PASS ?? 'passw'
+      }`
+    ).toString('base64');
+  const rpc = async (method: string, params: unknown[] = []) => {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain', 'authorization': auth },
+      body: JSON.stringify({ jsonrpc: '1.0', method, params }),
+    });
+    if (!r.ok) throw new Error(`bitcoind ${method} → HTTP ${r.status}`);
+    const j = (await r.json()) as {
+      result?: unknown;
+      error?: { message: string };
+    };
+    if (j.error) throw new Error(`bitcoind ${method}: ${j.error.message}`);
+    return j.result;
+  };
+  const address = (await rpc('getnewaddress')) as string;
+  await rpc('generatetoaddress', [blocks, address]);
 }
 
 /**

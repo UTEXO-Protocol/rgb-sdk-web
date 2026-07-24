@@ -1,7 +1,7 @@
 /**
  * RlnWalletManager — the RGB wallet + Lightning node layer, backed by
  * RlnWasmBinding. `UTEXOWallet` composes this and exposes the shared
- * `IUTEXOWallet` contract.
+ * `IUTEXOProtocol` contract.
  *
  * Every public method is `async` so validation and disposal failures surface
  * as promise rejections, not synchronous throws — a call site's `.catch()`

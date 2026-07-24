@@ -1,8 +1,8 @@
 /**
  * UTEXOWallet API structure tests.
  *
- * Verifies the RLN-backed UTEXOWallet exposes the IWalletManager + IUTEXOProtocol
- * surface (mirroring @utexo/rgb-sdk-rn) plus the RLN/Lightning extras. These are
+ * Verifies the RLN-backed UTEXOWallet exposes the IUTEXOProtocol surface
+ * (mirroring @utexo/rgb-sdk-rn) plus the RLN/Lightning extras. These are
  * shape-only checks (method presence) — no WASM is instantiated.
  */
 import { UTEXOWallet } from '../dist/index.mjs';

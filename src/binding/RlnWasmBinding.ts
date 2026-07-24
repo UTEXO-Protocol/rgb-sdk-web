@@ -21,6 +21,7 @@ import {
 import { initRlnWasm } from '../wasm/initRln';
 import {
   WalletError,
+  ValidationError,
   logger,
   normalizeNetwork,
   normalizeRlnNetwork,
@@ -989,6 +990,26 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     const assetId = String(
       invoiceData.asset_id ?? invoiceData.assetId ?? params.assetId ?? ''
     );
+    // A blank invoice (blinded/witness) names no asset — the payer must. Fail
+    // with a clear message instead of rgb-lib's "Asset with id  not found".
+    if (!assetId) {
+      throw new ValidationError(
+        'onchainSend: the invoice names no asset, so `assetId` is required. ' +
+          'Blinded and witness invoices are blank — the payer names the asset ' +
+          'and amount.',
+        'assetId'
+      );
+    }
+    // rgb-lib marks a witness recipient with a `wvout:` id; paying one needs
+    // `witnessData.amountSat` (the sat value of the output being created).
+    if (recipientId.includes('wvout:') && !params.witnessData) {
+      throw new ValidationError(
+        'onchainSend: this is a witness invoice — `witnessData.amountSat` is ' +
+          'required (the sat value of the output being created). Blinded ' +
+          'invoices must omit it.',
+        'witnessData'
+      );
+    }
     const endpoints = (invoiceData.transport_endpoints ??
       invoiceData.transportEndpoints ?? [
         this._transportEndpoint(),

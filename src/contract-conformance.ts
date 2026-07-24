@@ -13,12 +13,12 @@
  * Types alone cannot check the reverse direction (that a *present* carrier
  * really works) — that needs the runtime conformance suite.
  */
-import type { IUTEXOWallet } from '@utexo/rgb-sdk-core';
+import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
 import { UTEXOWallet } from './utexo/utexo-wallet';
 
 declare const concrete: UTEXOWallet;
 // A consumer programming against the shared contract, not the concrete class:
-const w: IUTEXOWallet<void> = concrete;
+const w: IUTEXOProtocol<void> = concrete;
 
 // 1. Always-present surface — must compile.
 void w.getBtcBalance();

@@ -393,6 +393,9 @@ test('C: onchainSend pays blinded, witness and donation invoices', async ({
 
       const sent = await wcall<Record<string, unknown>>(sender, 'onchainSend', {
         invoice: inv.invoice,
+        // The invoice is blank — the payer names the asset and amount.
+        assetId,
+        amount: SEND_AMOUNT,
         feeRate: 7,
         donation: v.donation,
         // Required for a witness invoice — the sat value of the output the
@@ -403,12 +406,15 @@ test('C: onchainSend pays blinded, witness and donation invoices', async ({
       expectFields(sent, { txid: { type: 'string', pattern: HEX_32 } });
       expectNoWireKeys(sent);
 
-      // Let it progress before the next variation spends the change: an RGB
-      // transfer still WaitingCounterparty holds the allocation it is spending.
+      // The next variation spends this send's change, and an RGB change
+      // allocation is only spendable once the transfer SETTLES —
+      // WaitingConfirmations is not enough (rgb-lib: "Insufficient total
+      // assignments"). syncWallet lets the sender see the confirmed change UTXO.
       await expect
         .poll(
           async () => {
             await mineBlocks(1).catch(() => undefined);
+            await wcall(sender, 'syncWallet').catch(() => undefined);
             await wcall(sender, 'refreshWallet').catch(() => undefined);
             await wcall(receiver, 'refreshWallet').catch(() => undefined);
             const ts = await wcall<{ txid?: string; status?: string }[]>(
@@ -418,14 +424,11 @@ test('C: onchainSend pays blinded, witness and donation invoices', async ({
             );
             const mine = ts.find((t) => t.txid === sent.txid);
             report(`sender: transfer — ${v.label}`, mine ?? null);
-            return mine?.status === 'Settled' ||
-              mine?.status === 'WaitingConfirmations'
-              ? mine.status
-              : null;
+            return mine?.status === 'Settled' ? mine.status : null;
           },
           {
             timeout: 180_000,
-            message: `the ${v.label} send must leave WaitingCounterparty`,
+            message: `the ${v.label} send must settle before the next variation spends its change`,
           }
         )
         .not.toBeNull();
@@ -461,6 +464,74 @@ test('C: onchainSend pays blinded, witness and donation invoices', async ({
       'receiver: listOnchainTransfers',
       await wcall(receiver, 'listOnchainTransfers', assetId)
     );
+  } finally {
+    await senderCtx.close();
+    await receiverCtx.close();
+  }
+});
+
+/**
+ * `onchainSend` validates before it reaches rgb-lib.
+ *
+ * A blank invoice (blinded or witness) names no asset, so the payer MUST pass
+ * `assetId` — omit it and the send fails fast with a clear message instead of
+ * rgb-lib's cryptic "Asset with id  not found". A witness invoice additionally
+ * needs `witnessData.amountSat`; paying one without it is a distinct, equally
+ * clear error.
+ */
+test('C: onchainSend rejects a blank invoice with no assetId and a witness invoice with no witnessData', async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+
+  const senderCtx = await browser.newContext();
+  const receiverCtx = await browser.newContext();
+  const sender = await senderCtx.newPage();
+  const receiver = await receiverCtx.newPage();
+
+  try {
+    wirePageLogging(sender);
+    wirePageLogging(receiver);
+    await bootWallet(sender, f);
+    await bootWallet(receiver, f);
+
+    // The receiver needs a colourable UTXO to mint receive invoices.
+    const receiverAddr = await wcall<string>(receiver, 'getAddress');
+    await fundAndCreateUtxos(receiver, f, receiverAddr, 4);
+
+    // 1. Blinded invoice — blank, names no asset. Paying it without `assetId`
+    //    must reject with a clear error, and never reach rgb-lib.
+    const blinded = await wcall<{ invoice: string; recipientId: string }>(
+      receiver,
+      'onchainReceive',
+      { durationSeconds: 3600, witness: false }
+    );
+    expect(blinded.recipientId).toContain('utxob:');
+    await expect(
+      wcall(sender, 'onchainSend', {
+        invoice: blinded.invoice,
+        amount: SEND_AMOUNT,
+        feeRate: 7,
+      })
+    ).rejects.toThrow(/names no asset|assetId/i);
+
+    // 2. Witness invoice — paying it without `witnessData` must reject with a
+    //    distinct error. A non-empty assetId is supplied so the assetId check
+    //    above passes and the witnessData check is what fires.
+    const witness = await wcall<{ invoice: string; recipientId: string }>(
+      receiver,
+      'onchainReceive',
+      { durationSeconds: 3600, witness: true }
+    );
+    expect(witness.recipientId).toContain('wvout:');
+    await expect(
+      wcall(sender, 'onchainSend', {
+        invoice: witness.invoice,
+        assetId: 'rgb:test-asset-id',
+        amount: SEND_AMOUNT,
+        feeRate: 7,
+      })
+    ).rejects.toThrow(/witness invoice|witnessData/i);
   } finally {
     await senderCtx.close();
     await receiverCtx.close();

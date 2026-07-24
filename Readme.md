@@ -100,7 +100,7 @@ console.log('RGB invoice:', invoice);
 
 ## Primary Class: `UTEXOWallet`
 
-`UTEXOWallet` implements the shared `IUTEXOWallet` contract and is backed by the RLN WASM node. It mirrors the `@utexo/rgb-sdk-rn` surface: RGB sends are exposed under the RN-parity names (`onchainSend`, `onchainSendBegin`, `onchainSendEnd`), receive is the single `onchainReceive()` entry point.
+`UTEXOWallet` implements the shared `IUTEXOProtocol` contract and is backed by the RLN WASM node. It mirrors the `@utexo/rgb-sdk-rn` surface: RGB sends are exposed under the RN-parity names (`onchainSend`, `onchainSendBegin`, `onchainSendEnd`), receive is the single `onchainReceive()` entry point.
 
 ### Construction
 

@@ -13,7 +13,7 @@
  */
 
 import type {
-  IUTEXOWallet,
+  IUTEXOProtocol,
   IPsbtSigning,
   IBeginEndFlows,
   WalletCapabilities,
@@ -106,11 +106,11 @@ export interface RlnVssRestoreResult {
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
 
 /**
- * Implements the shared `IUTEXOWallet` contract whole; platform-specific
+ * Implements the shared `IUTEXOProtocol` contract whole; platform-specific
  * surface (PSBT signing, begin/end flows) lives on optional carriers rather
  * than flat methods that throw where unsupported.
  */
-export class UTEXOWallet implements IUTEXOWallet<void> {
+export class UTEXOWallet implements IUTEXOProtocol<void> {
   private readonly params: RlnWalletInitParams;
   private readonly lspBaseUrl: string | null;
   private readonly lspBearerToken: string | null;

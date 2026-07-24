@@ -1,16 +1,11 @@
 /**
  * RlnWalletManager — the RGB wallet + Lightning node layer, backed by
- * RlnWasmBinding.
+ * RlnWasmBinding. `UTEXOWallet` composes this and exposes the shared
+ * `IUTEXOWallet` contract.
  *
- * A standalone class since step 5 of MIGRATION-PLAN-v3.md; it previously
- * extended `BaseWalletManager`, which is gone along with `IWalletManager`.
- * `UTEXOWallet` composes this and exposes the shared `IUTEXOWallet` contract.
- *
- * **Every public method is `async`.** Validation and disposal failures must
- * surface as promise rejections, not synchronous throws, so `.catch()` on a
- * call site behaves the same whichever way it fails. Dropping `async` from the
- * one-line delegations silently broke that and was caught by
- * `tests/rln-wallet-manager.test.ts` — keep it.
+ * Every public method is `async` so validation and disposal failures surface
+ * as promise rejections, not synchronous throws — a call site's `.catch()`
+ * then behaves the same whichever way the call fails.
  */
 
 import {
@@ -78,21 +73,13 @@ import { RlnSigner } from '../signer/RlnSigner';
 export const DEFAULT_FEE_RATE_SAT_VB = 7;
 
 /**
- * Web wallet params.
- *
- * Extends the shared contract (`UTEXOWalletCreateParams`) plus the still-used
+ * Web wallet params — the shared contract (`UTEXOWalletCreateParams`) plus the
  * rgb-lib-era optionals (`xpubVan`/`xpubCol`/`masterFingerprint`/
- * `maxAllocationsPerUtxo`/`vanillaKeychain`) — the migration plan assumed those
- * were dead; they are not.
+ * `maxAllocationsPerUtxo`/`vanillaKeychain`) that web still uses.
  */
 export interface RlnWalletInitParams extends UTEXOWalletCreateParams {
-  // ── rgb-lib-era fields, declared explicitly ────────────────────────────────
-  //
-  // These used to arrive via `Partial<WalletInitParams>`, inheriting the whole
-  // rgb-lib parameter bag to obtain five fields. `WalletInitParams` was deleted
-  // in step 5, so what web actually uses is now spelled out — the rest of that
-  // bag (`dataDir`, `reuseAddresses`, `indexerUrl`, `seed`, `xpub`, `network`,
-  // `transportEndpoint`) was never read here.
+  // rgb-lib-era fields web reads — declared explicitly rather than inherited
+  // from the old rgb-lib parameter bag.
 
   /** Vanilla (BTC) account xpub. Derived from the mnemonic when omitted. */
   xpubVan?: string;
@@ -143,7 +130,7 @@ export interface RlnWalletInitParams extends UTEXOWalletCreateParams {
    * (`config/mod.rs`, default `FEE_RATE = 7`), and it is a **wallet-level**
    * setting for the same reason it is node-level there: `openChannel` takes no
    * fee argument on either platform, and adding one to `OpenChannelParams`
-   * would put a field in the shared contract that rn cannot honour (§2.5).
+   * would put a field in the shared contract that rn cannot honour.
    * The native node funds channels from its own config; web has no node, so
    * the wallet holds it instead. Default {@link DEFAULT_FEE_RATE_SAT_VB}.
    */
@@ -173,17 +160,8 @@ export interface RlnWalletInitParams extends UTEXOWalletCreateParams {
 }
 
 /**
- * Standalone since step 5 — `BaseWalletManager` is gone.
- *
- * The base class was 498 lines, ~350 of them one-line delegations, with exactly
- * one consumer (this class). It also contradicted the core design rule
- * "interfaces + composition, not inheritance", and its `binding?`/`signer?`
- * optional constructor arguments meant `requireBinding()` could throw at
- * runtime on a fully type-checked object — the same "declared but not really
- * there" defect the wallet contract migration removed one layer up.
- *
- * Here `binding` and `signer` are **required and non-null**, so the delegations
- * below cannot fail that way.
+ * `binding` and `signer` are required and non-null, so the delegations below
+ * cannot fail on a missing dependency.
  */
 export class RlnWalletManager {
   private readonly rlnBinding: RlnWasmBinding;
@@ -219,7 +197,7 @@ export class RlnWalletManager {
     this.seed = params.mnemonic ? seedFromMnemonic(params.mnemonic) : null;
   }
 
-  // ── Lifecycle & state (formerly BaseWalletManager) ──────────────────────────
+  // ── Lifecycle & state ───────────────────────────────────────────────────────
 
   getXpub(): { xpubVan: string; xpubCol: string } {
     return { xpubVan: this.xpubVan, xpubCol: this.xpubCol };
@@ -250,7 +228,7 @@ export class RlnWalletManager {
     }
   }
 
-  // ── Binding delegations (formerly BaseWalletManager) ────────────────────────
+  // ── Binding delegations ─────────────────────────────────────────────────────
 
   async getBtcBalance(): Promise<BtcBalance> {
     this.ensureNotDisposed();
@@ -387,7 +365,7 @@ export class RlnWalletManager {
     this.rlnBinding.disableVssAutoBackup();
   }
 
-  // ── Channel funding (web-only, §6.0r) ───────────────────────────────────
+  // ── Channel funding (web-only) ──────────────────────────────────────────────
   //
   // `openChannel` only gets LDK to FundingGenerationReady; the app funds the
   // channel itself. rn's node does this internally and needs none of it.
@@ -432,7 +410,7 @@ export class RlnWalletManager {
     return this.signer.estimateFee(psbtBase64);
   }
 
-  // ── Signing (formerly BaseWalletManager) ────────────────────────────────────
+  // ── Signing ─────────────────────────────────────────────────────────────────
 
   async signMessage(message: string): Promise<string> {
     this.ensureNotDisposed();
@@ -636,7 +614,7 @@ export class RlnWalletManager {
   }
 
   async initialize(): Promise<void> {
-    // No-op (abstract in the base) — the real phases are create()/unlock().
+    // No-op — the real phases are create()/unlock().
   }
 
   async goOnline(
@@ -652,10 +630,8 @@ export class RlnWalletManager {
     return this.rlnBinding.isOnline();
   }
 
-  // Override: the base doesn't await binding sync/refresh (void interface),
-  // but they MUST be awaited — a fire-and-forget call can collide with the
-  // next wallet op on the shared wasm RefCell and panic ("RefCell already
-  // borrowed").
+  // MUST be awaited — a fire-and-forget sync/refresh can collide with the next
+  // wallet op on the shared wasm RefCell and panic ("RefCell already borrowed").
   async syncWallet(): Promise<void> {
     await this.rlnBinding.syncWallet();
   }
@@ -665,8 +641,7 @@ export class RlnWalletManager {
   }
 
   /** Like refreshWallet(), but reports whether any transfer changed status
-   *  this pass (the base IWalletManager signature is fixed to Promise<void>,
-   *  so the signal needs its own method). */
+   *  this pass. */
   async refreshWalletChanged(): Promise<boolean> {
     return this.rlnBinding.refreshWallet();
   }

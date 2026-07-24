@@ -122,11 +122,10 @@ function normalizeChannel(raw: RlnRawChannel): LightningChannel {
  *
  * The wasm node emits lowercase live-ledger values (`"succeeded"`,
  * `"claimable"`). Core's normalizer accepts any casing and preserves every
- * state — this replaced a local fold that collapsed six states into three,
- * losing the HODL states (`Claimable`/`Claiming`) and `Cancelled`.
+ * state, including the HODL states (`Claimable`/`Claiming`) and `Cancelled`.
  *
- * Unknown values fall back to `'Pending'` rather than throwing, so a scaffold
- * or newer node string cannot break a list call.
+ * Unknown values fall back to `'Pending'` rather than throwing, so a newer node
+ * string cannot break a list call.
  */
 function foldPaymentStatus(raw: unknown): RlnPaymentStatus {
   return tryNormalizePaymentStatus(raw) ?? 'Pending';
@@ -162,12 +161,9 @@ type LiveRawPayment = {
 };
 
 /**
- * Normalize a wasm invoice status onto the canonical vocabulary.
- *
- * Previously returned `'Paid'` — a value that does not exist in the node's
- * `InvoiceStatus` enum; the real state is `'Succeeded'`. Core's normalizer maps
- * the legacy spelling for compatibility and preserves the states the old fold
- * discarded.
+ * Normalize a wasm invoice status onto the canonical vocabulary. Core's
+ * normalizer maps the legacy `'Paid'` spelling to `'Succeeded'` and preserves
+ * every state.
  *
  * `expiresAt` still applies locally: the ledger can report `pending` for an
  * invoice whose expiry has passed but has not been reaped yet.
@@ -281,7 +277,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
    * The wasm node takes exactly these arguments — there is no `push_msat`,
    * `with_anchors`, fee override, `temporary_channel_id` or per-channel virtual
    * mode to pass (virtual channels are a node-wide setting chosen at init),
-   * which is why `OpenChannelParams` does not declare them (§6.0r).
+   * which is why `OpenChannelParams` does not declare them.
    */
   async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
     const raw = parseJson<{ channel_id?: string }>(
@@ -338,7 +334,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
       // Drain LDK's native runtime queue — this is what actually broadcasts a
       // funding transaction through the BroadcasterInterface. Without it a
       // channel sits at "pending awaiting funding lock-in" forever and the
-      // funding tx never reaches the mempool (§6.0r).
+      // funding tx never reaches the mempool.
       this.nodeHandle.processNativeRuntimeQueueValue();
     } catch {
       /* nothing queued */
@@ -356,12 +352,12 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   async createLnInvoice(
     params: CreateLnInvoiceParams
   ): Promise<LightningInvoice> {
-    // Use the LIVE ChannelManager invoice API (createLnInvoiceLiveJson — same as the
-    // wasm-interop e2e reference), NOT the scaffold createLnInvoiceJson builder. The
-    // live invoice (a) registers the payment secret/preimage with the ChannelManager
-    // so the inbound HTLC auto-claims, and (b) embeds private-channel route hints —
-    // required for multi-hop payments routed through the LSP. The scaffold invoice
-    // has neither, so an LSP-routed payment finds no route and sticks at Pending.
+    // Use the LIVE ChannelManager invoice API (createLnInvoiceLiveJson), NOT the
+    // scaffold createLnInvoiceJson builder. The live invoice (a) registers the
+    // payment secret/preimage with the ChannelManager so the inbound HTLC
+    // auto-claims, and (b) embeds private-channel route hints required for
+    // multi-hop payments routed through the LSP. The scaffold invoice has
+    // neither, so an LSP-routed payment finds no route and sticks at Pending.
     const raw = parseJson<{ invoice?: string }>(
       this.nodeHandle.createLnInvoiceLiveJson(
         params.amtMsat ?? null,
@@ -386,10 +382,9 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   async sendPayment(params: SendPaymentParams): Promise<SendPaymentResult> {
-    // sendPaymentLiveJson, NOT sendPaymentJson: the scaffold path only *records* a
-    // parity-model payment and never constructs an HTLC — nothing reaches the wire
-    // (verified: zero HTLC traffic at the LSP). The live path routes a real HTLC
-    // via the ChannelManager, same as the wasm-interop reference flows.
+    // sendPaymentLiveJson, NOT sendPaymentJson: the scaffold path only records a
+    // parity-model payment and never constructs an HTLC — nothing reaches the
+    // wire. The live path routes a real HTLC via the ChannelManager.
     const raw = parseJson<{ payment_hash?: string; status?: string }>(
       this.nodeHandle.sendPaymentLiveJson(
         params.invoice,
@@ -410,7 +405,7 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   async keysend(params: KeysendParams): Promise<SendPaymentResult> {
-    // keysendLiveJson for the same reason as sendPayment above.
+    // keysendLiveJson, for the same reason as sendPayment above.
     const raw = parseJson<RlnRawPayment>(
       this.nodeHandle.keysendLiveJson(
         params.destPubkey,
@@ -423,13 +418,11 @@ export class RlnNodeBinding implements IRlnNodeBinding {
   }
 
   /**
-   * The wasm node keeps two payment ledgers that don't see each other:
-   * scaffold maps (read by getPaymentJson /
-   * invoiceStatusJson / listPaymentsJson) and the live event-stream ledger fed by
-   * real LDK events (read by livePaymentValue / livePaymentsValue). Live-API
-   * invoices (createLnInvoiceLiveJson) and real HTLC sends exist only in the
-   * latter — the intended consumption pattern per the wasm-interop reference
-   * flows — so the read paths below consult the live ledger too.
+   * The wasm node keeps two payment ledgers that don't see each other: scaffold
+   * maps (read by getPaymentJson / invoiceStatusJson / listPaymentsJson) and the
+   * live event-stream ledger fed by real LDK events (read by livePaymentValue /
+   * livePaymentsValue). Live-API invoices (createLnInvoiceLiveJson) and real HTLC
+   * sends exist only in the latter, so the read paths below consult it too.
    */
   private livePayment(paymentHash: string): LiveRawPayment | null {
     try {

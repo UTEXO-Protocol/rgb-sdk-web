@@ -24,6 +24,7 @@ import type {
   ListAssets,
   AssetBalance,
   AssetNIA,
+  AssetIfa,
   Transaction,
   Transfer,
   InvoiceRequest,
@@ -105,12 +106,9 @@ export interface RlnVssRestoreResult {
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
 
 /**
- * An `Omit<IWalletManager, 'send' | 'sendBegin' | 'sendEnd'>` alias used to sit
- * here. Having to *subtract* from a contract in order to implement it was the
- * clearest signal that the contract was wrong — see MIGRATION-PLAN-v3.md §0.
- * `IUTEXOWallet` is implemented whole, with the platform-specific surface moved
- * onto carriers instead of being omitted; `IWalletManager` itself was deleted
- * in step 5.
+ * Implements the shared `IUTEXOWallet` contract whole; platform-specific
+ * surface (PSBT signing, begin/end flows) lives on optional carriers rather
+ * than flat methods that throw where unsupported.
  */
 export class UTEXOWallet implements IUTEXOWallet<void> {
   private readonly params: RlnWalletInitParams;
@@ -153,17 +151,13 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
 
   // ── Optional capability carriers ────────────────────────────────────────────
   //
-  // web supports all three, so every carrier is present. They exist as separate
-  // objects (rather than flat methods behind a boolean) so that on a platform
-  // that cannot perform a group, the property is simply absent and there is
-  // nothing to call — replacing the old "declare it and throw" pattern.
+  // web runs two engines — an rgb-lib wallet in wasm plus the RLN node — so it
+  // supports all three carrier groups and every carrier is present. They are
+  // separate objects (not flat methods behind a boolean) so that a platform
+  // that cannot perform a group simply omits the property: nothing to call.
   //
-  // web can do all of this because it runs TWO engines: an rgb-lib wallet in
-  // wasm *plus* the RLN node. rn has only the node, hence no PSBT to hand out
-  // and no begin/end flows. See MIGRATION-PLAN-v3.md §2.7a.
-  //
-  // Arrow functions capture `this` lazily, so `this.manager` is not touched
-  // until a carrier method is actually called — construction stays cheap.
+  // Arrow functions capture `this` lazily, so `this.manager` is untouched until
+  // a carrier method is actually called — construction stays cheap.
 
   /** PSBT signing — backed by the rgb-lib wallet (RlnSigner / BDK path). */
   readonly psbt: IPsbtSigning = {
@@ -203,8 +197,6 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
    *  a failed backup must not fail the operation itself. */
   private triggerAutoVssBackup(): void {
     if (this.autoBackupDisabled || !this.vssAutoConfig) return;
-    // No queue: a backup already in flight will carry this change, and the
-    // next state-changing op triggers the next one anyway.
     if (this.vssBackupInFlight) return;
     this.queueVssBackup(this.vssAutoConfig).catch((e) =>
       logger.warn('UTEXOWallet: auto VSS backup failed', e)
@@ -495,7 +487,7 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
   }
 
   /** Issue an Inflatable Fungible Asset (IFA). Requires the Lightning node. */
-  issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<any> {
+  issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
     return this.withVssBackup(this.manager.issueAssetIfa(params));
   }
 
@@ -603,10 +595,7 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
 
   /**
    * Replicate wallet state to the remote store now; returns the new backup
-   * version. The contract call (§2.7) — `vssBackup(config?)` below is the
-   * web-specific form that can target a different store.
-   *
-   * Only the rgb-lib wallet snapshot is uploaded here: the node's channel
+   * version. Only the rgb-lib wallet snapshot is uploaded — the node's channel
    * stream replicates continuously on its own.
    */
   backupNow(): Promise<number> {
@@ -791,15 +780,10 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
     return { lnInvoice: resp.invoice };
   }
 
-  /** Poll receive status for a Lightning invoice. */
-
   /**
-   * Canonical inbound LN status — no `TransferStatus` fold.
-   *
-   * Returns the node's own vocabulary, identical on web and RN. Prefer this
-   * Lightning and RGB on-chain statuses are deliberately separate — an invoice
-   * is never reported as a TransferStatus (an RGB consignment vocabulary with
-   * no Lightning meaning).
+   * Canonical inbound LN status — the node's own vocabulary, identical on web
+   * and RN. Lightning and RGB on-chain statuses are deliberately separate: an
+   * invoice is never reported as a `TransferStatus`.
    */
   getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
     return this.requireNode().invoiceStatus(id);
@@ -976,36 +960,27 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
    *
    * The wasm node has no wallet inside it, so LDK answers the open with
    * `FundingGenerationReady` and waits for someone to pay the 2-of-2 output.
-   * The native node does that from its own rgb-lib wallet; here the wallet
-   * lives beside the node, so this method does it — waiting for the funding
-   * request, building and signing the tx with BDK, and handing it back to LDK:
+   * Here the wallet lives beside the node, so this method does it — waiting for
+   * the funding request, building and signing the tx with BDK, and handing it
+   * back to LDK:
    *
    * ```text
    * openChannel → listPendingFundingRequests → buildLightningFundingTx
    *             → submitFundingTransaction
    * ```
    *
-   * This used to be phase one only, leaving the caller with a channel that
-   * hung forever unless it made three more calls (§6.0r). The signature is
-   * identical on both platforms, so the *behaviour* has to be too: rn's
-   * `openChannel` returns a channel that will reach ready, and now web's does.
-   *
    * Returns once the funding tx is submitted — **not** once the channel is
-   * ready, which needs on-chain confirmations. Poll `listChannels()` for that,
-   * exactly as on rn. `listChannels` doubles as the drive beat the wasm node
-   * needs to notice those confirmations.
+   * ready, which needs on-chain confirmations. Poll `listChannels()` for that
+   * (it also doubles as the drive beat the wasm node needs to notice them).
    *
    * The fee rate comes from the wallet's `feeRateSatVb`
    * ({@link DEFAULT_FEE_RATE_SAT_VB}), mirroring the daemon's
    * `[rgb] fee_rate_sat_vb` — `OpenChannelParams` carries no fee field on
    * either platform.
    *
-   * Funding is not optional here, deliberately: an `openChannel` that funds
-   * only sometimes would reintroduce the very thing this fixes — one signature
-   * with two behaviours. A caller that must own the handshake (to review the
-   * funding tx before signing, to fund from elsewhere, or to measure the steps
-   * as the §6.0s repro does) drops to the binding, the documented advanced-use
-   * layer, and drives the three public methods itself:
+   * A caller that must own the handshake (review the funding tx before signing,
+   * fund from elsewhere) can drop to the binding and drive the three public
+   * methods itself:
    *
    * ```ts
    * const opened = await wallet.getLightningNode()!.openChannel(params);
@@ -1179,13 +1154,12 @@ export class UTEXOWallet implements IUTEXOWallet<void> {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  // Channel funding (§6.0r) is not on this class. `listPendingFundingRequests`
-  // / `buildLightningFundingTx` / `submitFundingTransaction` were public
-  // delegations to the manager, which meant every caller had to know that
-  // `openChannel` was only half an operation. `openChannel` now drives them
-  // through `this.manager`, so the wallet exposes one way to open a channel and
-  // it is the same one rn exposes. The methods remain on `RlnWalletManager` /
-  // `RlnWasmBinding` for callers that reach the lower layers deliberately.
+  // Channel funding is driven inside openChannel via `this.manager`, so the
+  // wallet exposes one way to open a channel — the same one rn exposes. The
+  // lower-level funding methods (listPendingFundingRequests /
+  // buildLightningFundingTx / submitFundingTransaction) stay on
+  // `RlnWalletManager` / `RlnWasmBinding` for callers that reach those layers
+  // deliberately.
 
   private requireNode(): IRlnNodeBinding {
     const node = this.manager.getLightningNode();

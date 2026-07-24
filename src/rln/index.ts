@@ -48,7 +48,7 @@ export type { IRlnWalletBinding } from '../interfaces/IRlnWalletBinding';
 export type { IRlnNodeBinding } from '../interfaces/IRlnNodeBinding';
 export type { IRlnSdkBinding } from '../interfaces/IRlnSdkBinding';
 
-// ── Channel funding — web-only (§6.0r) ───────────────────────────────────────
+// ── Channel funding — web-only ───────────────────────────────────────────────
 //
 // The wasm node asks the app to fund a channel it has agreed to open: LDK
 // emits FundingGenerationReady, the app builds and signs the funding tx with
@@ -59,22 +59,16 @@ export type { IRlnSdkBinding } from '../interfaces/IRlnSdkBinding';
  * What `UTEXOWallet.openChannel` returns on web.
  *
  * A superset of the shared `OpenChannelResult`: web funds the channel itself,
- * so it knows the funding txid and rn does not. Widening a **response** is safe
- * under §2.5 — the rule constrains parameters, since a platform that does not
- * populate an optional response field is not a defect (see
- * `scripts/check-param-usage.mjs` in core).
+ * so it knows the funding txid and rn does not. Widening a response is safe —
+ * the shared contract only constrains parameters.
  */
 export interface WebOpenChannelResult extends OpenChannelResult {
   /** Txid of the funding transaction this SDK built, signed and submitted. */
   fundingTxid?: string;
   /**
-   * Raw signed funding transaction, as submitted.
-   *
-   * Returned so callers can inspect or re-publish it without needing the
-   * funding handshake methods, which are internal to `openChannel`. The demo's
-   * §6.0s repro uses it to re-POST the identical hex to esplora when the
-   * indexer never saw it — the probe that separates "our broadcast is broken"
-   * from "the transaction itself is invalid".
+   * Raw signed funding transaction, as submitted. Exposed so callers can
+   * inspect or re-publish it without driving the funding handshake methods,
+   * which are internal to `openChannel`.
    */
   fundingTxHex?: string;
 }

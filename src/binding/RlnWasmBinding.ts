@@ -229,8 +229,8 @@ function normalizeListAssets(raw: unknown): ListAssets {
     nia: (r.nia ?? []).map(normalizeAssetNia),
     cfa: (r.cfa ?? []).map(normalizeAssetCfa),
     uda: [],
-    // `listAssetsJson(['Nia', 'Ifa'])` asks for IFA — dropping them here made
-    // an issued IFA invisible to listAssets on web (§6.0r).
+    // `listAssetsJson(['Nia', 'Ifa'])` asks for IFA — dropping them here would
+    // make an issued IFA invisible to listAssets on web.
     ifa: (r.ifa ?? []).map(normalizeAssetIfa),
   };
 }
@@ -747,7 +747,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   // waits. The app owns phase two, because the wasm node has no wallet of its
   // own to fund from — list what is pending, build+sign the funding tx with
   // the BDK wallet, hand the raw hex back to LDK. rn needs none of this: its
-  // node funds channels internally (§2.7a, §6.0r).
+  // node funds channels internally.
 
   async listPendingFundingRequests(): Promise<PendingFundingRequest[]> {
     const node = this.requireNodeHandle();
@@ -810,7 +810,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     // `buildLightningFundingTx` signs but deliberately does not broadcast, and
     // handing the hex to LDK does not broadcast it either — the channel would
     // sit at "pending awaiting funding lock-in" forever. Queue it on the
-    // chain-sync session, which the drive beat flushes (§6.0r).
+    // chain-sync session, which the drive beat flushes.
     if (params.txid) {
       try {
         node.chainSyncEnqueueRebroadcastTx(params.txid, params.fundingTxHex);

@@ -100,7 +100,7 @@ console.log('RGB invoice:', invoice);
 
 ## Primary Class: `UTEXOWallet`
 
-`UTEXOWallet` implements `IWalletManager` + `IUTEXOProtocol` and is backed by the RLN WASM node. It mirrors the `@utexo/rgb-sdk-rn` surface: RGB sends are exposed under the RN-parity names (`onchainSend`, `onchainSendBegin`, `onchainSendEnd`), receive is the single `onchainReceive()` entry point.
+`UTEXOWallet` implements the shared `IUTEXOWallet` contract and is backed by the RLN WASM node. It mirrors the `@utexo/rgb-sdk-rn` surface: RGB sends are exposed under the RN-parity names (`onchainSend`, `onchainSendBegin`, `onchainSendEnd`), receive is the single `onchainReceive()` entry point.
 
 ### Construction
 
@@ -160,123 +160,123 @@ RN-parity three-phase lifecycle — the init→unlock gap is the explicit VSS-re
 
 ### Method Reference
 
-#### IWalletManager — Balance & Address
+#### Balance & Address
 
-| Method | Description |
-|--------|-------------|
-| `getBtcBalance()` | BTC balance (vanilla + colored) |
-| `getAddress()` | Current on-chain deposit address |
-| `getXpub()` | `{ xpubVan, xpubCol }` |
-| `getNetwork()` | Configured network string |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getBtcBalance()` | `Promise<BtcBalance>` | BTC balance (vanilla + colored) |
+| `getAddress()` | `Promise<string>` | Current on-chain deposit address |
+| `getXpub()` | `{ xpubVan: string; xpubCol: string }` | Wallet extended public keys |
+| `getNetwork()` | `Network` | Configured network |
 
-#### IWalletManager — UTXO Management
+#### UTXO Management
 
-| Method | Description |
-|--------|-------------|
-| `createUtxos({ upTo?, num?, size?, feeRate? })` | Create UTXOs — atomic (begin → sign → end) |
-| `createUtxosBegin(params)` / `createUtxosEnd({ signedPsbt })` | 3-step variant for external signing |
-| `listUnspents()` | List unspent UTXOs with RGB allocations |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `createUtxos({ upTo?, num?, size?, feeRate? })` | `Promise<number>` | Create UTXOs — atomic (begin → sign → end); returns the count created |
+| `createUtxosBegin(params)` / `createUtxosEnd({ signedPsbt })` | `Promise<string>` / `Promise<number>` | 3-step variant for external signing |
+| `listUnspents()` | `Promise<Unspent[]>` | List unspent UTXOs with RGB allocations |
 
-#### IWalletManager — Assets
+#### Assets
 
-| Method | Description |
-|--------|-------------|
-| `listAssets()` | All RGB assets |
-| `getAssetBalance(assetId)` | Balance for one asset |
-| `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflatable Asset |
-| `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, replaceRightsNum, rejectListUrl })` | Issue an Inflatable Fungible Asset |
-| `issueAssetCfa(params)` | Issue a CFA asset (requires the Lightning node) |
-| `inflate(params)` / `inflateBegin` / `inflateEnd` | Inflate an IFA asset (atomic or 3-step) |
-| `sendRgbFromGroups(params)` | Group-based RGB asset send |
-| `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `listAssets()` | `Promise<ListAssets>` | All RGB assets |
+| `getAssetBalance(assetId)` | `Promise<AssetBalance>` | Balance for one asset |
+| `issueAssetNia({ ticker, name, precision, amounts })` | `Promise<AssetNIA>` | Issue a Non-Inflatable Asset |
+| `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | `Promise<AssetIfa>` | Issue an Inflatable Fungible Asset |
+| `issueAssetCfa(params)` | `Promise<AssetCFA>` | Issue a CFA asset (requires the Lightning node) |
+| `inflate(params)` / `inflateBegin` / `inflateEnd` | `Promise<OperationResult>` / `Promise<string>` / `Promise<OperationResult>` | Inflate an IFA asset (atomic or 3-step) |
+| `sendRgbFromGroups(params)` | `Promise<SendRgbFromGroupsResult>` | Group-based RGB asset send |
+| `decodeRGBInvoice({ invoice })` | `Promise<InvoiceData>` | Decode an RGB invoice |
 
 #### IUTEXOProtocol — Onchain (RGB)
 
-| Method | Description |
-|--------|-------------|
-| `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default. Pass `witness: false` for a blinded invoice. Returns `{ invoice, recipientId, expirationTimestamp }` |
-| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | Atomic RGB send (begin → sign with the stored mnemonic → end). `witnessData: { amountSat }` required for witness invoices |
-| `onchainSendBegin(params)` / `onchainSendEnd({ signedPsbt })` | 3-step variant for external signing |
-| `listOnchainTransfers(assetId?)` | Alias of `listTransfers()` (RN-parity name) |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | `Promise<OnchainReceiveResponse>` | RGB invoice — witness by default. Pass `witness: false` for a blinded invoice. Resolves `{ invoice, recipientId, expirationTimestamp }` |
+| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | `Promise<OnchainSendResponse>` | Atomic RGB send (begin → sign with the stored mnemonic → end). `witnessData: { amountSat }` required for witness invoices |
+| `onchainSendBegin(params)` / `onchainSendEnd({ signedPsbt })` | `Promise<string>` / `Promise<OnchainSendResponse>` | 3-step variant for external signing |
+| `listOnchainTransfers(assetId?)` | `Promise<Transfer[]>` | Alias of `listTransfers()` (RN-parity name) |
 
-`blindReceive(params)` and `witnessReceive(params)` remain available as the underlying receive primitives.
+`blindReceive(params)` and `witnessReceive(params)` (both `Promise<InvoiceReceiveData>`) remain available as the underlying receive primitives.
 
-#### IWalletManager — BTC Sends
+#### BTC Sends
 
-| Method | Description |
-|--------|-------------|
-| `sendBtc({ address, amount, feeRate })` | Atomic on-chain BTC send |
-| `sendBtcBegin(params)` / `sendBtcEnd({ signedPsbt })` | 3-step variant |
-| `signPsbt(psbt)` | Sign a PSBT with the wallet mnemonic (BDK path) |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sendBtc({ address, amount, feeRate })` | `Promise<string>` | Atomic on-chain BTC send — returns the txid |
+| `sendBtcBegin(params)` / `sendBtcEnd({ signedPsbt })` | `Promise<string>` / `Promise<string>` | 3-step variant (unsigned PSBT / txid) |
+| `signPsbt(psbt)` | `Promise<string>` | Sign a PSBT with the wallet mnemonic (BDK path) |
 
-#### IWalletManager — Transactions & Transfers
+#### Transactions & Transfers
 
-| Method | Description |
-|--------|-------------|
-| `listTransactions()` | On-chain transaction history |
-| `listTransfers(assetId?)` | RGB transfer history |
-| `failTransfers({ batchTransferIdx? })` | Mark pending transfers as failed |
-| `refreshWallet()` | Refresh pending RGB transfer state |
-| `syncWallet()` | Sync BTC/UTXO blockchain state |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `listTransactions()` | `Promise<Transaction[]>` | On-chain transaction history |
+| `listTransfers(assetId?)` | `Promise<Transfer[]>` | RGB transfer history |
+| `failTransfers({ batchTransferIdx? })` | `Promise<boolean>` | Mark pending transfers as failed |
+| `refreshWallet()` | `Promise<void>` | Refresh pending RGB transfer state |
+| `syncWallet()` | `Promise<void>` | Sync BTC/UTXO blockchain state |
 
-#### IWalletManager — Fees, Backup & Crypto
+#### Fees, Backup & Crypto
 
-| Method | Description |
-|--------|-------------|
-| `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation |
-| `estimateFee(psbtBase64)` | Fee estimate for a PSBT |
-| `createBackup({ backupPath: '', password })` | Encrypted backup — bytes via `getLastBackupBytes()` |
-| `getLastBackupBytes()` | Raw `Uint8Array` of the last backup (web-specific) |
-| `restoreFromBackupBytes(bytes, password)` | Restore wallet state from backup bytes (web-specific) |
-| `backupNow()` | Replicate state to VSS now; returns the new backup version (the shared-contract call) |
-| `restoreFromVss(opts?)` | Explicit one-call VSS restore — init→unlock gap only (see VSS section) |
-| `configureVssBackup(config)` / `disableVssAutoBackup()` | Override / disable the automatic per-op backup (on by default) |
-| `vssBackup(config?)` / `vssBackupInfo(config?)` | Web-specific: back up to / query a chosen store |
-| `vssClearFence()` / `ldkVssBackupInfo()` | Bare fence clear (locked gap) / channel-replication health |
-| `signMessage(message)` / `verifyMessage(message, signature)` | Schnorr message signing with wallet keys |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `estimateFeeRate(blocks)` | `Promise<GetFeeEstimationResponse>` | Fee rate estimate for target confirmation |
+| `estimateFee(psbtBase64)` | `Promise<EstimateFeeResult>` | Fee estimate for a PSBT |
+| `createBackup({ backupPath: '', password })` | `Promise<WalletBackupResponse>` | Encrypted backup — bytes via `getLastBackupBytes()` |
+| `getLastBackupBytes()` | `Uint8Array \| null` | Raw bytes of the last backup (web-specific) |
+| `restoreFromBackupBytes(bytes, password)` | `void` | Restore wallet state from backup bytes (web-specific) |
+| `backupNow()` | `Promise<number>` | Replicate state to VSS now; returns the new backup version |
+| `restoreFromVss(opts?)` | `Promise<RlnVssRestoreResult>` | Explicit one-call VSS restore — init→unlock gap only (see VSS section) |
+| `configureVssBackup(config)` / `disableVssAutoBackup()` | `Promise<void>` / `Promise<void>` | Override / disable the automatic per-op backup (on by default) |
+| `vssBackup(config?)` / `vssBackupInfo(config?)` | `Promise<number>` / `Promise<VssBackupInfo>` | Web-specific: back up to / query a chosen store |
+| `vssClearFence()` / `ldkVssBackupInfo()` | `Promise<void>` / `LdkVssBackupInfo \| null` | Bare fence clear (locked gap) / channel-replication health |
+| `signMessage(message)` / `verifyMessage(message, signature)` | `Promise<string>` / `Promise<boolean>` | Schnorr message signing / verification with wallet keys |
 
 #### IUTEXOProtocol — Lightning
 
-| Method | Description |
-|--------|-------------|
-| `createLightningInvoice({ amountSats?, expirySeconds?, asset? })` | Create a Lightning invoice — BTC via `amountSats`, RGB via `asset: { assetId, amount }` (`assetAmount` accepted as an alias for `amount`) |
-| `payLightningInvoice({ lnInvoice, amount?, assetId?, assetAmount? })` | Atomic pay via the local RLN node (`amount` is sats) — returns `{ txid: paymentHash, status }` |
-| `getLightningSendRequest(paymentHash)` | Poll send status (`'WaitingCounterparty'` → `'Settled'` \| `'Failed'`) |
-| `getLightningReceiveRequest(invoice)` | Poll receive status |
-| `listLightningPayments()` | List all Lightning payments |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `createLightningInvoice({ amountSats?, expirySeconds?, asset? })` | `Promise<LightningReceiveRequest>` | Create a Lightning invoice — BTC via `amountSats`, RGB via `asset: { assetId, amount }` (`assetAmount` accepted as an alias for `amount`) |
+| `payLightningInvoice({ lnInvoice, amount?, assetId?, assetAmount? })` | `Promise<LightningSendRequest>` | Atomic pay via the local RLN node (`amount` is sats) — resolves `{ txid: paymentHash, status }` |
+| `getLightningSendStatus(paymentHash)` | `Promise<RlnPaymentStatus \| null>` | Poll send status (`'Pending'` \| `'Claimable'` \| `'Claiming'` \| `'Succeeded'` \| `'Cancelled'` \| `'Failed'`); `null` if the hash is unknown |
+| `getLightningReceiveStatus(invoice)` | `Promise<RlnInvoiceStatus>` | Poll receive status |
+| `listLightningPayments()` | `Promise<ListLightningPaymentsResponse>` | List all Lightning payments |
 
 #### IUTEXOProtocol — LSP & Async payments (APay)
 
-| Method | Description |
-|--------|-------------|
-| `createLsp(peer?, peerPort?)` | Create an `UtexoLsp` session. No-arg: discovers the peer from `lspBaseUrl` via `GET /get_info` (host from the URL, port defaults to 9735). Pass an `LspPeer` to override |
-| `getLspConfig()` | `{ baseUrl, bearerToken }` this wallet was created with |
-| `apayNewWithAddress(hostNodeId, username, domain)` | Register an attested hash pool (signs `address_sig`) — hash-substitution resistant |
-| `apayNew(hostNodeId)` | Register a hash pool without an address attestation |
-| `createHodlLnInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
-| `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
-| `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `createLsp(peer?, peerPort?)` | `Promise<UtexoLsp>` | Create an `UtexoLsp` session. No-arg: discovers the peer from `lspBaseUrl` via `GET /get_info` (host from the URL, port defaults to 9735). Pass an `LspPeer` to override |
+| `getLspConfig()` | `{ baseUrl: string \| null; bearerToken: string \| null }` | The LSP config this wallet was created with |
+| `apayNewWithAddress(hostNodeId, username, domain)` | `Promise<ApayNewResponse>` | Register an attested hash pool (signs `address_sig`) — hash-substitution resistant |
+| `apayNew(hostNodeId)` | `Promise<ApayNewResponse>` | Register a hash pool without an address attestation |
+| `createHodlInvoice(params)` | `Promise<LightningInvoice>` | Create a HODL invoice tied to a specific payment hash |
+| `claimHodlInvoice(paymentHash, preimage)` | `Promise<HodlInvoiceResult>` | Reveal preimage to claim an inbound HODL payment |
+| `cancelHodlInvoice(paymentHash)` | `Promise<HodlInvoiceResult>` | Cancel a HODL invoice |
 
 See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full examples.
 
 #### RLN Extras — Node, Peers & Channels
 
-| Method | Description |
-|--------|-------------|
-| `getNodeInfo()` / `getNetworkInfo()` | Node pubkey, channel counts, sync status / network info |
-| `getNodePubkey()` | Node pubkey (`null` when no Lightning node is configured) |
-| `attachLightningNode()` | Attach the wallet to the LN node explicitly (otherwise lazy on first use) |
-| `getLightningNode()` | The underlying `IRlnNodeBinding`, or `null` |
-| `connectPeer(peerAddr, peerPubkey)` | Connect to a peer (`'host:port'`, pubkey) |
-| `disconnectPeer(peerPubkey)` | Disconnect a peer |
-| `listPeers()` | List connected peers |
-| `openChannel({ peerPubkey, capacitySat, isPublic, assetId?, assetLocalAmount? })` | Open a channel (`capacitySat` / `assetLocalAmount` are `bigint`) — returns the temporary channel ID |
-| `closeChannel(channelId, peerPubkey?, force?)` | Close a channel |
-| `listChannels()` | List channels |
-| `keysend(destPubkey, amtMsat, assetId?, assetAmount?)` | Spontaneous keysend payment |
-| `listPayments()` / `getPayment(paymentHash)` | Payment history / one payment — records carry `rawStatus` (unfolded HODL states like `Claimable`) and `preimage` when known |
-| `decodeLnInvoice(invoice)` | Decode a Lightning invoice |
-| `invoiceStatus(invoice)` | Raw invoice status (`'Pending'` \| `'Paid'` \| `'Expired'`) |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getNodeInfo()` / `getNetworkInfo()` | `Promise<LightningNodeInfo>` / `Promise<LightningNetworkInfo>` | Node pubkey, channel counts, sync status / network info |
+| `getNodePubkey()` | `string \| null` | Node pubkey (`null` when no Lightning node is configured) |
+| `attachLightningNode()` | `void` | Attach the wallet to the LN node explicitly (otherwise lazy on first use) |
+| `getLightningNode()` | `IRlnNodeBinding \| null` | The underlying Lightning node binding, or `null` |
+| `connectPeer(peerUri)` | `Promise<void>` | Connect to a peer — `peerUri` is `'pubkey@host:port'` |
+| `disconnectPeer(peerPubkey)` | `Promise<void>` | Disconnect a peer |
+| `listPeers()` | `Promise<LightningPeer[]>` | List connected peers |
+| `openChannel({ peerPubkey, capacitySat, isPublic, assetId?, assetLocalAmount? })` | `Promise<WebOpenChannelResult>` | Open **and fund** a channel (`capacitySat` / `assetLocalAmount` are `bigint`) — resolves `{ temporaryChannelId, fundingTxid?, fundingTxHex? }` once the funding tx is submitted; poll `listChannels()` for readiness |
+| `closeChannel(channelId, peerPubkey?, force?)` | `Promise<void>` | Close a channel |
+| `listChannels()` | `Promise<LightningChannel[]>` | List channels |
+| `keysend(destPubkey, amtMsat, assetId?, assetAmount?)` | `Promise<SendPaymentResult>` | Spontaneous keysend payment |
+| `listPayments()` / `getPayment(paymentHash)` | `Promise<LightningPayment[]>` / `Promise<LightningPayment \| null>` | Payment history / one payment — `status` carries the unfolded HODL states (`Claimable`/`Claiming`) and `preimage` when known |
+| `decodeLnInvoice(invoice)` | `Promise<DecodedLnInvoice>` | Decode a Lightning invoice |
+| `invoiceStatus(invoice)` | `Promise<RlnInvoiceStatus>` | Invoice status (`'Pending'` \| `'Succeeded'` \| `'Expired'`) |
 
 ---
 
@@ -354,9 +354,11 @@ const txid2    = await wallet.sendBtcEnd({ signedPsbt: signed });
 
 ```typescript
 // Requires the Lightning node (proxyUrl set or defaulted, e.g. utexo)
-await wallet.connectPeer('peer.example.com:9735', peerPubkey);
+await wallet.connectPeer(`${peerPubkey}@peer.example.com:9735`);
 
-const tempChannelId = await wallet.openChannel({
+// openChannel both opens AND funds the channel, then returns once the
+// funding tx is submitted (not once the channel is ready — poll below).
+const { temporaryChannelId, fundingTxid } = await wallet.openChannel({
   peerPubkey,
   capacitySat: 100_000n,
   isPublic: false,
@@ -388,10 +390,10 @@ const { txid: paymentHash } = await senderWallet.payLightningInvoice({ lnInvoice
 
 // Poll until settled
 let status = null;
-while (status !== 'Settled') {
-  status = await senderWallet.getLightningSendRequest(paymentHash);
+while (status !== 'Succeeded') {
+  status = await senderWallet.getLightningSendStatus(paymentHash);
   if (status === 'Failed') throw new Error('Payment failed');
-  if (status !== 'Settled') await new Promise((r) => setTimeout(r, 2000));
+  if (status !== 'Succeeded') await new Promise((r) => setTimeout(r, 2000));
 }
 ```
 

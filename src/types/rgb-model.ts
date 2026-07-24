@@ -1,15 +1,8 @@
 // Web-only RGB wire shapes.
 //
-// `Unspent`, `Utxo` and `RgbAllocation` used to be declared here and re-exported
-// from `src/index.ts`, shadowing core's definitions of the same names — with
-// *different* shapes (`pendingBlinded` sat on `Utxo` here but on `Unspent` in
-// core; `assignment` was a raw map rather than the `Assignment` union).
-//
-// They were never what this SDK actually returns: `listUnspents()` resolves
-// core's `Unspent`. So the exported types disagreed with the runtime values.
-// They are gone; core's definitions are the single source of truth.
-//
-// What remains is genuinely wire-shaped and web-specific.
+// `Unspent`, `Utxo` and `RgbAllocation` are core's definitions (the single
+// source of truth for what `listUnspents()` returns); what remains here is
+// genuinely wire-shaped and web-specific.
 
 /**
  * Raw assignment map as the wasm binding emits it, e.g. `{ Fungible: 100 }`.

@@ -5,15 +5,13 @@
  * bundles only what is reachable from `src/index.ts`, so it never ships. It
  * contains no runtime exports and no tests to run.
  *
- * What it guards: the v3 contract's central promise — that surface a platform
- * cannot perform is **unreachable at compile time** rather than a method that
- * throws at runtime. Every `@ts-expect-error` below fails the build if the call
- * it marks ever becomes legal again, which is what would happen if someone
- * flattened a carrier back onto the wallet or restored one of the five §2.5
- * signature lies.
+ * What it guards: that surface a platform cannot perform is **unreachable at
+ * compile time** rather than a method that throws at runtime. Every
+ * `@ts-expect-error` below fails the build if the call it marks ever becomes
+ * legal again (e.g. a carrier flattened back onto the wallet).
  *
  * Types alone cannot check the reverse direction (that a *present* carrier
- * really works) — that needs the runtime conformance suite, plan §7.
+ * really works) — that needs the runtime conformance suite.
  */
 import type { IUTEXOWallet } from '@utexo/rgb-sdk-core';
 import { UTEXOWallet } from './utexo/utexo-wallet';
@@ -32,7 +30,7 @@ void w.backupNow();
 void w.psbt?.signPsbt('psbt');
 void w.beginEnd?.sendBtcBegin({ address: 'a', amount: 1, feeRate: 1 });
 
-// 3. Removed §2.5 params — each line below MUST be an error.
+// 3. Removed params — each line below MUST be an error.
 // @ts-expect-error accountXpub is no longer in the shared contract
 void w.verifyMessage('m', 's', 'xpub');
 // @ts-expect-error paymentHash was silently dropped by web; gone from the model

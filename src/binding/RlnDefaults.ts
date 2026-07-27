@@ -60,7 +60,8 @@ export function resolveNodeIndexerUrl(
   indexerUrl?: string
 ): string {
   if (indexerUrl) return indexerUrl;
-  const defaultIndexerUrl = CORE_DEFAULT_INDEXER_URLS[normalizeNetwork(network)];
+  const defaultIndexerUrl =
+    CORE_DEFAULT_INDEXER_URLS[normalizeNetwork(network)];
   if (!defaultIndexerUrl) {
     throw new ValidationError(
       `No indexer URL configured for network "${network}" — pass indexerUrl explicitly`,

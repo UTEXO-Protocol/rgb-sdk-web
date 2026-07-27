@@ -23,10 +23,9 @@ import {
   WalletError,
   ValidationError,
   logger,
-  normalizeNetwork,
   normalizeRlnNetwork,
 } from '@utexo/rgb-sdk-core';
-import { DEFAULT_INDEXER_URLS } from './RlnDefaults';
+import { resolveNodeIndexerUrl } from './RlnDefaults';
 import type { IRlnSdkBinding } from '../rln';
 import type { IRlnNodeBinding } from '../rln';
 import type {
@@ -116,6 +115,10 @@ export interface RlnBindingCreateParams {
   proxyUrl?: string;
   /** RGB proxy transport endpoint (HTTP) — passed to sdk.setDefaultRgbProxyTransport */
   transportEndpoint?: string;
+  /** Esplora HTTP indexer for the wallet go-online default and the LN node's
+   *  chain-sync. Omitted → the network default. Must be http(s) — the wasm
+   *  chain-sync rejects other schemes. */
+  indexerUrl?: string;
   /** stable runtime ID for persistent node state across reloads */
   nodeRuntimeId?: string;
   /** WS gateway relay auth (appended as auth_token/node_id query params on
@@ -557,9 +560,10 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       }
       rlnNode = new RlnNodeBinding(nodeHandle);
     }
-    const normalizedNet = normalizeNetwork(params.network);
-    const defaultIndexerUrl =
-      DEFAULT_INDEXER_URLS[normalizedNet] ?? DEFAULT_INDEXER_URLS.utexo;
+    const defaultIndexerUrl = resolveNodeIndexerUrl(
+      params.network,
+      params.indexerUrl
+    );
 
     const binding = new RlnWasmBinding(
       sdk,

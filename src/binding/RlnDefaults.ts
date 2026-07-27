@@ -1,4 +1,9 @@
 import type { Network } from '@utexo/rgb-sdk-core';
+import {
+  DEFAULT_INDEXER_URLS as CORE_DEFAULT_INDEXER_URLS,
+  normalizeNetwork,
+  ValidationError,
+} from '@utexo/rgb-sdk-core';
 
 export interface RlnNetworkUrls {
   /** WebSocket proxy URL for the Lightning node */
@@ -43,6 +48,27 @@ export const DEFAULT_RLN_URLS: Partial<Record<Network, RlnNetworkUrls>> = {
 
 export function getRlnUrls(network: string): RlnNetworkUrls | undefined {
   return (DEFAULT_RLN_URLS as Record<string, RlnNetworkUrls>)[network];
+}
+
+/**
+ * Effective esplora indexer for both the wallet go-online default and the LN
+ * node's chain-sync. A non-empty `indexerUrl` wins; otherwise the network
+ * default is used. Throws if neither is available (never silently guesses).
+ */
+export function resolveNodeIndexerUrl(
+  network: string,
+  indexerUrl?: string
+): string {
+  if (indexerUrl) return indexerUrl;
+  const defaultIndexerUrl =
+    CORE_DEFAULT_INDEXER_URLS[normalizeNetwork(network)];
+  if (!defaultIndexerUrl) {
+    throw new ValidationError(
+      `No indexer URL configured for network "${network}" — pass indexerUrl explicitly`,
+      'indexerUrl'
+    );
+  }
+  return defaultIndexerUrl;
 }
 
 // ── Moved to @utexo/rgb-sdk-core ─────────────────────────────────────────────

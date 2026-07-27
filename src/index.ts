@@ -41,7 +41,11 @@ export { RlnWasmBinding } from './binding/RlnWasmBinding';
 export type { RlnBindingCreateParams } from './binding/RlnWasmBinding';
 
 // RLN network defaults
-export { DEFAULT_RLN_URLS, getRlnUrls } from './binding/RlnDefaults';
+export {
+  DEFAULT_RLN_URLS,
+  getRlnUrls,
+  resolveNodeIndexerUrl,
+} from './binding/RlnDefaults';
 export type { RlnNetworkUrls } from './binding/RlnDefaults';
 export { getDefaultLspBaseUrl, resolveLspBaseUrl } from './binding/RlnDefaults';
 

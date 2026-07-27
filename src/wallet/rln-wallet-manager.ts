@@ -543,6 +543,7 @@ export class RlnWalletManager {
       vanillaKeychain: params.vanillaKeychain,
       proxyUrl,
       transportEndpoint,
+      indexerUrl,
       relayAuthToken,
       relayNodeId,
       nodeRuntimeId: params.nodeRuntimeId,

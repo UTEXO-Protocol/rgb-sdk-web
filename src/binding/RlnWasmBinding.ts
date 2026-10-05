@@ -443,6 +443,21 @@ export class RlnWasmBinding implements IRlnSdkBinding {
     signingKeyHex: string;
   } | null = null;
   private ldkVssConfigured = false;
+  /**
+   * Deferred Lightning-node params for fresh wallets: `newWithNodeRuntimeId`
+   * requires the unlocked SDK runtime, so when create() runs while LOCKED and
+   * the wasm throws, the params wait here and the handle is built in
+   * unlockWallet() after sdk.unlock. Null once the handle exists (or no
+   * proxyUrl was configured). A fresh wallet has no channel state, so the
+   * LOCKED-gap LDK APIs are meaningless until unlock anyway.
+   */
+  private pendingNodeParams: {
+    proxyUrl: string;
+    runtimeId: string;
+    networkStr: string;
+    relayAuthToken: string | null;
+    relayNodeId: string | null;
+  } | null = null;
 
   private constructor(
     sdk: RlnWasmSdk,
@@ -543,22 +558,43 @@ export class RlnWasmBinding implements IRlnSdkBinding {
 
     // Node handle creation doesn't start the runtime (attachWallet does) —
     // it must exist in the LOCKED phase so clearLdkVssFence works in the gap.
+    // Fresh wallets have no persisted runtime state, so the wasm refuses
+    // newWithNodeRuntimeId while LOCKED ("sdk node runtime is locked"); in
+    // that case defer creation to unlockWallet() after sdk.unlock.
     const proxyUrl = params.proxyUrl ?? params.transportEndpoint;
+    let pendingNodeParams: RlnWasmBinding['pendingNodeParams'] = null;
     if (proxyUrl) {
       const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
       const runtimeId = params.nodeRuntimeId ?? keys.master_fingerprint;
-      nodeHandle = RlnWasmNode.newWithNodeRuntimeId(
-        proxyUrl,
-        runtimeId,
-        networkStr
-      );
-      if (params.relayAuthToken || params.relayNodeId) {
-        nodeHandle.setRelaySessionAuth(
-          params.relayAuthToken ?? null,
-          params.relayNodeId ?? null
+      try {
+        nodeHandle = RlnWasmNode.newWithNodeRuntimeId(
+          proxyUrl,
+          runtimeId,
+          networkStr
         );
+      } catch (e) {
+        if (!/locked/i.test(String(e))) throw e;
+        logger.warn(
+          'RlnWasmBinding: node handle deferred to unlock (fresh runtime is locked)',
+          e
+        );
+        pendingNodeParams = {
+          proxyUrl,
+          runtimeId,
+          networkStr,
+          relayAuthToken: params.relayAuthToken ?? null,
+          relayNodeId: params.relayNodeId ?? null,
+        };
       }
-      rlnNode = new RlnNodeBinding(nodeHandle);
+      if (nodeHandle) {
+        if (params.relayAuthToken || params.relayNodeId) {
+          nodeHandle.setRelaySessionAuth(
+            params.relayAuthToken ?? null,
+            params.relayNodeId ?? null
+          );
+        }
+        rlnNode = new RlnNodeBinding(nodeHandle);
+      }
     }
     const defaultIndexerUrl = resolveNodeIndexerUrl(
       params.network,
@@ -576,6 +612,7 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       params.enableVirtualChannels ?? true
     );
     binding.vssParams = params.vss ?? null;
+    binding.pendingNodeParams = pendingNodeParams;
     // Created while LOCKED (no wasm lifecycle check) so VSS restore can run
     // in the init→unlock gap; ops stay gated by the `unlocked` flag.
     binding._wallet = await RlnWasmWallet.create(JSON.stringify(walletData));
@@ -583,11 +620,13 @@ export class RlnWasmBinding implements IRlnSdkBinding {
   }
 
   /** Phase 2: sdk.unlock (idempotent for the same password; validates the
-   *  password and authorizes the node runtime) → LDK VSS configure
-   *  (non-fatal — see getLdkVssInitError) → LOCKED gate released.
+   *  password and authorizes the node runtime) → deferred node-handle
+   *  creation (fresh wallets) → LDK VSS configure (non-fatal — see
+   *  getLdkVssInitError) → LOCKED gate released.
    *  Idempotent/retryable; the binding stays locked on a thrown failure. */
   async unlockWallet(): Promise<void> {
     await this.sdk.unlock(JSON.stringify({ password: this.password }));
+    await this.ensureNodeHandle();
     await this.configureLdkVss();
     this.unlocked = true;
   }
@@ -609,6 +648,29 @@ export class RlnWasmBinding implements IRlnSdkBinding {
       accountXpubColored: this.walletData.account_xpub_colored,
       masterFingerprint: this.walletData.master_fingerprint,
     };
+  }
+
+  /**
+   * Build the deferred Lightning node handle after sdk.unlock (fresh wallets:
+   * create() could not call newWithNodeRuntimeId while LOCKED). No-op when
+   * the handle already exists or no proxyUrl was configured. Idempotent.
+   */
+  private async ensureNodeHandle(): Promise<void> {
+    if (this.nodeHandle || !this.pendingNodeParams) return;
+    const { proxyUrl, runtimeId, networkStr, relayAuthToken, relayNodeId } =
+      this.pendingNodeParams;
+    const { RlnNodeBinding } = await import('../lightning/RlnNodeBinding');
+    const handle = RlnWasmNode.newWithNodeRuntimeId(
+      proxyUrl,
+      runtimeId,
+      networkStr
+    );
+    if (relayAuthToken || relayNodeId) {
+      handle.setRelaySessionAuth(relayAuthToken, relayNodeId);
+    }
+    this.nodeHandle = handle;
+    this.rlnNode = new RlnNodeBinding(handle);
+    this.pendingNodeParams = null;
   }
 
   /** Configure LDK/channel-state VSS replication — must run before the node

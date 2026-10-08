@@ -52,7 +52,7 @@
     "@noble/hashes": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
     "@utexo/rgb-sdk-core": "1.0.0-beta.5",
-    "@utexo/rln-wasm": "0.10.0-beta.3",
+    "@utexo/rln-wasm": "0.15.0-beta.3",
     "bitcoinjs-lib": "^6.1.7"
   },
   "keywords": [

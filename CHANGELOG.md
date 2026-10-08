@@ -1,6 +1,24 @@
 # Changelog
 
 
+## Unreleased
+
+### Fixed
+
+- **IFA assets (e.g. USDT) can be received** — `@utexo/rln-wasm` bumped from
+  `0.10.0-beta.3` to `0.15.0-beta.3`. The old build carried a stale IFA schema
+  ID, so a receiving wallet silently rejected every incoming IFA transfer: no
+  ACK was posted, the sender's transfer stayed `WaitingCounterparty` and the
+  receiver never got the asset (rgb-lightning-node#126, fixed in
+  rgb-lib-wasm#25)
+
+### Changed
+
+- **Lightning APIs are rejected on mainnet** — with the new `rln-wasm`, Lightning
+  operations (peers, channels, invoices, payments) on a mainnet wallet fail with
+  `LightningUnsupportedOnMainnet` instead of running. On-chain APIs are
+  unaffected, and the SDK ships no mainnet defaults
+
 ## 1.0.0-beta.11
 
 All four align the web surface with `@utexo/rgb-sdk-rn` (RN parity), so app code

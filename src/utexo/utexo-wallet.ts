@@ -59,6 +59,7 @@ import {
   logger,
   buildVssConfigFromMnemonic,
   DEFAULT_VSS_SERVER_URL,
+  ValidationError,
 } from '@utexo/rgb-sdk-core';
 import {
   RlnWalletManager,
@@ -101,6 +102,26 @@ export interface RlnVssRestoreResult {
   walletRestored: boolean;
   /** Server version of the installed snapshot (null when none existed). */
   serverVersion: number | null;
+}
+
+/**
+ * Validate a whole-unit amount (sats or asset base units) and convert it
+ * losslessly. Float math before BigInt() silently rounds anything outside
+ * the safe-integer range — realistic for RGB u64 base units — so fail
+ * closed with ValidationError instead of paying a different quantity.
+ */
+function toExactAmount(value: number, field: string): bigint {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new ValidationError(
+      `${field} must be a non-negative safe integer`,
+      field
+    );
+  return BigInt(value);
+}
+
+/** sats → exact msat bigint (no float multiplication before conversion). */
+function satsToMsat(sats: number, field: string): bigint {
+  return toExactAmount(sats, field) * 1000n;
 }
 
 // ── UTEXOWallet ──────────────────────────────────────────────────────────────
@@ -769,13 +790,18 @@ export class UTEXOWallet implements IUTEXOProtocol<void> {
     params: CreateLnInvoiceRequest
   ): Promise<LightningReceiveRequest> {
     const amtMsat =
-      params.amountSats != null ? BigInt(params.amountSats * 1000) : undefined;
+      params.amountSats != null
+        ? satsToMsat(params.amountSats, 'amountSats')
+        : undefined;
     const assetId = params.asset?.assetId || undefined;
     const resp = await this.requireNode().createLnInvoice({
       amtMsat,
       expirySec: params.expirySeconds ?? 3600,
       assetId,
-      assetAmount: assetId != null ? BigInt(params.asset!.amount) : undefined,
+      assetAmount:
+        assetId != null
+          ? toExactAmount(params.asset!.amount, 'asset.amount')
+          : undefined,
     });
     return { lnInvoice: resp.invoice };
   }
@@ -808,9 +834,11 @@ export class UTEXOWallet implements IUTEXOProtocol<void> {
     params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
     const amtMsat =
-      params.amount != null ? BigInt(params.amount * 1000) : undefined;
+      params.amount != null ? satsToMsat(params.amount, 'amount') : undefined;
     const assetAmount =
-      params.assetAmount != null ? BigInt(params.assetAmount) : undefined;
+      params.assetAmount != null
+        ? toExactAmount(params.assetAmount, 'assetAmount')
+        : undefined;
     const resp = await this.requireNode().sendPayment({
       invoice: params.lnInvoice,
       amtMsat,
@@ -1049,17 +1077,24 @@ export class UTEXOWallet implements IUTEXOProtocol<void> {
   }
 
   /** Spontaneous keysend payment (BTC, or an RGB asset via `assetId`/`assetAmount`). */
-  keysend(
+  async keysend(
     destPubkey: string,
     amtMsat: number,
     assetId?: string,
     assetAmount?: number
   ): Promise<SendPaymentResult> {
+    // Validate before requireNode(): argument evaluation happens after the
+    // receiver, so inline validation would never run on a cold wallet.
+    const safeAmtMsat = toExactAmount(amtMsat, 'amtMsat');
+    const safeAssetAmount =
+      assetAmount != null
+        ? toExactAmount(assetAmount, 'assetAmount')
+        : undefined;
     return this.requireNode().keysend({
       destPubkey,
-      amtMsat: BigInt(amtMsat),
+      amtMsat: safeAmtMsat,
       assetId,
-      assetAmount: assetAmount != null ? BigInt(assetAmount) : undefined,
+      assetAmount: safeAssetAmount,
     });
   }
 

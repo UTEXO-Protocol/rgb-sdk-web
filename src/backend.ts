@@ -43,14 +43,21 @@ import { WasmSession } from './session.js';
 /**
  * The engine's control layer (ADR-0002): one wallet profile, one queue.
  *
- * For each of the 29 SharedWalletApi methods it does, in order:
+ * A wallet operation (`run`, `withOptions` or `checked`) goes through:
  * 1. synchronous checks on an owned copy of the params: the params object,
  *    `skipSync`, watch-only for operations that sign, then `prepare` from
- *    `operations.ts` (an invalid call throws at once and queues nothing);
+ *    `operations.ts`. An invalid call queues nothing; the public method
+ *    (`guarded()`) returns the error as a rejected Promise;
  * 2. admission (`run`): refused once `destroy()` was called;
  * 3. for online operations, lazy connect, before entering the queue (the
  *    connect queues its own call); the wallet must already be open (`init()`);
  * 4. `execute` as one task in the serial queue, so WASM calls never overlap.
+ *
+ * Not every method has every stage: reads without params have no `prepare`;
+ * `listAssets` checks its schema filter inside the queued task, as on React
+ * Native, so that error keeps its place after the admission checks; the
+ * lifecycle methods (`init`, `unlock`, `destroy`) and the network getters
+ * have their own paths.
  *
  * It owns the lifecycle (open, connect, `destroy()` waiting for accepted
  * work) and maps errors to the public codes. It holds no wallet rules and
@@ -314,11 +321,12 @@ export class RgbLibWebBackend {
    * any connect or WASM call: the params are owned, a signing operation on a
    * watch-only wallet is refused, and `prepare` validates them once.
    */
-  private checked<P, T, R = undefined>(
+  private checked<P, T, R>(
     operation: string,
     requiresOnline: boolean,
     params: P,
-    rules: { signs?: boolean; prepare?: (owned: P) => R },
+    // Required: `action` gets what `prepare` returned, never a missing value.
+    rules: { signs?: boolean; prepare: (owned: P) => R },
     action: (session: WasmSession, owned: P, prepared: R) => Promise<T>
   ): Promise<T> {
     if (typeof params !== 'object' || params === null)
@@ -331,7 +339,7 @@ export class RgbLibWebBackend {
         `${operation} needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys`,
         operation
       );
-    const prepared = rules.prepare?.(owned) as R;
+    const prepared = rules.prepare(owned);
     return this.run(operation, requiresOnline, (session) =>
       action(session, owned, prepared)
     );

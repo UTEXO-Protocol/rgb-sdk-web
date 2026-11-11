@@ -44,6 +44,7 @@ export default [
       'examples/',
       'tests/e2e/.out/',
       'tests/e2e/.results/',
+      'tests/.codec-*/',
       // Generated: npm run capture:fixtures, npm run golden:update.
       'tests/fixtures/rgb-lib-wasm-*/*.mjs',
       '!tests/fixtures/rgb-lib-wasm-*/handmade.mjs',

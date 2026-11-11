@@ -900,7 +900,7 @@ export interface Transfer {
   expiration: bigint | null;
   transportEndpoints: {
     endpoint: string;
-    transportType: string;
+    transportType: (typeof TRANSPORT_TYPES)[number];
     used: boolean;
   }[];
   invoiceString: string | null;
@@ -933,7 +933,11 @@ export function decodeTransfers(value: unknown): Transfer[] {
           const e = record(x, 'transport endpoint');
           return {
             endpoint: str(e.endpoint, 'endpoint'),
-            transportType: str(e.transportType, 'transport type'),
+            transportType: known(
+              str(e.transportType, 'transport type'),
+              TRANSPORT_TYPES,
+              'transport type'
+            ),
             used: bool(e.used, 'endpoint used'),
           };
         }
@@ -1023,6 +1027,8 @@ const INVOICE_NETWORKS: Readonly<Record<string, BitcoinNetwork>> = {
   Signet: 'signet',
   Regtest: 'regtest',
 };
+/** beta.4 `TransportType` (`src/database/enums.rs`): its only variant. */
+const TRANSPORT_TYPES = ['JsonRpc'] as const;
 /** beta.4 `AssetSchema` (`src/database/enums.rs`): its only variants. */
 const ASSET_SCHEMAS = [AssetSchema.Nia, AssetSchema.Ifa, 'Bfa'] as const;
 const ENCRYPTIONS = ['Required', 'Unsupported', 'Optional'] as const;
@@ -1047,7 +1053,8 @@ export function decodeInvoice(value: unknown): Invoice {
   const v = record(value, 'invoice data');
   // A HashMap<String, String>, built as a plain object
   // (serialize_maps_as_objects in bindings/wasm/src/lib.rs).
-  const params = record(v.unknownQueryParams ?? {}, 'query params');
+  // Required in Rust (not an Option): a missing map is a malformed response.
+  const params = record(v.unknownQueryParams, 'query params');
   const expirationTimestamp = optBig(
     v.expirationTimestamp,
     'invoice expiration'

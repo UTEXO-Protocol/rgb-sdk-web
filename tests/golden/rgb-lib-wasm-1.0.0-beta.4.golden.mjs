@@ -1898,6 +1898,17 @@ export const golden = {
       "listTransfers",
     ],
   },
+  "negative: listTransfers — unknown transport type": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "listTransfers",
+      message: "Unknown rgb-lib-wasm transport type",
+    },
+    calls: [
+      "listTransfers",
+    ],
+  },
   "negative: listTransactions — unknown transaction type": {
     result: {
       ok: false,
@@ -2231,6 +2242,28 @@ export const golden = {
     },
     calls: [
       "refresh",
+    ],
+  },
+  "negative: invoiceData — invoice without unknownQueryParams": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm query params",
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: invoiceData — unknownQueryParams null": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm query params",
+    },
+    calls: [
+      "WasmInvoice",
     ],
   },
   "negative: invoiceData — unknownQueryParams as a Map": {

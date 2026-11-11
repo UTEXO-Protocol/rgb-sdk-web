@@ -80,7 +80,10 @@ function resolveReceiveAssignment(
   amount: number | undefined
 ): ReceiveAssignmentKind {
   const resolved = kind ?? (amount === undefined ? 'Any' : 'Fungible');
-  const rule = RECEIVE_KINDS[resolved];
+  // Own keys only: "constructor" or "toString" are not kinds.
+  const rule = Object.hasOwn(RECEIVE_KINDS, resolved)
+    ? RECEIVE_KINDS[resolved]
+    : undefined;
   if (rule === undefined)
     throw new ValidationError(
       `Unknown assignmentKind: ${String(kind)}`,

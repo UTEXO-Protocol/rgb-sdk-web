@@ -91,6 +91,15 @@ export const cases = [
     }),
   },
   {
+    method: 'listTransfers',
+    label: 'unknown transport type',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(sample(listTransfers, 'sender: pending sends'), (v) => {
+      v[1].transportEndpoints[0].transportType = 'ImaginaryTransport';
+    }),
+  },
+  {
     method: 'listTransactions',
     label: 'unknown transaction type',
     kind: 'unknown-variant',
@@ -255,6 +264,24 @@ export const cases = [
     ]),
   },
   // ── containers ────────────────────────────────────────────────────────
+  {
+    method: 'invoiceData',
+    label: 'invoice without unknownQueryParams',
+    kind: 'missing-field',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      delete v.unknownQueryParams;
+    }),
+  },
+  {
+    method: 'invoiceData',
+    label: 'unknownQueryParams null',
+    kind: 'wrong-type',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      v.unknownQueryParams = null;
+    }),
+  },
   {
     method: 'invoiceData',
     label: 'unknownQueryParams as a Map',

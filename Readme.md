@@ -12,6 +12,100 @@ React Native (`@utexo/rgb-lib-rn`).
 
 This package has no Lightning.
 
+## Requirements
+
+- A modern browser with WebAssembly and IndexedDB.
+- An ESM bundler. The package is ESM only.
+- An Esplora (HTTP) indexer and an RGB proxy. Known networks have defaults;
+  regtest has none. Electrum indexers do not work in the browser.
+
+## Quick start
+
+```ts
+import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
+
+const keys = await generateKeys('testnet'); // pure JS, no WASM
+const wallet = await RgbLibWeb.create({
+  network: 'testnet',
+  mnemonic: keys.mnemonic,
+});
+
+const address = await wallet.getAddress();
+const balance = await wallet.getBtcBalance();
+```
+
+`create()` loads the WASM (once per page), opens the wallet from IndexedDB and
+returns it. The first network operation connects; `unlock()` is needed only for
+connection settings other than the config's.
+
+Store `keys.mnemonic` safely. It is the only way to restore the wallet.
+
+## Config
+
+One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
+
+| Field | Meaning |
+|---|---|
+| `network` | `mainnet`, `testnet`, `testnet4`, `signet`, `regtest` or `utexo` |
+| `mnemonic` | the wallet mnemonic; or use `keys` |
+| `keys` | a function or `{ getMnemonic }` that returns the mnemonic on `init()`, optionally with public keys that must match; or public keys alone for a watch-only wallet |
+| `dataDir` | IndexedDB key prefix. Default `':memory:'` (nothing persists) |
+| `reuseAddresses` | one pinned address instead of a new one per call |
+| `maxAllocationsPerUtxo` | default 5 |
+| `indexerUrl` / `indexer` | Esplora server; default per network |
+| `proxyEndpoint` | RGB proxy; default per network |
+| `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys` | BFA mint locks and proxy auth |
+| `wasmUrl` | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS |
+| `runtime` | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl` |
+
+Pass exactly one of `mnemonic` and `keys`. Errors are `RgbLibWebError` with a
+`code` (`INVALID_CONFIG`, `KEYS_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY`, …);
+check them with `isEngineError(error, code)` from `@utexo/rgb-sdk-core`.
+
+## Restore between open and connect
+
+```ts
+const wallet = new RgbLibWeb({ network: 'testnet', mnemonic, dataDir: 'my-app' });
+await wallet.init();   // opened from IndexedDB, not online yet
+// restore from a backup here (planned: ADR-0003)
+await wallet.unlock(); // online
+```
+
+## With the facade
+
+```ts
+import { UTEXOWallet } from '@utexo/rgb-sdk';
+import { RgbLibWeb } from '@utexo/rgb-sdk-web';
+
+const wallet = new UTEXOWallet({
+  engine: new RgbLibWeb({ network: 'testnet', mnemonic }),
+});
+await wallet.init();
+```
+
+## Bundler setup
+
+`@utexo/rgb-lib-wasm` fetches its `.wasm` file from
+`new URL('rgb_lib_wasm_bindings_bg.wasm', import.meta.url)`. The bundler must
+copy that file next to the bundled JS, or the app sets `wasmUrl`.
+
+- **esbuild:** copy the file next to the bundle. This is what the e2e tests do
+  (`tests/e2e/serve.mjs`).
+- **Vite:** exclude the packages from pre-bundling, so `import.meta.url` keeps
+  pointing at the package files. This is not yet tested on this branch.
+
+  ```ts
+  // vite.config.ts
+  export default defineConfig({
+    optimizeDeps: { exclude: ['@utexo/rgb-sdk-web', '@utexo/rgb-lib-wasm'] },
+  });
+  ```
+
+## Examples
+
+See [`examples/`](examples/README.md): a new wallet, reading a wallet, UTXOs and
+issuing, a transfer.
+
 ## Status
 
 | Step | State |
@@ -19,43 +113,17 @@ This package has no Lightning.
 | 1. Remove RLN, depend on the split core and `@utexo/rgb-lib-wasm` 1.0.0-beta.4 | done |
 | 2. Move `RgbLibWeb` and its tests here | done |
 | 3. Load the WASM runtime inside the package | done |
-| 4. One-call start: `RgbLibWeb.create()`, `generateKeys` | next |
-
-Today the app passes nothing but the options and the keys; `init()` loads the
-WASM once per page:
-
-```ts
-import { RgbLibWeb } from '@utexo/rgb-sdk-web';
-
-const wallet = new RgbLibWeb({ network: 'testnet' }, mnemonic);
-await wallet.init();
-```
-
-`wasmUrl` points the loader at `rgb_lib_wasm_bindings_bg.wasm` when the bundler
-does not serve it next to the `@utexo/rgb-lib-wasm` JS file. The third
-constructor argument, `runtime`, takes a module the app already initialized, or
-a test double.
-
-The planned start:
-
-```ts
-import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
-
-const keys = await generateKeys('testnet');
-const wallet = await RgbLibWeb.create({ mnemonic: keys.mnemonic, network: 'testnet' });
-const balance = await wallet.getBtcBalance();
-```
+| 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
+| Backup and VSS (ADR-0003) | planned |
 
 ## Development
 
 ```bash
 npm install
-npm test          # typecheck, lint, build, unit tests (node:test)
+npm test          # typecheck, lint, build, unit tests (node:test), examples
 npm run test:e2e  # Playwright over the real WASM; needs the regtest stand (tests/e2e/README.md)
 ```
 
-`@utexo/rgb-sdk` (the facade) is a dev dependency, only for tests that wrap
-`RgbLibWeb` in `UTEXOWallet`.
-
 `@utexo/rgb-sdk-core` comes from `../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz`
-(the split core) until it is published.
+(the split core) until it is published. `@utexo/rgb-sdk` (the facade) is a dev
+dependency, only for tests that wrap `RgbLibWeb` in `UTEXOWallet`.

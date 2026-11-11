@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { runEngineConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { UTEXOWallet } from '@utexo/rgb-sdk';
-import { RgbLibWeb } from '../../dist/index.mjs';
+import { RgbLibWeb, generateKeys } from '../../dist/index.mjs';
 import {
   ASSET_ID,
   KEYS,
@@ -24,11 +24,12 @@ const ONLINE = {
 
 function create({ params = {}, keys = KEYS.mnemonic, ...fake } = {}) {
   const runtime = createFakeRuntime(fake);
-  const engine = new RgbLibWeb(
-    { network: 'regtest', ...params },
+  const engine = new RgbLibWeb({
+    network: 'regtest',
+    ...params,
     keys,
-    runtime
-  );
+    runtime,
+  });
   return { engine, runtime, names: () => runtime.calls.map((c) => c.name) };
 }
 
@@ -57,6 +58,73 @@ runEngineConformanceChecks({
   expect,
 });
 
+describe('RgbLibWeb config and create()', () => {
+  const isConfig = (e) => isEngineError(e, 'INVALID_CONFIG');
+
+  it('takes exactly one of mnemonic or keys', () => {
+    const runtime = createFakeRuntime();
+    assert.throws(() => new RgbLibWeb(), isConfig);
+    assert.throws(() => new RgbLibWeb(null), isConfig);
+    assert.throws(
+      () => new RgbLibWeb({ network: 'regtest', runtime }),
+      isConfig
+    );
+    assert.throws(
+      () =>
+        new RgbLibWeb({
+          network: 'regtest',
+          mnemonic: KEYS.mnemonic,
+          keys: KEYS.mnemonic,
+          runtime,
+        }),
+      isConfig
+    );
+    assert.throws(
+      () => new RgbLibWeb({ network: 'regtest', mnemonic: () => 'x', runtime }),
+      isConfig
+    );
+  });
+
+  it('create() returns an opened engine', async () => {
+    const runtime = createFakeRuntime();
+    const engine = await RgbLibWeb.create({
+      network: 'regtest',
+      mnemonic: KEYS.mnemonic,
+      runtime,
+      ...ONLINE,
+    });
+    assert.ok(engine instanceof RgbLibWeb);
+    assert.ok(runtime.calls.some((c) => c.name === 'create'));
+    assert.equal((await engine.getWalletIdentity()).network, 'regtest');
+    await engine.destroy();
+  });
+
+  it('create() rethrows the init error and opens nothing', async () => {
+    const runtime = createFakeRuntime();
+    await rejects(
+      RgbLibWeb.create({
+        network: 'regtest',
+        keys: () => {
+          throw new Error('locked');
+        },
+        runtime,
+      }),
+      'KEYS_UNAVAILABLE',
+      'init'
+    );
+    assert.equal(
+      runtime.calls.some((c) => c.name === 'create'),
+      false
+    );
+  });
+
+  it('re-exports generateKeys from core', async () => {
+    const keys = await generateKeys('regtest');
+    assert.equal(keys.mnemonic.split(' ').length, 12);
+    assert.ok(keys.accountXpubVanilla.startsWith('tpub'));
+  });
+});
+
 describe('RgbLibWeb construction', () => {
   it('validates arguments and calls nothing in the runtime', () => {
     const { names } = create({ params: ONLINE });
@@ -65,7 +133,12 @@ describe('RgbLibWeb construction', () => {
 
   it('rejects a runtime without the module API, bad keys and an Electrum indexer', () => {
     assert.throws(
-      () => new RgbLibWeb({ network: 'regtest' }, KEYS.mnemonic, {}),
+      () =>
+        new RgbLibWeb({
+          network: 'regtest',
+          mnemonic: KEYS.mnemonic,
+          runtime: {},
+        }),
       (e) => isEngineError(e, 'INVALID_CONFIG')
     );
     assert.throws(

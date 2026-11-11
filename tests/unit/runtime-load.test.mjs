@@ -31,7 +31,12 @@ async function freshPage() {
   initImpl = async () => undefined;
   const { RgbLibWeb } = await import(`../../dist/index.mjs?page=${page}`);
   return (params = {}, runtime) =>
-    new RgbLibWeb({ network: 'regtest', ...params }, KEYS.mnemonic, runtime);
+    new RgbLibWeb({
+      network: 'regtest',
+      ...params,
+      mnemonic: KEYS.mnemonic,
+      runtime,
+    });
 }
 
 async function rejects(promise, code, operation) {

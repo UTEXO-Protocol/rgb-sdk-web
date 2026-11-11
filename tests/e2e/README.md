@@ -48,7 +48,9 @@ Environment overrides: `RGB_E2E_INDEXER` (default `http://127.0.0.1:8094/regtest
 | `c-assets` | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs |
 | `d-transfers` | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData` |
 | `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty |
+| `f-start` | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; an Electrum indexer rejected before opening |
 
-Not covered: rgb-sdk-web specs f (psbt / beginEnd carriers; RgbLibWeb has neither),
+Not covered: the old rgb-sdk-web spec f (psbt / beginEnd carriers; RgbLibWeb has neither;
+the letter f is reused for `f-start`),
 g and h (VSS backup and restore), and i and j (Lightning). Backup and VSS are engine
 extensions that RgbLibWeb does not implement yet.

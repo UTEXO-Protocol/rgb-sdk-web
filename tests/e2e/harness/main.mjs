@@ -5,6 +5,7 @@
  * next to the bundle, as in an app.
  *
  *   boot(cfgJson)        — new RgbLibWeb → UTEXOWallet → init → unlock
+ *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no facade, no unlock
  *   call(method, args)   — call a wallet method
  *   get(property)        — read a wallet property ('capabilities')
  *
@@ -13,7 +14,10 @@
  */
 import { generateKeys } from '@utexo/rgb-sdk-core';
 import { UTEXOWallet } from '@utexo/rgb-sdk';
-import { RgbLibWeb } from '../../../dist/index.mjs';
+import {
+  RgbLibWeb,
+  generateKeys as generateKeysFromPackage,
+} from '../../../dist/index.mjs';
 
 let wallet = null;
 const statusEl = document.getElementById('status');
@@ -57,7 +61,7 @@ window.harness = {
       const cfg = JSON.parse(cfgJson);
       const mnemonic = cfg.mnemonic ?? (await generateKeys('regtest')).mnemonic;
       const dataDir = cfg.dataDir ?? `e2e-${Date.now().toString(16)}`;
-      const engine = new RgbLibWeb({ network: 'regtest', dataDir }, mnemonic);
+      const engine = new RgbLibWeb({ network: 'regtest', dataDir, mnemonic });
       wallet = new UTEXOWallet({ engine });
       await wallet.init();
       if (cfg.unlock !== false) {
@@ -68,6 +72,27 @@ window.harness = {
       }
       statusEl.textContent = `wallet booted (${dataDir})`;
       return { mnemonic, dataDir };
+    }),
+
+  /**
+   * The README quick start: keys from the package, one create() call, the
+   * engine used directly. cfg: { indexerUrl, proxyEndpoint, dataDir? }; on
+   * regtest the connection settings must be in the config (no defaults).
+   */
+  start: (cfgJson) =>
+    run(async () => {
+      const cfg = JSON.parse(cfgJson);
+      const keys = await generateKeysFromPackage('regtest');
+      const dataDir = cfg.dataDir ?? `e2e-${Date.now().toString(16)}`;
+      wallet = await RgbLibWeb.create({
+        network: 'regtest',
+        mnemonic: keys.mnemonic,
+        dataDir,
+        indexerUrl: cfg.indexerUrl,
+        proxyEndpoint: cfg.proxyEndpoint,
+      });
+      statusEl.textContent = `wallet started (${dataDir})`;
+      return { mnemonic: keys.mnemonic, dataDir, keys };
     }),
 
   call: (method, argsJson) =>

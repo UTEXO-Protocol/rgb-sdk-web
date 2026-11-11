@@ -4,6 +4,8 @@ import {
 } from '@utexo/rgb-sdk-core';
 import type { Network } from '@utexo/rgb-sdk-core';
 import { RgbLibWebError, unsupported } from './errors.js';
+import type { RgbLibWebKeys } from './keys.js';
+import type { RgbLibWasmRuntime } from './runtime/types.js';
 
 // Ported from `@utexo/rgb-lib-rn` (`rgb-lib/config.ts`, `network-endpoints.ts`).
 // rgb-lib-wasm is built with Esplora only: Electrum and bitcoind indexers are
@@ -61,6 +63,57 @@ export type RgbLibWebUnlockParams = RgbLibWebOnlineConfig &
  * without explicit parameters. Stored only: construction makes no network call.
  */
 export type RgbLibWebParams = RgbLibWebOptions & RgbLibWebUnlockParams;
+
+/**
+ * Everything `new RgbLibWeb(config)` and `RgbLibWeb.create(config)` take: the
+ * wallet settings, the default connection settings, the wallet keys and,
+ * optionally, a runtime.
+ *
+ * Keys come as `mnemonic` (a string) or as `keys` (every form of
+ * {@link RgbLibWebKeys}: a mnemonic reader, `{ getMnemonic }`, or public keys
+ * for a watch-only wallet). Pass exactly one of them.
+ */
+export type RgbLibWebConfig = RgbLibWebParams &
+  (
+    | { mnemonic: string; keys?: never }
+    | { keys: RgbLibWebKeys; mnemonic?: never }
+  ) & {
+    /**
+     * An initialized `@utexo/rgb-lib-wasm` module, or a test double. Omit it
+     * and `init()` loads the module itself; it cannot be combined with
+     * `wasmUrl`.
+     */
+    runtime?: RgbLibWasmRuntime;
+  };
+
+/** Splits the config into what the backend takes; validates the key fields only. */
+export function splitConfig(config: RgbLibWebConfig): {
+  params: RgbLibWebParams;
+  keys: RgbLibWebKeys;
+  runtime: RgbLibWasmRuntime | undefined;
+} {
+  if (!config || typeof config !== 'object') {
+    invalidConfig('RgbLibWeb needs a config object');
+  }
+  const { mnemonic, keys, runtime, ...params } = config as RgbLibWebParams & {
+    mnemonic?: unknown;
+    keys?: unknown;
+    runtime?: RgbLibWasmRuntime;
+  };
+  if ((mnemonic === undefined) === (keys === undefined)) {
+    invalidConfig('Pass exactly one of mnemonic or keys');
+  }
+  if (mnemonic !== undefined && typeof mnemonic !== 'string') {
+    invalidConfig(
+      'mnemonic must be a string; use keys for a reader or public keys'
+    );
+  }
+  return {
+    params,
+    keys: (mnemonic ?? keys) as RgbLibWebKeys,
+    runtime,
+  };
+}
 
 export interface ResolvedRgbLibWebConfig {
   indexer: RgbLibWebIndexer;

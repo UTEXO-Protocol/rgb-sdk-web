@@ -46,6 +46,24 @@ export async function bootWallet(page, opts = {}) {
   return unwrap(res, 'boot');
 }
 
+/** Opens the harness and runs the one-call start (harness `start`). */
+export async function startWallet(page, opts = {}) {
+  await page.goto('/');
+  await page.waitForFunction(() => window.harness?.ready === true, undefined, {
+    timeout: 60_000,
+  });
+  const cfg = {
+    indexerUrl: STAND.indexerUrl,
+    proxyEndpoint: STAND.proxyEndpoint,
+    ...opts,
+  };
+  const res = await page.evaluate(
+    (c) => window.harness.start(c),
+    JSON.stringify(cfg)
+  );
+  return unwrap(res, 'start');
+}
+
 /** Calls a wallet method in the page. */
 export async function wcall(page, method, ...args) {
   const res = await page.evaluate(

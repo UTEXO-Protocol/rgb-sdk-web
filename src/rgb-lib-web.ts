@@ -13,25 +13,33 @@ import type {
   SharedWalletApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebBackend } from './backend.js';
-import type { RgbLibWebParams, RgbLibWebUnlockParams } from './config.js';
-import type { RgbLibWebKeys } from './keys.js';
-import type { RgbLibWasmRuntime } from './runtime/types.js';
+import { splitConfig } from './config.js';
+import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
  * the 29 `SharedWalletApi` methods and no extension.
  *
  * ```ts
+ * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
+ *
+ * const { mnemonic } = await generateKeys('testnet');
+ * const wallet = await RgbLibWeb.create({ network: 'testnet', mnemonic });
+ * const balance = await wallet.getBtcBalance();
+ * ```
+ *
+ * Behind the platform-neutral facade:
+ *
+ * ```ts
  * import { UTEXOWallet } from '@utexo/rgb-sdk';
- * import { RgbLibWeb } from '@utexo/rgb-sdk-web';
  *
  * const wallet = new UTEXOWallet({
- *   engine: new RgbLibWeb({ network: 'utexo' }, mnemonic),
+ *   engine: new RgbLibWeb({ network: 'testnet', mnemonic }),
  * });
  * await wallet.init();
  * ```
  *
- * Construction validates the arguments only. `init()` loads
+ * Construction validates the config only. `init()` loads
  * `@utexo/rgb-lib-wasm` once per page (from `wasmUrl` if set), then opens the
  * wallet and restores its IndexedDB state. Pass `runtime` to use a module the
  * app has already initialized, or a test double. The first operation that needs the network
@@ -50,11 +58,25 @@ export class RgbLibWeb implements SharedWalletApi<
   readonly beginEnd = undefined;
   private readonly backend: RgbLibWebBackend;
 
-  constructor(
-    params: RgbLibWebParams,
-    keys: RgbLibWebKeys,
-    runtime?: RgbLibWasmRuntime
-  ) {
+  /**
+   * Constructs and opens the wallet: `new RgbLibWeb(config)`, then `init()`.
+   * The first network operation connects; call `unlock()` first only to pass
+   * connection settings that differ from the config's. If `init()` fails, the
+   * instance is destroyed and the error is rethrown.
+   */
+  static async create(config: RgbLibWebConfig): Promise<RgbLibWeb> {
+    const wallet = new RgbLibWeb(config);
+    try {
+      await wallet.init();
+    } catch (error) {
+      await wallet.destroy().catch(() => undefined);
+      throw error;
+    }
+    return wallet;
+  }
+
+  constructor(config: RgbLibWebConfig) {
+    const { params, keys, runtime } = splitConfig(config);
     this.backend = new RgbLibWebBackend(params, keys, runtime);
   }
 

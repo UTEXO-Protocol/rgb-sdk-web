@@ -143,6 +143,30 @@ describe('codec field tables', () => {
     ]);
   });
 
+  it('accept each beta.4 AssetSchema in a failure, and only those', () => {
+    const failure = (schema) =>
+      new Map([
+        [
+          1,
+          {
+            updatedStatus: 'Failed',
+            failure: { UnsupportedSchema: { asset_schema: schema } },
+          },
+        ],
+      ]);
+    for (const schema of ['Nia', 'Ifa', 'Bfa']) {
+      const [entry] = codec.decodeRefresh(failure(schema));
+      assert.equal(
+        entry.failure.message,
+        `UnsupportedSchema (asset_schema: ${schema})`
+      );
+    }
+    for (const schema of ['Cfa', 'Uda', 'nia']) {
+      const result = outcome(() => codec.decodeRefresh(failure(schema)));
+      assert.equal(result.code, 'INVALID_NATIVE_RESPONSE', schema);
+    }
+  });
+
   it('handle every field type of the generated Error variants', () => {
     const types = new Set(
       Object.values(generated.RGB_LIB_ERROR_VARIANTS).flatMap((f) =>

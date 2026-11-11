@@ -2363,6 +2363,17 @@ export const golden = {
       "refresh",
     ],
   },
+  "negative: refresh — failure field with an unknown AssetSchema": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Unknown rgb-lib-wasm asset schema",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
   "negative: refresh — unknown field in AssignmentsCollection (ignored)": {
     result: {
       ok: true,

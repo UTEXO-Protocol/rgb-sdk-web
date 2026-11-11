@@ -368,6 +368,21 @@ export const cases = [
   },
   {
     method: 'refresh',
+    label: 'failure field with an unknown AssetSchema',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [
+        4,
+        {
+          updatedStatus: 'Failed',
+          failure: { UnsupportedSchema: { asset_schema: 'ImaginarySchema' } },
+        },
+      ],
+    ]),
+  },
+  {
+    method: 'refresh',
     label: 'unknown field in AssignmentsCollection (ignored)',
     kind: 'unknown-key',
     expect: 'ok, without the unknown field',

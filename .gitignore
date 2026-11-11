@@ -10,7 +10,9 @@ package-lock.docs.json
 CLAUDE.md
 .env
 dist/
-scripts/
+# local scripts; the error table generator is tracked
+scripts/*
+!scripts/rgb-lib-errors.mjs
 .rgb-wallet/
 test-results/
 playwright-report/

@@ -1023,12 +1023,13 @@ const INVOICE_NETWORKS: Readonly<Record<string, BitcoinNetwork>> = {
   Signet: 'signet',
   Regtest: 'regtest',
 };
-const INVOICE_SCHEMAS = [AssetSchema.Nia, AssetSchema.Ifa, 'Bfa'] as const;
+/** beta.4 `AssetSchema` (`src/database/enums.rs`): its only variants. */
+const ASSET_SCHEMAS = [AssetSchema.Nia, AssetSchema.Ifa, 'Bfa'] as const;
 const ENCRYPTIONS = ['Required', 'Unsupported', 'Optional'] as const;
 
 export interface Invoice {
   recipientId: string;
-  assetSchema: (typeof INVOICE_SCHEMAS)[number] | null;
+  assetSchema: (typeof ASSET_SCHEMAS)[number] | null;
   assetId: string | null;
   assignment: Assignment;
   assignmentName: string | null;
@@ -1081,7 +1082,7 @@ export function decodeInvoice(value: unknown): Invoice {
     assetSchema:
       decoded.assetSchema === null
         ? null
-        : known(decoded.assetSchema, INVOICE_SCHEMAS, 'invoice schema'),
+        : known(decoded.assetSchema, ASSET_SCHEMAS, 'invoice schema'),
     encryption: known(decoded.encryption, ENCRYPTIONS, 'encryption'),
   };
 }
@@ -1158,7 +1159,8 @@ export interface Refreshed {
 const ERROR_FIELD = {
   String: (v: unknown, f: string) => str(v, f),
   // An enum with unit variants only, serialized as its name.
-  AssetSchema: (v: unknown, f: string) => str(v, f),
+  AssetSchema: (v: unknown, _f: string) =>
+    known(str(v, 'refresh failure details'), ASSET_SCHEMAS, 'asset schema'),
   u64: (v: unknown, f: string) => big(v, f).toString(),
   i32: (v: unknown, f: string) => String(int(v, f, 'i32')),
   AssignmentsCollection: (v: unknown, f: string) => {

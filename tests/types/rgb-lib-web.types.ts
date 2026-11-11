@@ -59,3 +59,13 @@ new RgbLibWeb({
 });
 // @ts-expect-error wasmUrl is a string or a URL
 new RgbLibWeb({ network: 'testnet', mnemonic: 'm', wasmUrl: 42 });
+
+// runtime and wasmUrl exclude each other: wasmUrl is only for the built-in loader.
+const both = {
+  network: 'testnet',
+  mnemonic: 'm',
+  runtime: asRuntime,
+  wasmUrl: '/rgb.wasm',
+} as const;
+// @ts-expect-error runtime with wasmUrl
+new RgbLibWeb(both);

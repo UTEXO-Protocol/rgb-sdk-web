@@ -1,54 +1,101 @@
 import initRgbLibWasm, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
-import { RgbLibWebError } from '../errors.js';
+import { RgbLibWebError, asCause } from '../errors.js';
 import type { RgbLibWasmRuntime } from './types.js';
 
-/** One load per page, shared by every wallet; cleared after a failure so a retry loads again. */
-let loading: Promise<RgbLibWasmRuntime> | undefined;
-let loadedFrom: string | undefined;
+interface Load {
+  readonly promise: Promise<RgbLibWasmRuntime>;
+  /** The normalized URL the load uses; undefined is the module's default URL. */
+  readonly from: string | undefined;
+}
 
 /**
- * Initializes `@utexo/rgb-lib-wasm` once per page and returns the module.
+ * Loads keyed by the module's init function, on `globalThis`, so every copy
+ * of this package on the page shares them. Two copies that import the same
+ * `@utexo/rgb-lib-wasm` must not run its init twice at once: the second
+ * instance would replace the first under wallets already open.
+ */
+const LOADS = Symbol.for('@utexo/rgb-sdk-web/rgb-lib-wasm-loads');
+
+function loads(): WeakMap<object, Load> {
+  const store = globalThis as { [LOADS]?: WeakMap<object, Load> };
+  return (store[LOADS] ??= new WeakMap());
+}
+
+/**
+ * The absolute form of a `wasmUrl`, so `/rgb.wasm` and its full address are
+ * one URL. Outside a page (no `location`) the string is kept as it is.
+ */
+export function normalizeWasmUrl(wasmUrl: string | URL): string {
+  const href = String(wasmUrl);
+  const page =
+    (
+      globalThis as {
+        location?: { href?: string };
+        document?: { baseURI?: string };
+      }
+    ).document?.baseURI ??
+    (globalThis as { location?: { href?: string } }).location?.href;
+  if (!page) return href;
+  try {
+    return new URL(href, page).href;
+  } catch {
+    return href;
+  }
+}
+
+/**
+ * Initializes `@utexo/rgb-lib-wasm` once per runtime instance and returns the
+ * module. Every wallet of every copy of this package that loads the same
+ * module shares one load.
  *
- * Without `wasmUrl`, the module fetches `rgb_lib_wasm_bindings_bg.wasm` next
- * to its own JS file; the app's bundler decides where that is. The first call
- * picks the URL. A later call with another URL is `INVALID_CONFIG`, because a
- * page holds one WASM instance.
+ * `wasmUrl` is already normalized (`normalizeWasmUrl`). Without it, the module
+ * fetches `rgb_lib_wasm_bindings_bg.wasm` next to its own JS file. The first
+ * load picks the URL; a later call with another URL is `INVALID_CONFIG`.
+ * A failed load is forgotten, so the next call loads again.
  */
 export function loadRgbLibWasm(
-  wasmUrl: string | URL | undefined,
+  wasmUrl: string | undefined,
   operation: string
 ): Promise<RgbLibWasmRuntime> {
-  const from = wasmUrl === undefined ? undefined : String(wasmUrl);
-  if (loading) {
-    if (from !== undefined && from !== loadedFrom) {
+  const key = initRgbLibWasm as object;
+  const current = loads().get(key);
+  if (current) {
+    if (wasmUrl !== undefined && wasmUrl !== current.from) {
       return Promise.reject(
         new RgbLibWebError(
           'INVALID_CONFIG',
-          `@utexo/rgb-lib-wasm is already loaded from ${loadedFrom ?? 'its default URL'}; a page holds one WASM instance`,
+          `@utexo/rgb-lib-wasm is already loaded from ${current.from ?? 'its default URL'}; one runtime is loaded once`,
           operation
         )
       );
     }
-    return loading;
+    return current.promise;
   }
-  loadedFrom = from;
   const promise = initRgbLibWasm(
     wasmUrl === undefined ? undefined : { module_or_path: wasmUrl }
   ).then(
     (): RgbLibWasmRuntime => rgbLibWasm,
     (error: unknown) => {
-      if (loading === promise) {
-        loading = undefined;
-        loadedFrom = undefined;
-      }
+      if (loads().get(key)?.promise === promise) loads().delete(key);
       throw new RgbLibWebError(
         'NATIVE_ERROR',
-        `Could not load @utexo/rgb-lib-wasm from ${from ?? 'its default URL'}: ${error instanceof Error ? error.message : String(error)}`,
+        `Could not load @utexo/rgb-lib-wasm from ${wasmUrl ?? 'its default URL'}: ${
+          error instanceof Error ? error.message : describe(error)
+        }`,
         operation,
-        error instanceof Error ? error : undefined
+        asCause(error)
       );
     }
   );
-  loading = promise;
+  loads().set(key, { promise, from: wasmUrl });
   return promise;
+}
+
+function describe(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
 }

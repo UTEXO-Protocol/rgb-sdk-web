@@ -76,23 +76,25 @@ window.harness = {
 
   /**
    * The README quick start: keys from the package, one create() call, the
-   * engine used directly. cfg: { indexerUrl, proxyEndpoint, dataDir? }; on
+   * engine used directly. cfg: { indexerUrl, proxyEndpoint, mnemonic?, dataDir? }; on
    * regtest the connection settings must be in the config (no defaults).
    */
   start: (cfgJson) =>
     run(async () => {
       const cfg = JSON.parse(cfgJson);
-      const keys = await generateKeysFromPackage('regtest');
-      const dataDir = cfg.dataDir ?? `e2e-${Date.now().toString(16)}`;
+      const keys = cfg.mnemonic
+        ? { mnemonic: cfg.mnemonic }
+        : await generateKeysFromPackage('regtest');
+      // No dataDir unless the spec passes one: the default config, as in an app.
       wallet = await RgbLibWeb.create({
         network: 'regtest',
         mnemonic: keys.mnemonic,
-        dataDir,
+        ...(cfg.dataDir ? { dataDir: cfg.dataDir } : {}),
         indexerUrl: cfg.indexerUrl,
         proxyEndpoint: cfg.proxyEndpoint,
       });
-      statusEl.textContent = `wallet started (${dataDir})`;
-      return { mnemonic: keys.mnemonic, dataDir, keys };
+      statusEl.textContent = 'wallet started';
+      return { mnemonic: keys.mnemonic, keys };
     }),
 
   call: (method, argsJson) =>

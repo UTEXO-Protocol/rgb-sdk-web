@@ -34,8 +34,9 @@ const address = await wallet.getAddress();
 const balance = await wallet.getBtcBalance();
 ```
 
-`create()` loads the WASM (once per page), opens the wallet from IndexedDB and
-returns it. The first network operation connects; `unlock()` is needed only for
+`create()` loads the WASM, opens the wallet from IndexedDB and returns it. The
+WASM is loaded once per `@utexo/rgb-lib-wasm` module, shared by all wallets and
+by every copy of this package on the page. The first network operation connects; `unlock()` is needed only for
 connection settings other than the config's.
 
 Store `keys.mnemonic` safely. It is the only way to restore the wallet.
@@ -49,7 +50,7 @@ One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 | `network` | `mainnet`, `testnet`, `testnet4`, `signet`, `regtest` or `utexo` |
 | `mnemonic` | the wallet mnemonic; or use `keys` |
 | `keys` | a function or `{ getMnemonic }` that returns the mnemonic on `init()`, optionally with public keys that must match; or public keys alone for a watch-only wallet |
-| `dataDir` | IndexedDB key prefix. Default `':memory:'` (nothing persists) |
+| `dataDir` | IndexedDB key prefix. Default `':memory:'`, which is a prefix too: the state is still saved to IndexedDB and restored with the same keys |
 | `reuseAddresses` | one pinned address instead of a new one per call |
 | `maxAllocationsPerUtxo` | default 5 |
 | `indexerUrl` / `indexer` | Esplora server; default per network |
@@ -58,9 +59,15 @@ One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 | `wasmUrl` | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS |
 | `runtime` | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl` |
 
-Pass exactly one of `mnemonic` and `keys`. Errors are `RgbLibWebError` with a
-`code` (`INVALID_CONFIG`, `KEYS_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY`, …);
-check them with `isEngineError(error, code)` from `@utexo/rgb-sdk-core`.
+Pass exactly one of `mnemonic` and `keys`, and at most one of `runtime` and
+`wasmUrl`. A `wasmUrl` is read once, at construction, and made absolute
+against the page URL.
+
+Errors follow the `EngineError` shape of `@utexo/rgb-sdk-core`: a `code`
+(`INVALID_CONFIG`, `KEYS_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY`, …),
+`operation` and `protocol`. The package's own errors are `RgbLibWebError`, but
+an engine error from the runtime passes through as it is, so check errors with
+`isEngineError(error, code)`, not `instanceof`.
 
 ## Restore between open and connect
 
@@ -91,8 +98,10 @@ copy that file next to the bundled JS, or the app sets `wasmUrl`.
 
 - **esbuild:** copy the file next to the bundle. This is what the e2e tests do
   (`tests/e2e/serve.mjs`).
-- **Vite:** exclude the packages from pre-bundling, so `import.meta.url` keeps
-  pointing at the package files. This is not yet tested on this branch.
+- **Vite** (checked with 6.4.3, dev and production, no WASM plugin): exclude the
+  packages from dependency pre-bundling in dev, so `import.meta.url` keeps
+  pointing at the package files. A production build emits the `.wasm` as a
+  hashed asset by itself.
 
   ```ts
   // vite.config.ts

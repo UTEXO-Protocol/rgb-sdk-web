@@ -35,6 +35,22 @@ test('F: generateKeys + RgbLibWeb.create(), then address and balance', async ({
   await wcall(page, 'destroy');
 });
 
+test('F: the default config persists to IndexedDB across a reload', async ({
+  page,
+}) => {
+  wirePageLogging(page);
+  // No dataDir: the default ':memory:' is only a key prefix.
+  const { mnemonic } = await startWallet(page);
+  const first = await wcall(page, 'getAddress');
+  await wcall(page, 'destroy');
+
+  await startWallet(page, { mnemonic }); // reloads the page
+  const next = await wcall(page, 'getAddress');
+  // A fresh wallet would return the first address again; this one resumes.
+  expect(next).not.toBe(first);
+  await wcall(page, 'destroy');
+});
+
 test('F: create() rejects an Electrum indexer before opening', async ({
   page,
 }) => {

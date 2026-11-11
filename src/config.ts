@@ -16,7 +16,9 @@ export interface RgbLibWebOptions {
   network: Network;
   /**
    * Prefix of the IndexedDB key; the wallet stores its state under
-   * `<dataDir>/<masterFingerprint>/<network>`. Default `':memory:'`.
+   * `<dataDir>/<masterFingerprint>/<network>`. Default `':memory:'`, which is
+   * only a prefix here: the state is still saved to IndexedDB and restored
+   * on the next `init()` with the same keys.
    */
   dataDir?: string;
   maxAllocationsPerUtxo?: number;
@@ -77,14 +79,18 @@ export type RgbLibWebConfig = RgbLibWebParams &
   (
     | { mnemonic: string; keys?: never }
     | { keys: RgbLibWebKeys; mnemonic?: never }
-  ) & {
-    /**
-     * An initialized `@utexo/rgb-lib-wasm` module, or a test double. Omit it
-     * and `init()` loads the module itself; it cannot be combined with
-     * `wasmUrl`.
-     */
-    runtime?: RgbLibWasmRuntime;
-  };
+  ) &
+  (
+    | {
+        /**
+         * An initialized `@utexo/rgb-lib-wasm` module, or a test double.
+         * Omit it and `init()` loads the module itself, from `wasmUrl` if set.
+         */
+        runtime: RgbLibWasmRuntime;
+        wasmUrl?: never;
+      }
+    | { runtime?: never }
+  );
 
 /** Splits the config into what the backend takes; validates the key fields only. */
 export function splitConfig(config: RgbLibWebConfig): {

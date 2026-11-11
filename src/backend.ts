@@ -38,7 +38,7 @@ import {
 import { readMnemonic, resolveKeys } from './keys.js';
 import type { ResolvedKeys, RgbLibWebKeys } from './keys.js';
 import * as map from './mappers.js';
-import { loadRgbLibWasm } from './runtime/load.js';
+import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './session.js';
 
@@ -142,7 +142,10 @@ function validateAssetSchemas(schemas: unknown): string[] {
 /** One backend owns one WASM wallet, one queue and one wallet profile. */
 export class RgbLibWebBackend {
   private readonly queue = new SerialExecutor();
-  private readonly params: Readonly<RgbLibWebOptions>;
+  /** `wasmUrl` is kept as its normalized href. */
+  private readonly params: Readonly<
+    Omit<RgbLibWebOptions, 'wasmUrl'> & { wasmUrl?: string }
+  >;
   private readonly configuredOnline?: Readonly<RgbLibWebUnlockParams>;
   private readonly keys: ResolvedKeys;
   private session?: WasmSession;
@@ -186,7 +189,12 @@ export class RgbLibWebBackend {
     }
     this.keys = resolveKeys(keys, params.network);
     const { options, connection } = splitWalletParams(params);
-    this.params = Object.freeze(options);
+    // A URL object stays the caller's and can change; keep its normalized href.
+    const { wasmUrl, ...fixed } = options;
+    this.params = Object.freeze({
+      ...fixed,
+      ...(wasmUrl !== undefined ? { wasmUrl: normalizeWasmUrl(wasmUrl) } : {}),
+    });
     if (connection) {
       const owned = Object.freeze(snapshot(connection));
       // Invalid endpoints fail here, not on the first online operation.
@@ -394,12 +402,14 @@ export class RgbLibWebBackend {
     if (this.opening) return this.opening;
     if (this.session) return Promise.resolve();
     const opening = this.queue.run(async () => {
-      let mnemonic: string | null = this.keys.readMnemonic
-        ? await readMnemonic(this.keys.readMnemonic, 'init')
-        : null;
+      let mnemonic: string | null = null;
       try {
+        // Load first: the mnemonic is read only when the wallet can open now.
         const runtime =
           this.runtime ?? (await loadRgbLibWasm(this.params.wasmUrl, 'init'));
+        if (this.keys.readMnemonic) {
+          mnemonic = await readMnemonic(this.keys.readMnemonic, 'init');
+        }
         this.session = await WasmSession.open(
           runtime,
           {

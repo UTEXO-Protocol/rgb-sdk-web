@@ -1145,6 +1145,18 @@ export function decodeVssVersion(value: unknown): number {
   return value;
 }
 
+/** `vssBackupInfo`: only `backup_exists` is read. */
+export function decodeVssBackupExists(value: unknown): boolean {
+  const exists = (value as { backup_exists?: unknown } | null)?.backup_exists;
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    typeof exists !== 'boolean'
+  )
+    rejected('Invalid VSS backup info');
+  return exists;
+}
+
 /** `getFeeEstimation`: an f64 in sat/vB. */
 export function decodeFeeEstimate(value: unknown): number {
   if (

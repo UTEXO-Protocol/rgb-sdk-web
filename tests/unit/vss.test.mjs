@@ -1,7 +1,8 @@
-// VSS backup (ADR-0003 B1): the identity derived on init(), the options,
-// backupNow(), and the automatic upload after mutations. The signing key is a
-// secret: no error or log here may contain it.
-import { describe, it, mock } from 'node:test';
+// VSS backup (ADR-0003 B1, B2): the identity derived on init(), the options,
+// backupNow(), the automatic upload after mutations, restoreFromVss() and the
+// check for an unrestored server backup. The signing key is a secret: no
+// error or log here may contain it.
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_VSS_SERVER_URL,
@@ -312,4 +313,232 @@ describe('automatic upload', () => {
   });
 });
 
-mock.reset();
+/** A fresh wallet: nothing local that a restore would replace. */
+const EMPTY = {
+  listAssets: () => ({ nia: [], ifa: [], bfa: [] }),
+  listTransfers: () => [],
+  listUnspents: () => [],
+  listTransactions: () => [],
+};
+const SERVER_HAS_BACKUP = {
+  vssBackupInfo: async () => ({
+    backup_exists: true,
+    server_version: 5n,
+    backup_required: true,
+    last_backup_error: null,
+  }),
+};
+
+describe('restoreFromVss()', () => {
+  it('restores an empty wallet between init() and the first connection', async () => {
+    const { engine, names } = await ready({ overrides: EMPTY });
+    assert.equal(await engine.restoreFromVss(), undefined);
+    assert.ok(names().includes('vssRestoreBackup'));
+    assert.ok(!names().includes('goOnline'));
+    await engine.unlock();
+    const calls = names();
+    assert.ok(calls.indexOf('vssRestoreBackup') < calls.indexOf('goOnline'));
+  });
+
+  for (const source of Object.keys(EMPTY))
+    it(`refuses local data (${source}) without overwrite`, async () => {
+      const { [source]: _kept, ...others } = EMPTY;
+      const { engine, names } = await ready({ overrides: others });
+      await rejects(engine.restoreFromVss(), 'WALLET_INVALID_STATE');
+      assert.ok(!names().includes('vssRestoreBackup'));
+    });
+
+  it('overwrite: true replaces local data', async () => {
+    const { engine, names } = await ready();
+    await engine.restoreFromVss({ overwrite: true });
+    assert.ok(names().includes('vssRestoreBackup'));
+    assert.ok(!names().includes('listAssets'), 'no local-data check');
+  });
+
+  it('rejects after unlock(), with no wallet call', async () => {
+    const { engine, names } = await ready({ overrides: EMPTY });
+    await engine.unlock();
+    const before = names().length;
+    await rejects(engine.restoreFromVss(), 'WALLET_INVALID_STATE');
+    assert.deepEqual(names().slice(before), []);
+  });
+
+  it('rejects after a lazy connect', async () => {
+    const { engine, names } = await ready({ overrides: EMPTY });
+    await engine.refreshWallet();
+    await rejects(engine.restoreFromVss(), 'WALLET_INVALID_STATE');
+    assert.ok(!names().includes('vssRestoreBackup'));
+  });
+
+  it('rejects when unlock() was called first, without awaiting', async () => {
+    const { engine, names } = await ready({ overrides: EMPTY });
+    const unlocking = engine.unlock();
+    await rejects(engine.restoreFromVss(), 'WALLET_INVALID_STATE');
+    await unlocking;
+    assert.ok(!names().includes('vssRestoreBackup'));
+  });
+
+  it('before init() rejects with WALLET_NOT_INITIALIZED', async () => {
+    const { engine } = create({ overrides: EMPTY });
+    await rejects(engine.restoreFromVss(), 'WALLET_NOT_INITIALIZED');
+  });
+
+  it('with VSS off, rejects with INVALID_CONFIG before any call', async () => {
+    const { engine, names } = create({ params: { vssUrl: null } });
+    await rejects(engine.restoreFromVss(), 'INVALID_CONFIG');
+    assert.deepEqual(names(), []);
+  });
+
+  it('on a watch-only wallet without vss, rejects with INVALID_CONFIG', async () => {
+    const { engine, names } = await ready({ keys: WATCH_ONLY });
+    await rejects(engine.restoreFromVss(), 'INVALID_CONFIG');
+    assert.ok(!names().includes('vssRestoreBackup'));
+  });
+
+  for (const options of ['x', null, { overwrite: 'yes' }])
+    it(`refuses options ${JSON.stringify(options)} before any call`, async () => {
+      const { engine, names } = create();
+      await rejects(engine.restoreFromVss(options), 'INVALID_PARAMS');
+      assert.deepEqual(names(), []);
+    });
+
+  it('a runtime failure holds no key and frees nothing', async () => {
+    const { engine, names } = await ready({
+      overrides: {
+        ...EMPTY,
+        vssRestoreBackup: async () => {
+          throw new Error('VSS error: backup not found');
+        },
+      },
+    });
+    await assert.rejects(engine.restoreFromVss(), (error) => {
+      assert.ok(isEngineError(error), String(error));
+      assert.equal(error.operation, 'restoreFromVss');
+      noSecret(error);
+      return true;
+    });
+    assert.ok(!names().includes('free'));
+    assert.equal(typeof (await engine.getAddress()), 'string');
+    // The gap is still open: a retry is allowed.
+    await assert.rejects(engine.restoreFromVss(), /backup not found/);
+  });
+
+  it('queues no automatic upload', async () => {
+    const { engine, names } = await ready({ overrides: EMPTY });
+    await engine.restoreFromVss();
+    await engine.getAddress();
+    assert.ok(!names().includes('ensureInitialBackup'));
+  });
+});
+
+describe('unrestored server backup', () => {
+  const drained = (engine) => engine.getAddress();
+
+  it('an empty wallet that skipped restore: warns once and holds uploads', async (t) => {
+    const warn = t.mock.method(logger, 'warn', () => undefined);
+    const { engine, args } = await ready({
+      overrides: { ...EMPTY, ...SERVER_HAS_BACKUP },
+    });
+    await engine.unlock();
+    await engine.issueAssetNia(NIA);
+    await engine.createUtxos({ num: 1 });
+    await drained(engine);
+    assert.equal(args('vssBackupInfo').length, 1);
+    assert.equal(args('ensureInitialBackup').length, 0, 'upload held');
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /was not restored/);
+    noSecret(warn.mock.calls[0].arguments);
+    // An explicit backupNow() replaces the server copy and lifts the hold.
+    assert.equal(await engine.backupNow(), 3);
+    await engine.issueAssetNia(NIA);
+    await drained(engine);
+    assert.equal(args('ensureInitialBackup').length, 1);
+  });
+
+  it('runs before a mutation that waited for the connect', async () => {
+    const { engine, names } = await ready({
+      overrides: { ...EMPTY, ...SERVER_HAS_BACKUP },
+    });
+    await engine.createUtxos({ num: 1 });
+    await drained(engine);
+    const calls = names();
+    assert.ok(
+      calls.indexOf('vssBackupInfo') < calls.indexOf('createUtxosBegin')
+    );
+    assert.ok(!calls.includes('ensureInitialBackup'));
+  });
+
+  it('a wallet with local data is not checked', async () => {
+    const { engine, args } = await ready({ overrides: SERVER_HAS_BACKUP });
+    await engine.unlock();
+    await engine.issueAssetNia(NIA);
+    await drained(engine);
+    assert.equal(args('vssBackupInfo').length, 0);
+    assert.equal(args('ensureInitialBackup').length, 1);
+  });
+
+  it('no server backup: nothing is held', async (t) => {
+    const warn = t.mock.method(logger, 'warn', () => undefined);
+    const { engine, args } = await ready({ overrides: EMPTY });
+    await engine.unlock();
+    await engine.issueAssetNia(NIA);
+    await drained(engine);
+    assert.equal(args('vssBackupInfo').length, 1);
+    assert.equal(args('ensureInitialBackup').length, 1);
+    assert.equal(warn.mock.callCount(), 0);
+  });
+
+  it('a restored wallet is not checked', async () => {
+    const { engine, args } = await ready({
+      overrides: { ...EMPTY, ...SERVER_HAS_BACKUP },
+    });
+    await engine.restoreFromVss();
+    await engine.unlock();
+    await engine.issueAssetNia(NIA);
+    await drained(engine);
+    assert.equal(args('vssBackupInfo').length, 0);
+    assert.equal(args('ensureInitialBackup').length, 1);
+  });
+
+  it('a failed check is logged and holds nothing', async (t) => {
+    const warn = t.mock.method(logger, 'warn', () => undefined);
+    const { engine, args } = await ready({
+      overrides: {
+        ...EMPTY,
+        vssBackupInfo: async () => {
+          throw new Error('Network error: VSS server unreachable');
+        },
+      },
+    });
+    await engine.unlock();
+    await engine.issueAssetNia(NIA);
+    await drained(engine);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /could not check/);
+    noSecret(warn.mock.calls[0].arguments);
+    assert.equal(args('ensureInitialBackup').length, 1);
+  });
+
+  it('an invalid info value is a failed check', async (t) => {
+    const warn = t.mock.method(logger, 'warn', () => undefined);
+    const { engine } = await ready({
+      overrides: { ...EMPTY, vssBackupInfo: async () => ({ exists: true }) },
+    });
+    await engine.unlock();
+    await drained(engine);
+    assert.equal(
+      warn.mock.calls[0].arguments[1].code,
+      'INVALID_NATIVE_RESPONSE'
+    );
+  });
+
+  it('with VSS off, nothing is checked', async () => {
+    const { engine, names } = await ready({
+      params: { vssUrl: null },
+      overrides: { ...EMPTY, ...SERVER_HAS_BACKUP },
+    });
+    await engine.unlock();
+    await drained(engine);
+    assert.ok(!names().includes('vssBackupInfo'));
+  });
+});

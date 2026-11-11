@@ -1,5 +1,5 @@
 // Public API: the RgbLibWeb class, the 29 SharedWalletApi methods and
-// backupNow(). Each method passes through `backend.guarded()` (synchronous
+// backupNow(), plus the engine-only restoreFromVss(). Each method passes through `backend.guarded()` (synchronous
 // argument errors become rejected Promises) to RgbLibWebBackend; no wallet
 // logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
@@ -26,7 +26,7 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
  * the 29 `SharedWalletApi` methods and the `VssBackupApi` extension
- * (`backupNow()`; ADR-0003).
+ * (`backupNow()`; ADR-0003), plus `restoreFromVss()` on the engine only.
  *
  * ```ts
  * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
@@ -240,6 +240,18 @@ export class RgbLibWeb
   }
 
   // ── VssBackupApi (ADR-0003) ───────────────────────────────────────────────
+
+  /**
+   * Restores the wallet from its VSS backup (ADR-0003). Call it after
+   * `init()` and before `unlock()` or any online operation. A wallet that
+   * already has local data is refused unless `overwrite: true`. Engine-only:
+   * the facade does not forward it yet.
+   */
+  restoreFromVss(options?: { overwrite?: boolean }): Promise<void> {
+    return this.backend.guarded('restoreFromVss', () =>
+      this.backend.restoreFromVss(options)
+    );
+  }
 
   /**
    * Uploads an encrypted backup to the VSS server now; resolves with the new

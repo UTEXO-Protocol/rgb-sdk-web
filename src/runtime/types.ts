@@ -40,6 +40,10 @@ export interface RgbLibWasmWallet {
   vssBackup(): Promise<unknown>;
   /** Uploads only when the wallet changed since the last backup; else null. */
   ensureInitialBackup(): Promise<unknown>;
+  /** Replaces the local state with the server copy, then flushes it. */
+  vssRestoreBackup(): Promise<void>;
+  /** `{ backup_exists, server_version, backup_required, last_backup_error }`. */
+  vssBackupInfo(): Promise<unknown>;
   getBtcBalance(): unknown;
   getAssetBalance(assetId: string): unknown;
   listAssets(filterAssetSchemas: unknown): unknown;

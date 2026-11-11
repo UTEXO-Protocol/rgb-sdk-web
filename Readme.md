@@ -91,10 +91,24 @@ VSS (cloud) backup is on by default, with no setup, as on the RLN web wallet:
 
 ```ts
 const wallet = new RgbLibWeb({ network: 'testnet', mnemonic, dataDir: 'my-app' });
-await wallet.init();   // opened from IndexedDB, not online yet
-// restore from a backup here (ADR-0003 B2, planned)
-await wallet.unlock(); // online
+await wallet.init();            // opened from IndexedDB, not online yet
+await wallet.restoreFromVss();  // the VSS backup of this mnemonic, saved locally
+await wallet.unlock();          // online
 ```
+
+- `restoreFromVss()` runs only after `init()` and before the first
+  connection (`unlock()` or any online call); later it rejects with
+  `WALLET_INVALID_STATE`. To restore later, destroy the wallet, create it
+  again and restore before `unlock()`.
+- A wallet with local data (assets, transfers, UTXOs or transactions) is
+  refused unless `{ overwrite: true }`, so a restore never wipes newer local
+  state by accident.
+- It is on the engine only; the facade does not forward it yet.
+- **Unrestored backup.** On the first connection of an empty wallet that was
+  not restored, the engine asks the server whether a backup exists. If one
+  does, it belongs to this mnemonic from another device: the engine logs a
+  warning and holds automatic uploads, so the first mutation does not replace
+  it. `backupNow()` lifts the hold and replaces the server copy on purpose.
 
 ## With the facade
 
@@ -205,7 +219,8 @@ issuing, a transfer.
 | 3. Load the WASM runtime inside the package | done |
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
 | VSS backup: zero config, `backupNow()`, automatic upload (ADR-0003 B1) | done |
-| VSS restore, byte backup (ADR-0003 B2–B4) | planned |
+| VSS restore before connect, unrestored-backup hold (ADR-0003 B2) | done |
+| Byte backup, backup e2e (ADR-0003 B3–B4) | planned |
 
 ## Development
 

@@ -147,6 +147,14 @@ export class RgbLibWebBackend {
   private vssOn = false;
   /** An automatic upload is queued and has not started yet. */
   private backupWaiting = false;
+  /**
+   * Automatic uploads are held: the first connection found a server backup
+   * that this empty wallet did not restore, and an upload would replace it.
+   * Cleared by `restoreFromVss()` or an explicit `backupNow()`.
+   */
+  private backupHeld = false;
+  /** The unrestored-backup check ran or is queued (once per session). */
+  private cloudChecked = false;
 
   constructor(
     params: RgbLibWebParams,
@@ -279,7 +287,8 @@ export class RgbLibWebBackend {
     const upload = this.queue
       .run(async () => {
         this.backupWaiting = false;
-        if (this.session) await ops.autoBackup.execute(this.session);
+        if (this.session && !this.backupHeld)
+          await ops.autoBackup.execute(this.session);
       })
       .catch((error: unknown) => {
         const e = toBackendError(error, 'vssBackup');
@@ -538,6 +547,8 @@ export class RgbLibWebBackend {
     const connecting = this.execute('unlock', false, async (session) => {
       await session.goOnline(config);
       this.online = config;
+      // Queued here, so it runs before any work that waited for the connect.
+      this.checkCloudBackup();
     });
     this.connecting = { config, promise: connecting };
     const clear = () => {
@@ -772,15 +783,85 @@ export class RgbLibWebBackend {
         'VSS backup is off (vssUrl: null)',
         'backupNow'
       );
-    return this.run('backupNow', false, (s) => {
+    return this.run('backupNow', false, async (s) => {
       if (!this.vssOn)
         throw new RgbLibWebError(
           'INVALID_CONFIG',
           'VSS backup needs the mnemonic or an explicit vss config; this wallet was opened watch-only',
           'backupNow'
         );
-      return ops.backupNow.execute(s);
+      const version = await ops.backupNow.execute(s);
+      // An explicit upload replaces the cloud copy on purpose.
+      this.backupHeld = false;
+      return version;
     });
+  }
+
+  /**
+   * Restores the wallet from its VSS backup (ADR-0003 B2). Allowed only after
+   * `init()` and before the first connection; a wallet with local data needs
+   * `{ overwrite: true }`. The restored state is flushed before it resolves.
+   */
+  restoreFromVss(options?: { overwrite?: boolean }): Promise<void> {
+    const prepared = ops.restoreFromVss.prepare(snapshot(options));
+    if (this.vss.kind === 'off')
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        'VSS backup is off (vssUrl: null)',
+        'restoreFromVss'
+      );
+    return this.run('restoreFromVss', false, async (s) => {
+      if (!this.vssOn)
+        throw new RgbLibWebError(
+          'INVALID_CONFIG',
+          'VSS restore needs the mnemonic or an explicit vss config; this wallet was opened watch-only',
+          'restoreFromVss'
+        );
+      // In the task: a connect queued ahead of this one (unlock() called
+      // first, without awaiting) has finished by now and counts too.
+      if (this.online) throw this.restoreTooLate();
+      await ops.restoreFromVss.execute(s, prepared);
+      // The local state is now the server copy: nothing to protect.
+      this.cloudChecked = true;
+      this.backupHeld = false;
+    });
+  }
+
+  private restoreTooLate(): RgbLibWebError {
+    return new RgbLibWebError(
+      'WALLET_INVALID_STATE',
+      'restoreFromVss() runs only between init() and the first connection; destroy the wallet, create it again and restore before unlock()',
+      'restoreFromVss'
+    );
+  }
+
+  /**
+   * Once, after the first connection: if this wallet is empty, was not
+   * restored, and the server has a backup, the backup belongs to this mnemonic
+   * from another device. Warn, and hold automatic uploads so the first
+   * mutation does not replace it. A failed check is logged and holds nothing.
+   */
+  private checkCloudBackup(): void {
+    if (!this.vssOn || this.cloudChecked) return;
+    this.cloudChecked = true;
+    const check = this.queue
+      .run(async () => {
+        const s = this.session;
+        if (!s || ops.hasLocalData(s)) return;
+        if (!(await ops.vssBackupExists.execute(s))) return;
+        this.backupHeld = true;
+        logger.warn(
+          'RgbLibWeb: a VSS backup exists for this wallet but was not restored; automatic backups are held. Restore it (destroy, create again, restoreFromVss() before unlock()) or call backupNow() to replace it with this wallet'
+        );
+      })
+      .catch((error: unknown) => {
+        const e = toBackendError(error, 'vssBackupInfo');
+        logger.warn('RgbLibWeb: could not check for an unrestored VSS backup', {
+          code: e.code,
+          message: e.message,
+        });
+      });
+    this.track(check);
   }
 
   /** Read inside a queued task of an online operation: the connection is set. */

@@ -672,3 +672,54 @@ export const autoBackup = {
     return version === null ? null : codec.decodeVssVersion(version);
   },
 };
+
+/** Options of `restoreFromVss`, checked before admission. */
+export const restoreFromVss = {
+  prepare(options: unknown): { overwrite: boolean } {
+    if (options === undefined) return { overwrite: false };
+    if (typeof options !== 'object' || options === null)
+      throw new ValidationError(
+        'restoreFromVss options must be an object',
+        'options'
+      );
+    const { overwrite } = options as { overwrite?: unknown };
+    if (overwrite !== undefined && typeof overwrite !== 'boolean')
+      throw new ValidationError('overwrite must be a boolean', 'overwrite');
+    return { overwrite: overwrite === true };
+  },
+  /**
+   * Replaces the local state with the server copy. Unless `overwrite`, a
+   * wallet with local data is refused, so a restore never wipes newer local
+   * state by accident. The runtime flushes the restored state to IndexedDB
+   * before it resolves.
+   */
+  async execute(s: WasmSession, prepared: { overwrite: boolean }) {
+    if (!prepared.overwrite && hasLocalData(s))
+      throw new RgbLibWebError(
+        'WALLET_INVALID_STATE',
+        'This wallet already has local data; pass { overwrite: true } to replace it with the VSS backup',
+        'restoreFromVss'
+      );
+    await s.wallet.vssRestoreBackup();
+  },
+};
+
+/**
+ * True when the local wallet has anything a restore would replace: assets,
+ * transfers, UTXOs or transactions. Reads local state only, no sync.
+ */
+export function hasLocalData(s: WasmSession): boolean {
+  const assets = codec.decodeAssets(s.wallet.listAssets([]));
+  return (
+    assets.nia.length + assets.ifa.length + assets.bfa.length > 0 ||
+    codec.decodeTransfers(s.wallet.listTransfers('any', null)).length > 0 ||
+    codec.decodeUnspents(s.wallet.listUnspents(false)).length > 0 ||
+    codec.decodeTransactions(s.wallet.listTransactions()).length > 0
+  );
+}
+
+/** Whether the server holds a backup for this wallet. */
+export const vssBackupExists = {
+  execute: async (s: WasmSession) =>
+    codec.decodeVssBackupExists(await s.wallet.vssBackupInfo()),
+};

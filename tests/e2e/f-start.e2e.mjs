@@ -92,3 +92,25 @@ test('F: the real runtime takes the derived VSS identity; an unreachable server 
   expect((await wcall(page, 'getAddress')).startsWith('bcrt1p')).toBe(true);
   await wcall(page, 'destroy');
 });
+
+test('F: restoreFromVss runs only before the first connection; an unreachable server fails it without the key', async ({
+  page,
+}) => {
+  wirePageLogging(page);
+  // create() opens the wallet; it connects lazily, on the first online call.
+  const { mnemonic } = await startWallet(page, {
+    vssUrl: 'http://127.0.0.1:59999/vss',
+  });
+  const key = deriveVssSigningKeyFromMnemonic(mnemonic);
+  const failed = await wcallError(page, 'restoreFromVss');
+  expect(failed.operation).toBe('restoreFromVss');
+  expect(failed.code).toBe('NATIVE_ERROR');
+  expect(failed.detail.message).toMatch(/^VSS error/);
+  expect(JSON.stringify(failed)).not.toContain(key);
+  // The failed restore changed nothing: the wallet still opens and connects.
+  expect((await wcall(page, 'getAddress')).startsWith('bcrt1p')).toBe(true);
+  await wcall(page, 'syncWallet');
+  const late = await wcallError(page, 'restoreFromVss');
+  expect(late.code).toBe('WALLET_INVALID_STATE');
+  await wcall(page, 'destroy');
+});

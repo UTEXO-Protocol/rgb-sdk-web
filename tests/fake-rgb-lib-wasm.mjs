@@ -179,6 +179,13 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
     disableVssBackup: () => undefined,
     vssBackup: async () => 3,
     ensureInitialBackup: async () => 4,
+    vssRestoreBackup: async () => undefined,
+    vssBackupInfo: async () => ({
+      backup_exists: false,
+      server_version: null,
+      backup_required: true,
+      last_backup_error: null,
+    }),
     ...overrides,
   };
 

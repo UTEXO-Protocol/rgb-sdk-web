@@ -131,6 +131,8 @@ issuing, a transfer.
 npm install
 npm test          # typecheck, lint, build, unit tests (node:test), examples
 npm run test:e2e  # Playwright over the real WASM; needs the regtest stand (tests/e2e/README.md)
+npm run capture:fixtures  # re-capture raw runtime values (tests/fixtures/README.md)
+npm run golden:update     # rewrite the golden results after an intended change
 ```
 
 `@utexo/rgb-sdk-core` comes from `../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz`

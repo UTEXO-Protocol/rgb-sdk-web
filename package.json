@@ -31,7 +31,9 @@
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
-    "typecheck:examples": "tsc -p examples/tsconfig.json"
+    "typecheck:examples": "tsc -p examples/tsconfig.json",
+    "capture:fixtures": "npm run build && playwright test -c tests/e2e/playwright.capture.config.mjs",
+    "golden:update": "npm run build && node tests/golden/update.mjs"
   },
   "files": [
     "dist",

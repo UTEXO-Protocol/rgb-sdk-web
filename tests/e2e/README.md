@@ -41,14 +41,19 @@ Environment overrides: `RGB_E2E_INDEXER` (default `http://127.0.0.1:8094/regtest
 
 ## Scenarios
 
-| Spec | Covers |
-|---|---|
-| `a-lifecycle` | init → unlock → network info → identity (stable per mnemonic) → capabilities → destroy → `WALLET_DISPOSED` |
-| `b-onchain` | address → funding → balance (incl. `skipSync`) → createUtxos → listUnspents with parsed outpoints → listTransactions; sendBtc between two wallets; estimateFeeRate on regtest |
-| `c-assets` | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs |
-| `d-transfers` | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData` |
-| `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty |
-| `f-start` | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; the default config (no `dataDir`) persists across a reload; an Electrum indexer rejected before opening |
+| Spec            | Covers                                                                                                                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `a-lifecycle`   | init → unlock → network info → identity (stable per mnemonic) → capabilities → destroy → `WALLET_DISPOSED`                                                                                                                                                         |
+| `b-onchain`     | address → funding → balance (incl. `skipSync`) → createUtxos → listUnspents with parsed outpoints → listTransactions; sendBtc between two wallets; estimateFeeRate on regtest                                                                                      |
+| `c-assets`      | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs    |
+| `d-transfers`   | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData`                      |
+| `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty                                                                                                                                                         |
+| `f-start`       | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; the default config (no `dataDir`) persists across a reload; an Electrum indexer rejected before opening |
+
+`npm run capture:fixtures` runs `capture/fixtures.capture.mjs` with its own
+config: the harness boots with a recording runtime (`harness/capture.mjs`) and
+the raw values go to `tests/fixtures/` (see its README). It is not part of
+`npm run test:e2e`.
 
 Not covered: the old rgb-sdk-web spec f (psbt / beginEnd carriers; RgbLibWeb has neither;
 the letter f is reused for `f-start`),

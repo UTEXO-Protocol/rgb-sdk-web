@@ -6,13 +6,17 @@
  *
  *   boot(cfgJson)        — new RgbLibWeb → UTEXOWallet → init → unlock
  *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no facade, no unlock
+ *   boot({ capture: true }) records raw runtime values (capture.mjs);
+ *   label(name) tags the next records; takeCapture() returns and clears them
  *   call(method, args)   — call a wallet method
  *   get(property)        — read a wallet property ('capabilities')
  *
  * Results cross the page boundary as JSON `{ ok, value | error }`; an error
  * keeps `code` and `operation`, so specs can assert engine error codes.
  */
+import initRgbLibWasm, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
 import { generateKeys } from '@utexo/rgb-sdk-core';
+import { recordingRuntime } from './capture.mjs';
 import { UTEXOWallet } from '@utexo/rgb-sdk';
 import {
   RgbLibWeb,
@@ -20,6 +24,8 @@ import {
 } from '../../../dist/index.mjs';
 
 let wallet = null;
+let captureLabel = 'unlabeled';
+const captured = [];
 const statusEl = document.getElementById('status');
 
 const enc = (v) =>
@@ -61,7 +67,20 @@ window.harness = {
       const cfg = JSON.parse(cfgJson);
       const mnemonic = cfg.mnemonic ?? (await generateKeys('regtest')).mnemonic;
       const dataDir = cfg.dataDir ?? `e2e-${Date.now().toString(16)}`;
-      const engine = new RgbLibWeb({ network: 'regtest', dataDir, mnemonic });
+      let runtime;
+      if (cfg.capture) {
+        // The same module the package loads; init() is a no-op once loaded.
+        await initRgbLibWasm();
+        runtime = recordingRuntime(rgbLibWasm, (r) =>
+          captured.push({ label: captureLabel, ...r })
+        );
+      }
+      const engine = new RgbLibWeb({
+        network: 'regtest',
+        dataDir,
+        mnemonic,
+        ...(runtime ? { runtime } : {}),
+      });
       wallet = new UTEXOWallet({ engine });
       await wallet.init();
       if (cfg.unlock !== false) {
@@ -96,6 +115,11 @@ window.harness = {
       statusEl.textContent = 'wallet started';
       return { mnemonic: keys.mnemonic, keys };
     }),
+
+  label: (name) => {
+    captureLabel = name;
+  },
+  takeCapture: () => JSON.stringify(captured.splice(0)),
 
   call: (method, argsJson) =>
     run(async () => {

@@ -783,7 +783,7 @@ export class RgbLibWebBackend {
     if (this.vss.kind === 'off')
       throw new RgbLibWebError(
         'INVALID_CONFIG',
-        'VSS backup is off (vssUrl: null)',
+        `VSS backup is off (${this.vss.reason}); pass vssUrl or vss to turn it on`,
         'backupNow'
       );
     return this.run('backupNow', false, async (s) => {
@@ -810,7 +810,7 @@ export class RgbLibWebBackend {
     if (this.vss.kind === 'off')
       throw new RgbLibWebError(
         'INVALID_CONFIG',
-        'VSS backup is off (vssUrl: null)',
+        `VSS backup is off (${this.vss.reason}); pass vssUrl or vss to turn it on`,
         'restoreFromVss'
       );
     return this.run('restoreFromVss', false, async (s) => {

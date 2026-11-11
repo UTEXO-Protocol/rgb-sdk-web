@@ -31,11 +31,16 @@ const WATCH_ONLY = {
 };
 const NIA = { ticker: 'T', name: 'Token', amounts: [10], precision: 0 };
 
+/** On regtest VSS is off without a server, so these tests name one. */
+const LOCAL_VSS = 'http://127.0.0.1:8181/vss';
+
 function create({ params = {}, keys = KEYS.mnemonic, ...fake } = {}) {
   const runtime = createFakeRuntime(fake);
+  const named = 'vss' in params || 'vssUrl' in params;
   const engine = new RgbLibWeb({
     network: 'regtest',
     ...ONLINE,
+    ...(named ? {} : { vssUrl: LOCAL_VSS }),
     ...params,
     keys,
     runtime,
@@ -69,8 +74,10 @@ async function rejects(promise, code) {
 }
 
 describe('VSS identity on init()', () => {
-  it('derives it from the mnemonic, with the default server', async () => {
-    const { args, names } = await ready();
+  it('derives it from the mnemonic, with the default server off regtest', async () => {
+    const { args, names } = await ready({
+      params: { network: 'testnet', vssUrl: undefined },
+    });
     assert.deepEqual(args('configureVssBackup')[0].args, [
       DEFAULT_VSS_SERVER_URL,
       getBackupStoreId(KEYS.masterFingerprint),
@@ -79,6 +86,22 @@ describe('VSS identity on init()', () => {
     // Nothing is uploaded on init(): a restore may still run before connect.
     assert.ok(!names().includes('vssBackup'));
     assert.ok(!names().includes('ensureInitialBackup'));
+  });
+
+  it('regtest without vssUrl or vss: off, and VSS calls say why', async () => {
+    const { engine, names } = await ready({ params: { vssUrl: undefined } });
+    assert.ok(!names().includes('configureVssBackup'));
+    await assert.rejects(engine.backupNow(), (error) => {
+      assert.ok(isEngineError(error, 'INVALID_CONFIG'), error?.message);
+      assert.match(error.message, /regtest without vssUrl/);
+      return true;
+    });
+    await rejects(engine.restoreFromVss(), 'INVALID_CONFIG');
+  });
+
+  it('regtest with an explicit vss config: on', async () => {
+    const { args } = await ready({ params: { vss: EXPLICIT } });
+    assert.equal(args('configureVssBackup').length, 1);
   });
 
   it('uses vssUrl as the server', async () => {

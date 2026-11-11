@@ -58,7 +58,7 @@ One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 | `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys` | BFA mint locks and proxy auth |
 | `wasmUrl` | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS |
 | `runtime` | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl` |
-| `vssUrl` | VSS backup server; default the UTEXO server, `null` turns VSS off |
+| `vssUrl` | VSS backup server; default the UTEXO server (on regtest: off), `null` turns VSS off |
 | `vss` | an explicit VSS identity `{ serverUrl, storeId, signingKey }` instead of the derived one; not with `vssUrl` |
 
 Pass exactly one of `mnemonic` and `keys`, and at most one of `runtime` and
@@ -73,7 +73,9 @@ an engine error from the runtime passes through as it is, so check errors with
 
 ## VSS backup
 
-VSS (cloud) backup is on by default, with no setup, as on the RLN web wallet:
+VSS (cloud) backup is on by default, with no setup, as on the RLN web wallet.
+On regtest it is off unless `vssUrl` or `vss` names a server, so test wallets
+do not upload to the production server.
 
 - `init()` derives the identity from the mnemonic with the core helpers:
   store `wallet_<masterFingerprint>`, signing key from the mnemonic. The key

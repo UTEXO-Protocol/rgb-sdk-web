@@ -36,7 +36,8 @@ export interface RgbLibWebOptions {
   wasmUrl?: string | URL;
   /**
    * VSS (cloud) backup server. Default: the UTEXO server
-   * (`DEFAULT_VSS_SERVER_URL`); `null` turns VSS off. The identity is derived
+   * (`DEFAULT_VSS_SERVER_URL`), except on regtest, where VSS is off unless
+   * this or `vss` is set; `null` turns VSS off. The identity is derived
    * from the mnemonic on `init()`, as on the RLN web wallet: store
    * `wallet_<masterFingerprint>`, signing key from the mnemonic. A watch-only
    * wallet has no mnemonic, so it gets VSS only with `vss`.
@@ -262,7 +263,8 @@ export function validateWalletParams(params: RgbLibWebParams) {
 
 /** How the wallet gets its VSS identity; resolved once, before init(). */
 export type VssSetting =
-  | { kind: 'off' }
+  /** `reason` goes into the error of a VSS call on a wallet with VSS off. */
+  | { kind: 'off'; reason: 'vssUrl: null' | 'regtest without vssUrl' }
   | { kind: 'derived'; serverUrl: string }
   | { kind: 'explicit'; config: Readonly<VssBackupConfig> };
 
@@ -294,9 +296,13 @@ export function resolveVss(params: RgbLibWebOptions): VssSetting {
       }),
     };
   }
-  if (vssUrl === null) return { kind: 'off' };
+  if (vssUrl === null) return { kind: 'off', reason: 'vssUrl: null' };
   if (vssUrl === undefined)
-    return { kind: 'derived', serverUrl: DEFAULT_VSS_SERVER_URL };
+    // A regtest wallet would upload to the production server: off unless
+    // the app names a server.
+    return params.network === 'regtest'
+      ? { kind: 'off', reason: 'regtest without vssUrl' }
+      : { kind: 'derived', serverUrl: DEFAULT_VSS_SERVER_URL };
   return {
     kind: 'derived',
     serverUrl: url(vssUrl, ['https://', 'http://'], 'vssUrl'),

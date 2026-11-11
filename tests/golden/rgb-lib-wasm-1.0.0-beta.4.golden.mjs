@@ -2255,6 +2255,133 @@ export const golden = {
       "refresh",
     ],
   },
+  "negative: invoiceData — invoice network \"constructor\"": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm invoice network",
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: invoiceData — invoice network \"__proto__\"": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm invoice network",
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: invoiceData — invoice network \"toString\"": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm invoice network",
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: invoiceData — query params out of key order (valid)": {
+    result: {
+      ok: true,
+      value: {
+        invoice: "rgb:golden-invoice",
+        recipientId: "bcrt:wvout:BQrh~g~e-K7UxTWj-rcWtuqx-_7AjE4Y-l6xlYd~-9~dGbTN-0R3Z26g",
+        assetId: "rgb:lOKTMMxy-CNrTQRP-TuKtHNs-VSPlEuk-pobg33H-kAB0bdQ",
+        assetSchema: "Nia",
+        assignment: {
+          type: "Fungible",
+          amountBaseUnits: "7",
+          amount: 7,
+        },
+        assignmentName: "assetOwner",
+        network: "regtest",
+        expirationTimestamp: 1794481516,
+        transportEndpoints: [
+          "rpc://127.0.0.1:3002/json-rpc",
+        ],
+        publicKey: "7a3ae7d1e8a67b6a08572f70a1c855aece18167a0003d8304010aa7680418cc6",
+        encryption: "Required",
+        unknownQueryParams: {
+          a: "first",
+          z: "last",
+        },
+      },
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: refresh — unknown failure variant": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Unknown rgb-lib-wasm refresh failure",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: refresh — struct failure variant without its fields": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm refresh failure",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: refresh — unit failure variant with fields": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm refresh failure",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: refresh — failure field of the wrong type": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm refresh failure details",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: refresh — unknown field in AssignmentsCollection (ignored)": {
+    result: {
+      ok: true,
+      value: {
+        transfers: {
+          "4": {
+            updatedStatus: "Failed",
+            failure: {
+              name: "RGB_LIB_InsufficientAssignments",
+              message: "InsufficientAssignments (asset_id: rgb:handmade, available: {fungible: 1, non_fungible: false, inflation: 0, link: false, mint: 0})",
+            },
+          },
+        },
+      },
+    },
+    calls: [
+      "refresh",
+    ],
+  },
   "negative: refresh — nested failure with BigInt details": {
     result: {
       ok: true,

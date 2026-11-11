@@ -2,28 +2,49 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import type { Network } from '@utexo/rgb-sdk-core';
 import type { ResolvedRgbLibWebConfig } from './config.js';
+import {
+  decodeAssets,
+  decodeBalance,
+  decodeBtcBalance,
+  decodeFeeEstimate,
+  decodeIfa,
+  decodeInvoice,
+  decodeNia,
+  decodeOperation,
+  decodeReceive,
+  decodeRefresh,
+  decodeTransactions,
+  decodeTransfers,
+  decodeUnspents,
+  encodeAssignment,
+  bool,
+  int,
+  record,
+  str,
+} from './codec.js';
 import type {
-  DtoAsset,
-  DtoAssignment,
-  DtoBalance,
-  DtoInvoice,
-  DtoOperation,
-  DtoOutpoint,
-  DtoReceive,
-  DtoRefreshed,
-  DtoTransaction,
-  DtoTransfer,
-  DtoUnspent,
-} from './dto.js';
+  AssetIfaExact,
+  AssetNia,
+  Assets,
+  Balance,
+  BtcBalance,
+  Invoice,
+  Operation,
+  ReceiveData,
+  Refreshed,
+  Transfer,
+  Unspent,
+  WalletTransaction,
+} from './codec.js';
 import { RgbLibWebError } from './errors.js';
 import type { RgbLibWebPublicKeys } from './keys.js';
 import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './runtime/types.js';
 
 /**
  * One open rgb-lib-wasm wallet. It plays the part of the React Native bridge
- * (`RgbLibSessionStore.kt`): same operations, same rules, and it returns the
- * bridge's value shapes (`dto.ts`). Calls must be serialized by the caller:
- * the WASM wallet panics on overlapping calls.
+ * (`RgbLibSessionStore.kt`): same operations, same rules. Results are decoded
+ * by `codec.ts` into exact internal values (ADR-0002 step 3). Calls must be
+ * serialized by the caller: the WASM wallet panics on overlapping calls.
  */
 
 /** rgb-lib-wasm's `BitcoinNetwork` serde names. `utexo` is a signet. */
@@ -46,14 +67,6 @@ const BRIDGE_NETWORKS: Readonly<Record<Network, string>> = {
   regtest: 'regtest',
 };
 
-const INVOICE_NETWORKS: Readonly<Record<string, string>> = {
-  Mainnet: 'mainnet',
-  Testnet: 'testnet',
-  Testnet4: 'testnet4',
-  Signet: 'signet',
-  Regtest: 'regtest',
-};
-
 /** rgb-lib's own default: invoices without `exp` get one hour. */
 const DEFAULT_SEND_EXPIRY_SECONDS = 3600n;
 /** Time left to detect the ACK and broadcast before the invoice expires. */
@@ -64,319 +77,6 @@ export interface SessionOptions {
   dataDir: string;
   maxAllocationsPerUtxo: number;
   reuseAddresses: boolean;
-}
-
-// ── wire readers ────────────────────────────────────────────────────────────
-
-function invalid(field: string): never {
-  throw new RgbLibWebError(
-    'INVALID_NATIVE_RESPONSE',
-    `Invalid rgb-lib-wasm ${field}`
-  );
-}
-/**
- * A plain JS object (a Rust struct). serde-wasm-bindgen gives a `Map` for a
- * Rust map and an array for a `Vec`; neither stands in for a struct.
- */
-function record(value: unknown, field: string): Record<string, unknown> {
-  if (value === null || typeof value !== 'object') invalid(field);
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) invalid(field);
-  return value as Record<string, unknown>;
-}
-function list(value: unknown, field: string): unknown[] {
-  if (!Array.isArray(value)) invalid(field);
-  return value;
-}
-function str(value: unknown, field: string): string {
-  if (typeof value !== 'string') invalid(field);
-  return value;
-}
-function optStr(value: unknown, field: string): string | null {
-  return value === null || value === undefined ? null : str(value, field);
-}
-function bool(value: unknown, field: string): boolean {
-  if (typeof value !== 'boolean') invalid(field);
-  return value;
-}
-/** Ranges of the Rust integer types that arrive as numbers. */
-const INT_RANGES = {
-  u8: [0, 0xff],
-  u32: [0, 0xffff_ffff],
-  i32: [-0x8000_0000, 0x7fff_ffff],
-} as const;
-
-/** A u8 / u32 / i32 field; outside the Rust type's range it is a broken response. */
-function int(
-  value: unknown,
-  field: string,
-  type: keyof typeof INT_RANGES
-): number {
-  const [min, max] = INT_RANGES[type];
-  if (
-    typeof value !== 'number' ||
-    !Number.isInteger(value) ||
-    value < min ||
-    value > max
-  )
-    invalid(field);
-  return value;
-}
-const U64_MAX = 2n ** 64n - 1n;
-const I64_MIN = -(2n ** 63n);
-const I64_MAX = 2n ** 63n - 1n;
-
-/**
- * u64 / i64 fields arrive as BigInt; the exact value becomes a decimal string.
- * A value outside the Rust type's range is a broken response, so it fails
- * here as INVALID_NATIVE_RESPONSE, before any numeric conversion.
- */
-function dec(value: unknown, field: string, signed = false): string {
-  if (typeof value === 'bigint') {
-    const [min, max] = signed ? [I64_MIN, I64_MAX] : [0n, U64_MAX];
-    if (value < min || value > max) invalid(field);
-    return value.toString();
-  }
-  if (
-    typeof value === 'number' &&
-    Number.isSafeInteger(value) &&
-    (signed || value >= 0)
-  )
-    return String(value);
-  return invalid(field);
-}
-function optDec(value: unknown, field: string): string | null {
-  return value === null || value === undefined ? null : dec(value, field);
-}
-
-/** Externally tagged `Assignment`: `"NonFungible"` or `{ Fungible: 10n }`. */
-function assignment(value: unknown): DtoAssignment {
-  if (typeof value === 'string') return { type: value, amount: null };
-  const entries = Object.entries(record(value, 'assignment'));
-  if (entries.length !== 1) invalid('assignment');
-  const [type, amount] = entries[0]!;
-  return { type, amount: dec(amount, 'assignment amount') };
-}
-function optAssignment(value: unknown): DtoAssignment | null {
-  return value === null || value === undefined ? null : assignment(value);
-}
-function outpoint(value: unknown): DtoOutpoint {
-  const v = record(value, 'outpoint');
-  return {
-    txid: str(v.txid, 'outpoint txid'),
-    vout: int(v.vout, 'vout', 'u32'),
-  };
-}
-function balance(value: unknown): DtoBalance {
-  const v = record(value, 'balance');
-  return {
-    settled: dec(v.settled, 'settled balance'),
-    future: dec(v.future, 'future balance'),
-    spendable: dec(v.spendable, 'spendable balance'),
-  };
-}
-function asset(value: unknown, schema: 'Nia' | 'Ifa' | 'Bfa'): DtoAsset {
-  const v = record(value, 'asset');
-  const media =
-    v.media === null || v.media === undefined
-      ? null
-      : (() => {
-          const m = record(v.media, 'media');
-          return {
-            filePath: str(m.filePath, 'media path'),
-            digest: str(m.digest, 'media digest'),
-            mime: str(m.mime, 'media mime'),
-          };
-        })();
-  return {
-    schema,
-    assetId: str(v.assetId, 'asset ID'),
-    ticker: optStr(v.ticker, 'ticker'),
-    name: str(v.name, 'asset name'),
-    details: optStr(v.details, 'details'),
-    precision: int(v.precision, 'precision', 'u8'),
-    issuedSupply: optDec(v.issuedSupply, 'issued supply'),
-    initialSupply: optDec(v.initialSupply, 'initial supply'),
-    maxSupply: optDec(v.maxSupply, 'max supply'),
-    knownCirculatingSupply: optDec(
-      v.knownCirculatingSupply,
-      'circulating supply'
-    ),
-    timestamp: dec(v.timestamp, 'timestamp', true),
-    addedAt: dec(v.addedAt, 'addedAt', true),
-    balance: balance(v.balance),
-    media,
-    rejectListUrl: optStr(v.rejectListUrl, 'reject list URL'),
-  };
-}
-function transfer(value: unknown): DtoTransfer {
-  const v = record(value, 'transfer');
-  return {
-    idx: int(v.idx, 'transfer idx', 'i32'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
-    createdAt: dec(v.createdAt, 'createdAt', true),
-    updatedAt: dec(v.updatedAt, 'updatedAt', true),
-    status: str(v.status, 'transfer status'),
-    requestedAssignment: optAssignment(v.requestedAssignment),
-    assignments: list(v.assignments, 'assignments').map(assignment),
-    kind: str(v.kind, 'transfer kind'),
-    txid: optStr(v.txid, 'txid'),
-    recipientId: optStr(v.recipientId, 'recipient ID'),
-    receiveUtxo:
-      v.receiveUtxo === null || v.receiveUtxo === undefined
-        ? null
-        : outpoint(v.receiveUtxo),
-    // This rgb-lib reports one change UTXO.
-    changeUtxos:
-      v.changeUtxo === null || v.changeUtxo === undefined
-        ? []
-        : [outpoint(v.changeUtxo)],
-    expiration: optDec(v.expirationTimestamp, 'expiration'),
-    transportEndpoints: list(v.transportEndpoints, 'transport endpoints').map(
-      (item) => {
-        const e = record(item, 'transport endpoint');
-        return {
-          endpoint: str(e.endpoint, 'endpoint'),
-          transportType: str(e.transportType, 'transport type'),
-          used: bool(e.used, 'endpoint used'),
-        };
-      }
-    ),
-    invoiceString: optStr(v.invoiceString, 'invoice string'),
-    consignmentPath: optStr(v.consignmentPath, 'consignment path'),
-  };
-}
-function transaction(value: unknown): DtoTransaction {
-  const v = record(value, 'transaction');
-  const time =
-    v.confirmationTime === null || v.confirmationTime === undefined
-      ? null
-      : record(v.confirmationTime, 'confirmation time');
-  return {
-    transactionType: str(v.transactionType, 'transaction type'),
-    txid: str(v.txid, 'txid'),
-    received: dec(v.received, 'received'),
-    sent: dec(v.sent, 'sent'),
-    fee: dec(v.fee, 'fee'),
-    confirmationTime: time
-      ? {
-          height: int(time.height, 'height', 'u32'),
-          timestamp: dec(time.timestamp, 'confirmation timestamp'),
-        }
-      : null,
-  };
-}
-function unspent(value: unknown): DtoUnspent {
-  const v = record(value, 'unspent');
-  const utxo = record(v.utxo, 'utxo');
-  return {
-    utxo: {
-      outpoint: outpoint(utxo.outpoint),
-      btcAmount: dec(utxo.btcAmount, 'btcAmount'),
-      colorable: bool(utxo.colorable, 'colorable'),
-      exists: bool(utxo.exists, 'exists'),
-    },
-    rgbAllocations: list(v.rgbAllocations, 'allocations').map((item) => {
-      const a = record(item, 'allocation');
-      return {
-        assetId: optStr(a.assetId, 'allocation asset ID'),
-        assignment: assignment(a.assignment),
-        settled: bool(a.settled, 'settled'),
-      };
-    }),
-    pendingBlinded: int(v.pendingBlinded, 'pending blinded', 'u32'),
-  };
-}
-function receive(value: unknown): DtoReceive {
-  const v = record(value, 'receive data');
-  return {
-    invoice: str(v.invoice, 'invoice'),
-    recipientId: str(v.recipientId, 'recipient ID'),
-    expirationTimestamp: dec(v.expirationTimestamp, 'expiration'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
-    publicKey: str(v.publicKey, 'public key'),
-  };
-}
-function operation(value: unknown): DtoOperation {
-  const v = record(value, 'operation result');
-  return {
-    txid: str(v.txid, 'txid'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
-    entropy: dec(v.entropy, 'entropy'),
-  };
-}
-/** Raw invoice data; u64 values still BigInt, as `send()` needs them. */
-function invoiceData(value: unknown) {
-  const v = record(value, 'invoice data');
-  // A HashMap<String, String>, built as a plain object
-  // (serialize_maps_as_objects in bindings/wasm/src/lib.rs).
-  const params = record(v.unknownQueryParams ?? {}, 'query params');
-  const expiration = optDec(v.expirationTimestamp, 'invoice expiration');
-  const wasmNetwork = str(v.network, 'invoice network');
-  const dto: DtoInvoice = {
-    recipientId: str(v.recipientId, 'recipient ID'),
-    assetSchema: optStr(v.assetSchema, 'asset schema'),
-    assetId: optStr(v.assetId, 'asset ID'),
-    assignment: assignment(v.assignment),
-    assignmentName: optStr(v.assignmentName, 'assignment name'),
-    network: INVOICE_NETWORKS[wasmNetwork] ?? invalid('invoice network'),
-    expirationTimestamp: expiration,
-    transportEndpoints: list(v.transportEndpoints, 'transport endpoints').map(
-      (e) => str(e, 'transport endpoint')
-    ),
-    publicKey: optStr(v.publicKey, 'public key'),
-    encryption: str(v.encryption, 'encryption'),
-    unknownQueryParams: Object.entries(params)
-      .map(([key, item]) => ({ key, value: str(item, 'query param') }))
-      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
-  };
-  return { dto, wasmNetwork, raw: v };
-}
-/**
- * One value of a refresh failure's fields, as text: nested structs and lists
- * in full, u64 values exact (BigInt, never rounded through `number`).
- */
-function detail(value: unknown, depth = 0): string {
-  if (depth > 8) invalid('refresh failure details');
-  if (value === null || value === undefined) return 'null';
-  // Every BigInt field of the beta.4 Error enum is a u64.
-  if (typeof value === 'bigint') {
-    if (value < 0n || value > U64_MAX) invalid('refresh failure details');
-    return value.toString();
-  }
-  if (typeof value !== 'object') return String(value);
-  if (Array.isArray(value))
-    return `[${value.map((v) => detail(v, depth + 1)).join(', ')}]`;
-  const entries =
-    value instanceof Map
-      ? [...value.entries()].map(([k, v]) => [detail(k, depth + 1), v] as const)
-      : Object.entries(record(value, 'refresh failure details'));
-  return `{${entries.map(([k, v]) => `${k}: ${detail(v, depth + 1)}`).join(', ')}}`;
-}
-
-/** A refresh failure (`Error`, externally tagged) named like the RN bridge. */
-function refreshFailure(value: unknown): { name: string; message: string } {
-  if (typeof value === 'string')
-    return { name: `RGB_LIB_${value}`, message: value };
-  const entries = Object.entries(record(value, 'refresh failure'));
-  if (entries.length !== 1) invalid('refresh failure');
-  const [variant, fields] = entries[0]!;
-  // A struct variant keeps its `key: value` list; a tuple or newtype variant
-  // is shown as its value.
-  const details =
-    fields === null || fields === undefined
-      ? ''
-      : typeof fields === 'object' &&
-          !Array.isArray(fields) &&
-          !(fields instanceof Map)
-        ? Object.entries(record(fields, 'refresh failure fields'))
-            .map(([k, v]) => `${k}: ${detail(v)}`)
-            .join(', ')
-        : detail(fields);
-  return {
-    name: `RGB_LIB_${variant}`,
-    message: details ? `${variant} (${details})` : variant,
-  };
 }
 
 function fail(message: string): never {
@@ -521,47 +221,33 @@ export class WasmSession {
     return this.persisted(str(this.wallet.getAddress(), 'address'));
   }
 
-  async getBtcBalance(skipSync: boolean) {
+  async getBtcBalance(skipSync: boolean): Promise<BtcBalance> {
     await this.syncFirst(skipSync);
-    const v = record(this.wallet.getBtcBalance(), 'BTC balance');
-    return { vanilla: balance(v.vanilla), colored: balance(v.colored) };
+    return decodeBtcBalance(this.wallet.getBtcBalance());
   }
 
-  async getAssetBalance(assetId: string): Promise<DtoBalance> {
-    return balance(this.wallet.getAssetBalance(assetId));
+  async getAssetBalance(assetId: string): Promise<Balance> {
+    return decodeBalance(this.wallet.getAssetBalance(assetId));
   }
 
-  async listAssets(schemas: string[]): Promise<DtoAsset[]> {
-    const v = record(this.wallet.listAssets(schemas), 'assets');
-    const bucket = (items: unknown, schema: 'Nia' | 'Ifa' | 'Bfa') =>
-      items === null || items === undefined
-        ? []
-        : list(items, 'assets').map((item) => asset(item, schema));
-    return [
-      ...bucket(v.nia, 'Nia'),
-      ...bucket(v.ifa, 'Ifa'),
-      ...bucket(v.bfa, 'Bfa'),
-    ];
+  async listAssets(schemas: string[]): Promise<Assets> {
+    return decodeAssets(this.wallet.listAssets(schemas));
   }
 
-  async listUnspents(skipSync: boolean): Promise<DtoUnspent[]> {
+  async listUnspents(skipSync: boolean): Promise<Unspent[]> {
     await this.syncFirst(skipSync);
-    return list(this.wallet.listUnspents(false), 'unspents').map(unspent);
+    return decodeUnspents(this.wallet.listUnspents(false));
   }
 
-  async listTransactions(skipSync: boolean): Promise<DtoTransaction[]> {
+  async listTransactions(skipSync: boolean): Promise<WalletTransaction[]> {
     await this.syncFirst(skipSync);
-    return list(this.wallet.listTransactions(), 'transactions').map(
-      transaction
-    );
+    return decodeTransactions(this.wallet.listTransactions());
   }
 
-  async listTransfers(assetId: string | null): Promise<DtoTransfer[]> {
+  async listTransfers(assetId: string | null): Promise<Transfer[]> {
     // AssetFilter is camelCase in this build: "any" or { id }.
     const filter = assetId === null ? 'any' : { id: assetId };
-    return list(this.wallet.listTransfers(filter, null), 'transfers').map(
-      transfer
-    );
+    return decodeTransfers(this.wallet.listTransfers(filter, null));
   }
 
   /** Begin, sign with the wallet keys, end. */
@@ -615,7 +301,7 @@ export class WasmSession {
     expirationTimestamp: string,
     transportEndpoints: string[],
     minConfirmations: number
-  ): Promise<DtoReceive> {
+  ): Promise<ReceiveData> {
     const wireAssignment =
       kind === 'Fungible' || kind === 'InflationRight'
         ? { [kind]: BigInt(amount ?? fail(`${kind} receive requires amount`)) }
@@ -629,7 +315,7 @@ export class WasmSession {
       minConfirmations,
       null,
     ] as const;
-    return receive(
+    return decodeReceive(
       await (witness
         ? this.wallet.witnessReceive(...args)
         : this.wallet.blindReceive(...args))
@@ -639,14 +325,14 @@ export class WasmSession {
   private parseInvoice(invoice: string) {
     const parsed = new this.runtime.WasmInvoice(invoice);
     try {
-      return invoiceData(parsed.invoiceData());
+      return decodeInvoice(parsed.invoiceData());
     } finally {
       parsed.free();
     }
   }
 
-  async decodeInvoice(invoice: string): Promise<DtoInvoice> {
-    return this.parseInvoice(invoice).dto;
+  async decodeInvoice(invoice: string): Promise<Invoice> {
+    return this.parseInvoice(invoice);
   }
 
   /** The Kotlin bridge's `send()`: invoice checks, then begin, sign, end. */
@@ -660,10 +346,10 @@ export class WasmSession {
     feeRate: string,
     minConfirmations: number,
     senderTransportEndpoint: string
-  ): Promise<DtoOperation> {
+  ): Promise<Operation> {
     const online = this.connected();
-    const { dto, wasmNetwork, raw } = this.parseInvoice(invoice);
-    if (wasmNetwork !== this.wasmNetwork)
+    const dto = this.parseInvoice(invoice);
+    if (dto.wasmNetwork !== this.wasmNetwork)
       fail('Invoice network does not match wallet');
     if (assetId !== null && dto.assetId !== null && assetId !== dto.assetId)
       fail('Asset override does not match invoice');
@@ -674,16 +360,15 @@ export class WasmSession {
       if (n === null || n === 0n) fail('Amount is required');
       wireAssignment = { Fungible: n };
     } else if (dto.assignment.type === 'Fungible') {
-      if (n !== null && n !== BigInt(dto.assignment.amount!))
+      if (n !== null && n !== dto.assignment.amount)
         fail('Amount override does not match invoice');
-      wireAssignment = raw.assignment;
+      wireAssignment = encodeAssignment(dto.assignment);
     } else {
       if (n !== null) fail('Amount override is incompatible with invoice');
-      wireAssignment = raw.assignment;
+      wireAssignment = encodeAssignment(dto.assignment);
     }
     const now = BigInt(Math.floor(Date.now() / 1000));
-    const invoiceExpiry =
-      dto.expirationTimestamp === null ? null : BigInt(dto.expirationTimestamp);
+    const invoiceExpiry = dto.expirationTimestamp;
     let expiry: bigint;
     if (invoiceExpiry === null) expiry = now + DEFAULT_SEND_EXPIRY_SECONDS;
     else if (invoiceExpiry <= now + SEND_EXPIRY_MARGIN_SECONDS)
@@ -716,7 +401,7 @@ export class WasmSession {
       'send begin result'
     );
     const signed = this.wallet.signPsbt(str(begun.psbt, 'PSBT'));
-    return operation(await this.wallet.sendEnd(online, signed, false));
+    return decodeOperation(await this.wallet.sendEnd(online, signed, false));
   }
 
   async issueAssetNia(
@@ -724,16 +409,15 @@ export class WasmSession {
     name: string,
     precision: number,
     amounts: string[]
-  ): Promise<DtoAsset> {
+  ): Promise<AssetNia> {
     return this.persisted(
-      asset(
+      decodeNia(
         this.wallet.issueAssetNia(
           ticker,
           name,
           precision,
           amounts.map((n) => BigInt(n))
-        ),
-        'Nia'
+        )
       )
     );
   }
@@ -745,9 +429,9 @@ export class WasmSession {
     amounts: string[],
     inflationAmounts: string[],
     rejectListUrl: string | null
-  ): Promise<DtoAsset> {
+  ): Promise<AssetIfaExact> {
     return this.persisted(
-      asset(
+      decodeIfa(
         this.wallet.issueAssetIfa(
           ticker,
           name,
@@ -758,8 +442,7 @@ export class WasmSession {
           // As on React Native: no link right, not linked from a contract.
           false,
           null
-        ),
-        'Ifa'
+        )
       )
     );
   }
@@ -769,7 +452,7 @@ export class WasmSession {
     amounts: string[],
     feeRate: string,
     minConfirmations: number
-  ): Promise<DtoOperation> {
+  ): Promise<Operation> {
     const online = this.connected();
     const psbt = await this.wallet.inflateBegin(
       online,
@@ -779,7 +462,7 @@ export class WasmSession {
       minConfirmations
     );
     const signed = this.wallet.signPsbt(psbt);
-    return operation(await this.wallet.inflateEnd(online, signed));
+    return decodeOperation(await this.wallet.inflateEnd(online, signed));
   }
 
   async failTransfers(
@@ -798,27 +481,10 @@ export class WasmSession {
     );
   }
 
-  async refresh(skipSync: boolean): Promise<DtoRefreshed[]> {
-    const result = await this.wallet.refresh(
-      this.connected(),
-      null,
-      [],
-      skipSync
+  async refresh(skipSync: boolean): Promise<Refreshed[]> {
+    return decodeRefresh(
+      await this.wallet.refresh(this.connected(), null, [], skipSync)
     );
-    // RefreshResult is HashMap<i32, RefreshedTransfer>: a Map with number keys.
-    if (!(result instanceof Map)) invalid('refresh result');
-    return [...result.entries()].map(([key, item]) => {
-      const idx = key as unknown;
-      const v = record(item, 'refreshed transfer');
-      return {
-        batchTransferIdx: int(idx, 'batch transfer idx', 'i32'),
-        updatedStatus: optStr(v.updatedStatus, 'updated status'),
-        failure:
-          v.failure === null || v.failure === undefined
-            ? null
-            : refreshFailure(v.failure),
-      };
-    });
   }
 
   async sync(): Promise<void> {
@@ -826,6 +492,8 @@ export class WasmSession {
   }
 
   async estimateFeeRate(blocks: number): Promise<number> {
-    return this.wallet.getFeeEstimation(this.connected(), blocks);
+    return decodeFeeEstimate(
+      await this.wallet.getFeeEstimation(this.connected(), blocks)
+    );
   }
 }

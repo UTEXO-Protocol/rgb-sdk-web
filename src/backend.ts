@@ -37,7 +37,7 @@ import {
 } from './errors.js';
 import { readMnemonic, resolveKeys } from './keys.js';
 import type { ResolvedKeys, RgbLibWebKeys } from './keys.js';
-import * as map from './mappers.js';
+import * as codec from './codec.js';
 import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './session.js';
@@ -566,18 +566,18 @@ export class RgbLibWebBackend {
       syncs,
       options,
       async (s, owned) => {
-        const value = await s.getBtcBalance(skipSyncOf(owned?.skipSync));
-        return {
-          vanilla: map.balance(value.vanilla),
-          colored: map.balance(value.colored),
-        };
+        return codec.publicBtcBalance(
+          await s.getBtcBalance(skipSyncOf(owned?.skipSync))
+        );
       }
     );
   }
 
   listUnspents(options?: ReadOptions) {
     return this.withOptions('listUnspents', syncs, options, async (s, owned) =>
-      (await s.listUnspents(skipSyncOf(owned?.skipSync))).map(map.unspent)
+      (await s.listUnspents(skipSyncOf(owned?.skipSync))).map(
+        codec.publicUnspent
+      )
     );
   }
 
@@ -635,20 +635,7 @@ export class RgbLibWebBackend {
   estimateFeeRate(blocks: number) {
     const checked = integer(blocks, 'blocks', 1, 0xffff);
     return this.run('estimateFeeRate', true, async (s) => {
-      const estimate = await s.estimateFeeRate(checked);
-      if (
-        typeof estimate !== 'number' ||
-        !Number.isFinite(estimate) ||
-        estimate <= 0 ||
-        estimate > Number.MAX_SAFE_INTEGER
-      ) {
-        throw new RgbLibWebError(
-          'INVALID_NATIVE_RESPONSE',
-          'Invalid fee estimation'
-        );
-      }
-      // A recommendation; explicit send inputs are never rounded.
-      return { feeRate: Math.ceil(estimate) };
+      return codec.publicFeeEstimate(await s.estimateFeeRate(checked));
     });
   }
 
@@ -658,13 +645,13 @@ export class RgbLibWebBackend {
     return this.withOptions('listAssets', false, options, async (s, owned) => {
       // Validated in the queue, as on React Native; nothing has run yet.
       const schemas = validateAssetSchemas(owned?.filterAssetSchemas);
-      return map.assets(await s.listAssets(schemas));
+      return codec.publicAssets(await s.listAssets(schemas));
     });
   }
 
   getAssetBalance(assetId: string) {
     return this.run('getAssetBalance', false, async (s) =>
-      map.balance(await s.getAssetBalance(assetId))
+      codec.publicBalance(await s.getAssetBalance(assetId))
     );
   }
 
@@ -680,7 +667,9 @@ export class RgbLibWebBackend {
         }),
       },
       async (s, p, v) =>
-        map.nia(await s.issueAssetNia(p.ticker, p.name, v.precision, v.amounts))
+        codec.publicNia(
+          await s.issueAssetNia(p.ticker, p.name, v.precision, v.amounts)
+        )
     );
   }
 
@@ -696,7 +685,7 @@ export class RgbLibWebBackend {
         }),
       },
       async (s, p, v) =>
-        map.ifa(
+        codec.publicIfa(
           await s.issueAssetIfa(
             p.ticker,
             p.name,
@@ -730,7 +719,7 @@ export class RgbLibWebBackend {
         }),
       },
       async (s, p, v) =>
-        map.operation(
+        codec.publicOperation(
           await s.inflate(p.assetId, v.amounts, v.feeRate, v.minConfirmations)
         )
     );
@@ -765,7 +754,7 @@ export class RgbLibWebBackend {
         }),
       },
       async (s, p, v) =>
-        map.receive(
+        codec.publicReceive(
           await s.receive(
             v.witness,
             p.assetId ?? null,
@@ -800,7 +789,7 @@ export class RgbLibWebBackend {
         'invoice'
       );
     return this.run('decodeRGBInvoice', false, async (s) =>
-      map.invoice(await s.decodeInvoice(invoice), invoice)
+      codec.publicInvoice(await s.decodeInvoice(invoice), invoice)
     );
   }
 
@@ -840,7 +829,7 @@ export class RgbLibWebBackend {
         },
       },
       async (s, p, v) =>
-        map.operation(
+        codec.publicOperation(
           await s.send(
             p.invoice,
             p.assetId ?? null,
@@ -882,7 +871,7 @@ export class RgbLibWebBackend {
     if (assetId !== undefined && typeof assetId !== 'string')
       throw new ValidationError('assetId must be a string', 'assetId');
     return this.run('listTransfers', false, async (s) =>
-      (await s.listTransfers(assetId ?? null)).map(map.transfer)
+      (await s.listTransfers(assetId ?? null)).map(codec.publicTransfer)
     );
   }
 
@@ -893,7 +882,7 @@ export class RgbLibWebBackend {
       options,
       async (s, owned) =>
         (await s.listTransactions(skipSyncOf(owned?.skipSync))).map(
-          map.transaction
+          codec.publicTransaction
         )
     );
   }
@@ -902,23 +891,7 @@ export class RgbLibWebBackend {
     s: WasmSession,
     skipSync: boolean
   ): Promise<RefreshTransfersResult> {
-    return {
-      transfers: Object.fromEntries(
-        (await s.refresh(skipSync)).map((item) => [
-          item.batchTransferIdx,
-          {
-            updatedStatus:
-              item.updatedStatus === null
-                ? undefined
-                : map.transferStatus(item.updatedStatus),
-            failure:
-              item.failure === null
-                ? undefined
-                : map.refreshFailure(item.failure),
-          },
-        ])
-      ),
-    };
+    return codec.publicRefresh(await s.refresh(skipSync));
   }
 
   refresh(options?: ReadOptions) {

@@ -15,6 +15,7 @@ import type {
   WalletUnspent,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebError } from './errors.js';
+import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
 
 /**
  * Decoding of rgb-lib-wasm 1.0.0-beta.4 results (ADR-0002, "Rules for
@@ -31,8 +32,8 @@ import { RgbLibWebError } from './errors.js';
  * so an additive runtime release keeps working. Tests use `unknownFields()`
  * to fail on a field the table does not know.
  *
- * Not called yet: ADR-0002 step 3 moves the callers here, one value family
- * at a time.
+ * The session decodes every WasmWallet result here and the backend projects
+ * it (ADR-0002 step 3); the rules move out of the session in step 4.
  */
 
 // ── field tables ────────────────────────────────────────────────────────────
@@ -248,7 +249,20 @@ export const FIELDS = {
   },
   RefreshedTransfer: {
     rust: 'src/wallet/online.rs RefreshedTransfer',
+    // `failure` is an `Error`: its variants and their fields come from
+    // RGB_LIB_ERROR_VARIANTS (generated from src/error.rs).
     fields: { updatedStatus: 'mapped', failure: 'mapped' },
+  },
+  AssignmentsCollection: {
+    // No rename_all: snake_case. Only inside the InsufficientAssignments error.
+    rust: 'src/wallet/online.rs AssignmentsCollection',
+    fields: {
+      fungible: 'mapped',
+      non_fungible: 'mapped',
+      inflation: 'mapped',
+      link: 'mapped',
+      mint: 'mapped',
+    },
   },
 } as const satisfies Record<string, StructTable>;
 
@@ -306,8 +320,40 @@ export function unknownFields(
       out.push(at);
       continue;
     }
+    if (struct === 'RefreshedTransfer' && key === 'failure') {
+      out.push(...unknownErrorFields(item, at));
+      continue;
+    }
     const child = table.nested?.[key] as StructName | undefined;
     if (child) out.push(...unknownFields(child, item, at));
+  }
+  return out;
+}
+
+/** The same for an `Error` value: an unknown variant or field. */
+function unknownErrorFields(value: unknown, path: string): string[] {
+  if (value === null || value === undefined) return [];
+  if (typeof value === 'string')
+    return Object.hasOwn(RGB_LIB_ERROR_VARIANTS, value)
+      ? []
+      : [`${path}.${value}`];
+  if (typeof value !== 'object') return [];
+  const out: string[] = [];
+  for (const [variant, fields] of Object.entries(value)) {
+    const at = `${path}.${variant}`;
+    if (!Object.hasOwn(RGB_LIB_ERROR_VARIANTS, variant)) {
+      out.push(at);
+      continue;
+    }
+    const known = RGB_LIB_ERROR_VARIANTS[variant] ?? {};
+    if (fields === null || typeof fields !== 'object') continue;
+    for (const [key, item] of Object.entries(fields)) {
+      if (!Object.hasOwn(known, key)) out.push(`${at}.${key}`);
+      else if (known[key] === 'AssignmentsCollection')
+        out.push(
+          ...unknownFields('AssignmentsCollection', item, `${at}.${key}`)
+        );
+    }
   }
   return out;
 }
@@ -325,13 +371,13 @@ function invalid(field: string): never {
     `Invalid rgb-lib-wasm ${field}`
   );
 }
-/** The same code with a message of its own, as the mappers gave it. */
+/** The same code with a message of its own (kept from the earlier mappers). */
 function rejected(message: string): never {
   throw new RgbLibWebError('INVALID_NATIVE_RESPONSE', message);
 }
 
 /** A plain object (a Rust struct); a `Map` or an array is not one. */
-function record(value: unknown, field: string): Record<string, unknown> {
+export function record(value: unknown, field: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object') invalid(field);
   const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype && proto !== null) invalid(field);
@@ -344,7 +390,7 @@ function list(value: unknown, field: string): unknown[] {
 function absent(value: unknown): value is null | undefined {
   return value === null || value === undefined;
 }
-function str(value: unknown, field: string): string {
+export function str(value: unknown, field: string): string {
   if (typeof value !== 'string') invalid(field);
   return value;
 }
@@ -356,7 +402,7 @@ function needStr(value: unknown, field: string, missing: string): string {
   if (absent(value)) rejected(`Missing ${missing}`);
   return str(value, field);
 }
-function bool(value: unknown, field: string): boolean {
+export function bool(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') invalid(field);
   return value;
 }
@@ -368,7 +414,7 @@ const INT_RANGES = {
 } as const;
 
 /** u8 / u32 / i32: a number within the Rust type's range. */
-function int(
+export function int(
   value: unknown,
   field: string,
   type: keyof typeof INT_RANGES
@@ -463,6 +509,11 @@ export function decodeAssignment(value: unknown): Assignment {
 }
 function optAssignment(value: unknown): Assignment | null {
   return absent(value) ? null : decodeAssignment(value);
+}
+
+/** An `Assignment` in the wire form the runtime takes: `"Any"` or `{ Fungible: 10n }`. */
+export function encodeAssignment(value: Assignment): unknown {
+  return value.amount === null ? value.type : { [value.type]: value.amount };
 }
 
 /** `amountBaseUnits` is exact; `amount` only when it fits a `number`. */
@@ -1006,7 +1057,10 @@ export function decodeInvoice(value: unknown): Invoice {
     assetId: optStr(v.assetId, 'asset ID'),
     assignment: decodeAssignment(v.assignment),
     assignmentName: optStr(v.assignmentName, 'assignment name'),
-    network: INVOICE_NETWORKS[wasmNetwork] ?? invalid('invoice network'),
+    // Own keys only: "constructor" or "__proto__" must not resolve.
+    network: Object.hasOwn(INVOICE_NETWORKS, wasmNetwork)
+      ? INVOICE_NETWORKS[wasmNetwork]!
+      : invalid('invoice network'),
     wasmNetwork,
     expirationTimestamp,
     transportEndpoints: list(v.transportEndpoints, 'transport endpoints').map(
@@ -1014,11 +1068,11 @@ export function decodeInvoice(value: unknown): Invoice {
     ),
     publicKey: optStr(v.publicKey, 'public key'),
     encryption: str(v.encryption, 'encryption'),
+    // Sorted by key, so Object.keys() and JSON.stringify() are stable.
     unknownQueryParams: Object.fromEntries(
-      Object.entries(params).map(([key, item]) => [
-        key,
-        str(item, 'query param'),
-      ])
+      Object.entries(params)
+        .map(([key, item]) => [key, str(item, 'query param')] as const)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     ),
   };
   return {
@@ -1099,54 +1153,53 @@ export interface Refreshed {
   failure: RefreshFailure | null;
 }
 
-/**
- * One value of a refresh failure's fields, as text: nested structs and lists
- * in full, u64 values exact.
- */
-function detail(value: unknown, depth = 0): string {
-  if (depth > 8) invalid('refresh failure details');
-  if (absent(value)) return 'null';
-  // Every BigInt field of the beta.4 Error enum is a u64.
-  if (typeof value === 'bigint') {
-    if (value < 0n || value > U64_MAX) invalid('refresh failure details');
-    return value.toString();
-  }
-  if (typeof value !== 'object') return String(value);
-  if (Array.isArray(value))
-    return `[${value.map((v) => detail(v, depth + 1)).join(', ')}]`;
-  const entries =
-    value instanceof Map
-      ? [...value.entries()].map(([k, v]) => [detail(k, depth + 1), v] as const)
-      : Object.entries(record(value, 'refresh failure details'));
-  return `{${entries.map(([k, v]) => `${k}: ${detail(v, depth + 1)}`).join(', ')}}`;
-}
+/** The Rust field types of the beta.4 `Error` variants, as text. */
+const ERROR_FIELD = {
+  String: (v: unknown, f: string) => str(v, f),
+  // An enum with unit variants only, serialized as its name.
+  AssetSchema: (v: unknown, f: string) => str(v, f),
+  u64: (v: unknown, f: string) => big(v, f).toString(),
+  i32: (v: unknown, f: string) => String(int(v, f, 'i32')),
+  AssignmentsCollection: (v: unknown, f: string) => {
+    const a = record(v, f);
+    return `{fungible: ${big(a.fungible, f)}, non_fungible: ${bool(a.non_fungible, f)}, inflation: ${big(a.inflation, f)}, link: ${bool(a.link, f)}, mint: ${big(a.mint, f)}}`;
+  },
+} as const;
 
-/** A failure (`Error`, externally tagged): `"Variant"` or `{ Variant: … }`. */
+/** For tests: every field type the generated variants use is handled. */
+export const ERROR_FIELD_TYPES: readonly string[] = Object.keys(ERROR_FIELD);
+
+/**
+ * A failure: an `Error`, externally tagged — `"Variant"` for a unit variant,
+ * `{ Variant: { field: … } }` for a struct variant. The variant must be one of
+ * beta.4; a struct variant's message lists its fields in Rust order, exact.
+ * Fields the variant does not have are ignored.
+ */
 function decodeFailure(value: unknown): RefreshFailure {
   let variant: string;
-  let message: string;
+  let fields: unknown;
   if (typeof value === 'string') {
     variant = value;
-    message = value;
   } else {
     const entries = Object.entries(record(value, 'refresh failure'));
     if (entries.length !== 1) invalid('refresh failure');
-    const [tag, fields] = entries[0]!;
-    // A struct variant keeps its `key: value` list; a tuple or newtype
-    // variant is shown as its value.
-    const details = absent(fields)
-      ? ''
-      : typeof fields === 'object' &&
-          !Array.isArray(fields) &&
-          !(fields instanceof Map)
-        ? Object.entries(record(fields, 'refresh failure fields'))
-            .map(([k, v]) => `${k}: ${detail(v)}`)
-            .join(', ')
-        : detail(fields);
-    variant = tag;
-    message = details ? `${tag} (${details})` : tag;
+    [variant, fields] = entries[0]!;
   }
-  if (!/^[A-Z][A-Za-z0-9]*$/.test(variant)) rejected('Invalid refresh failure');
+  if (!Object.hasOwn(RGB_LIB_ERROR_VARIANTS, variant))
+    rejected('Unknown rgb-lib-wasm refresh failure');
+  const known = RGB_LIB_ERROR_VARIANTS[variant] ?? null;
+  if ((known === null) !== (typeof value === 'string'))
+    invalid('refresh failure');
+  let message = variant;
+  if (known !== null) {
+    const v = record(fields, 'refresh failure fields');
+    const details = Object.entries(known).map(([name, type]) => {
+      const text = ERROR_FIELD[type as keyof typeof ERROR_FIELD];
+      if (!text) invalid('refresh failure fields');
+      return `${name}: ${text(v[name], 'refresh failure details')}`;
+    });
+    message = `${variant} (${details.join(', ')})`;
+  }
   return { name: `RGB_LIB_${variant}`, message };
 }
 

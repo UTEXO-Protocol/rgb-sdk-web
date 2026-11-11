@@ -55,7 +55,10 @@ describe('golden RgbLibWeb results for rgb-lib-wasm fixtures', () => {
       return out;
     };
     let checked = 0;
-    for (const c of cases.filter((x) => x.method === 'refresh')) {
+    // Unknown keys are ignored, so they are not in the message.
+    for (const c of cases.filter(
+      (x) => x.method === 'refresh' && x.kind !== 'unknown-key'
+    )) {
       const outcome = outcomes[c.name];
       if (!outcome?.result.ok) continue;
       for (const [idx, item] of c.value) {
@@ -73,6 +76,23 @@ describe('golden RgbLibWeb results for rgb-lib-wasm fixtures', () => {
       }
     }
     assert.ok(checked >= 3, `checked ${checked} nested failures`);
+  });
+
+  it('leaves an unknown failure field out of the message', () => {
+    const c = cases.find(
+      (x) => x.method === 'refresh' && x.kind === 'unknown-key'
+    );
+    const { message } = outcomes[c.name].result.value.transfers[4].failure;
+    assert.ok(!message.includes('newField'), message);
+  });
+
+  it('sorts invoice query params by key', () => {
+    // deepStrictEqual ignores key order; the order itself is checked here.
+    const c = cases.find(
+      (x) => x.label === 'query params out of key order (valid)'
+    );
+    const params = outcomes[c.name].result.value.unknownQueryParams;
+    assert.deepEqual(Object.keys(params), ['a', 'z']);
   });
 
   it('differs from the strict rules only by the known defects', () => {

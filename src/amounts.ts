@@ -59,25 +59,6 @@ export function issuanceAmounts(
   return { amounts: exact, inflationAmounts: inflation };
 }
 
-export function safeNumber(value: string, field: string): number {
-  if (typeof value !== 'string' || !/^-?(0|[1-9]\d*)$/.test(value)) {
-    throw new RgbLibWebError('INVALID_NATIVE_RESPONSE', `Invalid ${field}`);
-  }
-  const number = Number(value);
-  if (!Number.isSafeInteger(number)) {
-    throw new RgbLibWebError(
-      'AMOUNT_OVERFLOW',
-      `${field} cannot be represented by the numeric SDK field`
-    );
-  }
-  return number;
-}
-
-export function safeAmount(value: string, field: string): number {
-  u64(value, field);
-  return safeNumber(value, field);
-}
-
 /** A positive integer sat/vB, as a decimal string. */
 export function feeRate(value: number = 2): string {
   if (!Number.isSafeInteger(value) || value < 1) {

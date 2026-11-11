@@ -281,6 +281,118 @@ export const cases = [
       ],
     ]),
   },
+  {
+    method: 'invoiceData',
+    label: 'invoice network "constructor"',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      v.network = 'constructor';
+    }),
+  },
+  {
+    method: 'invoiceData',
+    label: 'invoice network "__proto__"',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      v.network = '__proto__';
+    }),
+  },
+  {
+    method: 'invoiceData',
+    label: 'invoice network "toString"',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      v.network = 'toString';
+    }),
+  },
+  {
+    method: 'invoiceData',
+    label: 'query params out of key order (valid)',
+    kind: 'boundary',
+    expect: 'ok',
+    value: variant(invoice, (v) => {
+      v.unknownQueryParams = { z: 'last', a: 'first' };
+    }),
+  },
+  // ── refresh failures against the beta.4 Error enum ───────────────────
+  {
+    method: 'refresh',
+    label: 'unknown failure variant',
+    kind: 'unknown-variant',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [4, { updatedStatus: 'Failed', failure: 'ImaginaryVariant' }],
+    ]),
+  },
+  {
+    method: 'refresh',
+    label: 'struct failure variant without its fields',
+    kind: 'wrong-type',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [4, { updatedStatus: 'Failed', failure: 'InsufficientBitcoins' }],
+    ]),
+  },
+  {
+    method: 'refresh',
+    label: 'unit failure variant with fields',
+    kind: 'wrong-type',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [
+        4,
+        {
+          updatedStatus: 'Failed',
+          failure: { NoValidTransportEndpoint: { x: 1 } },
+        },
+      ],
+    ]),
+  },
+  {
+    method: 'refresh',
+    label: 'failure field of the wrong type',
+    kind: 'wrong-type',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [
+        4,
+        {
+          updatedStatus: 'Failed',
+          failure: { InsufficientBitcoins: { needed: '1', available: 0n } },
+        },
+      ],
+    ]),
+  },
+  {
+    method: 'refresh',
+    label: 'unknown field in AssignmentsCollection (ignored)',
+    kind: 'unknown-key',
+    expect: 'ok, without the unknown field',
+    value: new Map([
+      [
+        4,
+        {
+          updatedStatus: 'Failed',
+          failure: {
+            InsufficientAssignments: {
+              asset_id: 'rgb:handmade',
+              available: {
+                fungible: 1n,
+                non_fungible: false,
+                inflation: 0n,
+                link: false,
+                mint: 0n,
+                newField: 9n,
+              },
+            },
+          },
+        },
+      ],
+    ]),
+  },
   // ── nested error with BigInt ───────────────────────────────────────────
   {
     method: 'refresh',

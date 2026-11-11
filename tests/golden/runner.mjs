@@ -149,6 +149,8 @@ export function collectCases(mods) {
         value: c.value,
         capturedAt,
         expect: c.expect,
+        kind: c.kind,
+        label: c.label,
       });
     }
   }

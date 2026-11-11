@@ -124,7 +124,11 @@ describe('rgb-lib-wasm fixtures', () => {
       if ('non_fungible' in value) found.push(value);
       Object.values(value).forEach(walk);
     };
-    for (const file of HANDMADE) mods[file].cases.forEach((c) => walk(c.value));
+    for (const file of HANDMADE)
+      mods[file].cases
+        // A negative case may add an unknown key on purpose.
+        .filter((c) => c.kind !== 'unknown-key')
+        .forEach((c) => walk(c.value));
     assert.ok(found.length >= 2);
     for (const a of found) {
       assert.deepEqual(Object.keys(a).sort(), [

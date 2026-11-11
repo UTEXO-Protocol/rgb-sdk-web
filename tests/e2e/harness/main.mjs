@@ -8,20 +8,24 @@
  *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no facade, no unlock
  *   boot({ capture: true }) records raw runtime values (capture.mjs);
  *   label(name) tags the next records; takeCapture() returns and clears them
- *   call(method, args)   — call a wallet method
+ *   call(method, args)   — call a wallet method; 'engine.<name>' calls an
+ *                          engine-only method (restoreFromVss) past the facade
  *   get(property)        — read a wallet property ('capabilities')
  *
  * Results cross the page boundary as JSON `{ ok, value | error }`; an error
  * keeps `code` and `operation`, so specs can assert engine error codes.
  */
 import initRgbLibWasm, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
-import { generateKeys } from '@utexo/rgb-sdk-core';
+import { LogLevel, generateKeys, logger } from '@utexo/rgb-sdk-core';
 import { recordingRuntime } from './capture.mjs';
 import { UTEXOWallet } from '@utexo/rgb-sdk';
 import {
   RgbLibWeb,
   generateKeys as generateKeysFromPackage,
 } from '../../../dist/index.mjs';
+
+// The core logger prints only errors by default; the VSS specs read warnings.
+logger.setLevel(LogLevel.WARN);
 
 let wallet = null;
 let captureLabel = 'unlabeled';
@@ -135,8 +139,10 @@ window.harness = {
 
   call: (method, argsJson) =>
     run(async () => {
-      const w = live();
-      const fn = w[method];
+      // 'engine.<name>' calls an engine-only method past the facade.
+      const engineOnly = method.startsWith('engine.');
+      const w = engineOnly ? live().engine : live();
+      const fn = w[engineOnly ? method.slice('engine.'.length) : method];
       if (typeof fn !== 'function') {
         throw new Error(`harness.call: ${method} is not a wallet method`);
       }

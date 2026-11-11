@@ -545,10 +545,13 @@ export class RgbLibWebBackend {
           );
     }
     const connecting = this.execute('unlock', false, async (session) => {
+      // Read before goOnline(): its full scan brings in the chain UTXOs and
+      // transactions of this mnemonic, so a new device no longer looks empty.
+      const empty = this.cloudCheckDue() && !ops.hasLocalData(session);
       await session.goOnline(config);
       this.online = config;
       // Queued here, so it runs before any work that waited for the connect.
-      this.checkCloudBackup();
+      if (empty) this.checkCloudBackup();
     });
     this.connecting = { config, promise: connecting };
     const clear = () => {
@@ -864,19 +867,24 @@ export class RgbLibWebBackend {
     });
   }
 
+  private cloudCheckDue(): boolean {
+    return this.vssOn && !this.cloudChecked;
+  }
+
   /**
-   * Once, after the first connection: if this wallet is empty, was not
-   * restored, and the server has a backup, the backup belongs to this mnemonic
-   * from another device. Warn, and hold automatic uploads so the first
-   * mutation does not replace it. A failed check is logged and holds nothing.
+   * Once, after the first connection of a wallet that was empty before it
+   * (checked by the caller) and was not restored: if the server has a backup,
+   * it belongs to this mnemonic from another device. Warn, and hold automatic
+   * uploads so the first mutation does not replace it. A failed check is
+   * logged and holds nothing.
    */
   private checkCloudBackup(): void {
-    if (!this.vssOn || this.cloudChecked) return;
+    if (!this.cloudCheckDue()) return;
     this.cloudChecked = true;
     const check = this.queue
       .run(async () => {
         const s = this.session;
-        if (!s || ops.hasLocalData(s)) return;
+        if (!s) return;
         if (!(await ops.vssBackupExists.execute(s))) return;
         this.backupHeld = true;
         logger.warn(

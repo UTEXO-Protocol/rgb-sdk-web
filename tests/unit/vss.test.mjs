@@ -468,6 +468,32 @@ describe('unrestored server backup', () => {
     assert.ok(!calls.includes('ensureInitialBackup'));
   });
 
+  it('judges emptiness before the connect: its scan brings in chain data', async (t) => {
+    const warn = t.mock.method(logger, 'warn', () => undefined);
+    // A new device: nothing local until goOnline() scans the chain, which
+    // finds the UTXOs and transactions this mnemonic made on another device.
+    let scanned = false;
+    const chain = (rows) => () => (scanned ? rows : []);
+    const { engine, args } = await ready({
+      overrides: {
+        ...EMPTY,
+        ...SERVER_HAS_BACKUP,
+        goOnline: async () => {
+          scanned = true;
+          return { id: 1n, indexerUrl: 'http://esplora' };
+        },
+        listUnspents: chain([{ utxo: {} }]),
+        listTransactions: chain([{}]),
+      },
+    });
+    await engine.unlock();
+    await engine.refreshWallet();
+    await drained(engine);
+    assert.equal(args('vssBackupInfo').length, 1);
+    assert.equal(args('ensureInitialBackup').length, 0, 'upload held');
+    assert.equal(warn.mock.callCount(), 1);
+  });
+
   it('a wallet with local data is not checked', async () => {
     const { engine, args } = await ready({ overrides: SERVER_HAS_BACKUP });
     await engine.unlock();

@@ -104,11 +104,16 @@ await wallet.unlock();          // online
   refused unless `{ overwrite: true }`, so a restore never wipes newer local
   state by accident.
 - It is on the engine only; the facade does not forward it yet.
-- **Unrestored backup.** On the first connection of an empty wallet that was
-  not restored, the engine asks the server whether a backup exists. If one
-  does, it belongs to this mnemonic from another device: the engine logs a
-  warning and holds automatic uploads, so the first mutation does not replace
-  it. `backupNow()` lifts the hold and replaces the server copy on purpose.
+- **Unrestored backup.** On the first connection of a wallet that was empty
+  before it (judged before the connect: its chain scan brings in the UTXOs of
+  this mnemonic) and was not restored, the engine asks the server whether a
+  backup exists. If one does, it belongs to this mnemonic from another
+  device: the engine logs a warning and holds automatic uploads, so the first
+  mutation does not replace it. `backupNow()` lifts the hold and replaces the
+  server copy on purpose.
+- The core logger prints only errors by default. To see the VSS warnings
+  (a held upload, a failed automatic backup), raise its level:
+  `logger.setLevel(LogLevel.WARN)` from `@utexo/rgb-sdk-core`.
 
 ## Byte backup
 
@@ -245,7 +250,7 @@ issuing, a transfer.
 | VSS backup: zero config, `backupNow()`, automatic upload (ADR-0003 B1) | done |
 | VSS restore before connect, unrestored-backup hold (ADR-0003 B2) | done |
 | Byte backup: `exportBackup()`, `restoreBackup()`, with e2e (ADR-0003 B3) | done |
-| VSS backup and restore e2e against a VSS server (ADR-0003 B4) | planned |
+| VSS backup and restore e2e against a local VSS server (ADR-0003 B4) | done |
 
 ## Development
 

@@ -9,16 +9,13 @@ import type {
   OnchainReceiveParams,
   OnchainSendRequestModel,
   ReadOptions,
-  ReceiveAssignmentKind,
   ReceiveParams,
   RefreshTransfersResult,
   SendBtcBeginRequestModel,
   WalletIdentity,
 } from '@utexo/rgb-sdk-core';
-import { feeRate, issuanceAmounts, u64 } from './amounts.js';
 import {
   configEquals,
-  integer,
   resolveConfig,
   splitWalletParams,
   validateWalletParams,
@@ -37,7 +34,8 @@ import {
 } from './errors.js';
 import { readMnemonic, resolveKeys } from './keys.js';
 import type { ResolvedKeys, RgbLibWebKeys } from './keys.js';
-import * as codec from './codec.js';
+import * as ops from './operations.js';
+import { skipSyncOf, syncs } from './operations.js';
 import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './session.js';
@@ -70,73 +68,10 @@ function snapshot<T>(value: T): T {
   return value;
 }
 
-/** Omitted or null is `false`; anything but a boolean is INVALID_PARAMS. */
-function skipSyncOf(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value !== 'boolean')
-    throw new ValidationError('skipSync must be a boolean', 'skipSync');
-  return value;
-}
-/** Reads that sync first need a connection; `skipSync: true` reads work offline. */
-const syncs = (options: { skipSync?: boolean } | null | undefined) =>
-  !skipSyncOf(options?.skipSync);
-
 function definedOnly<T extends object>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined)
   ) as T;
-}
-
-const RECEIVE_KINDS: Record<ReceiveAssignmentKind, 'amount' | 'none'> = {
-  Fungible: 'amount',
-  InflationRight: 'amount',
-  NonFungible: 'none',
-  MintRight: 'none',
-  Any: 'none',
-};
-
-/** The invoice assignment for a receive; the same rules as React Native. */
-function resolveReceiveAssignment(
-  kind: ReceiveAssignmentKind | undefined,
-  amount: number | undefined
-): ReceiveAssignmentKind {
-  const resolved = kind ?? (amount === undefined ? 'Any' : 'Fungible');
-  const rule = RECEIVE_KINDS[resolved];
-  if (rule === undefined)
-    throw new ValidationError(
-      `Unknown assignmentKind: ${String(kind)}`,
-      'assignmentKind'
-    );
-  if (rule === 'amount' && amount === undefined)
-    throw new ValidationError(`${resolved} receive requires amount`, 'amount');
-  if (rule === 'none' && amount !== undefined)
-    throw new ValidationError(`${resolved} receive takes no amount`, 'amount');
-  return resolved;
-}
-
-/** rgb-lib-wasm has NIA, IFA and BFA; CFA and UDA filters are unsupported input. */
-const WASM_SCHEMAS = ['Nia', 'Ifa', 'Bfa'];
-function validateAssetSchemas(schemas: unknown): string[] {
-  if (schemas === undefined) return [];
-  if (!Array.isArray(schemas))
-    throw new ValidationError(
-      'filterAssetSchemas must be an array',
-      'filterAssetSchemas'
-    );
-  for (const schema of schemas) {
-    if (schema === 'Cfa' || schema === 'Uda')
-      throw new RgbLibWebError(
-        'UNSUPPORTED_CAPABILITY',
-        `listAssets: the ${schema} schema is not supported by the rgb-lib-wasm engine`,
-        'listAssets'
-      );
-    if (!WASM_SCHEMAS.includes(schema))
-      throw new ValidationError(
-        `Unknown asset schema: ${String(schema)}`,
-        'filterAssetSchemas'
-      );
-  }
-  return [...schemas];
 }
 
 /** One backend owns one WASM wallet, one queue and one wallet profile. */
@@ -557,27 +492,18 @@ export class RgbLibWebBackend {
   // ── bitcoin ───────────────────────────────────────────────────────────────
 
   getAddress(): Promise<string> {
-    return this.run('getAddress', false, (s) => s.getAddress());
+    return this.run('getAddress', false, (s) => ops.getAddress.execute(s));
   }
 
   getBtcBalance(options?: ReadOptions) {
-    return this.withOptions(
-      'getBtcBalance',
-      syncs,
-      options,
-      async (s, owned) => {
-        return codec.publicBtcBalance(
-          await s.getBtcBalance(skipSyncOf(owned?.skipSync))
-        );
-      }
+    return this.withOptions('getBtcBalance', syncs, options, (s, owned) =>
+      ops.getBtcBalance.execute(s, skipSyncOf(owned?.skipSync))
     );
   }
 
   listUnspents(options?: ReadOptions) {
-    return this.withOptions('listUnspents', syncs, options, async (s, owned) =>
-      (await s.listUnspents(skipSyncOf(owned?.skipSync))).map(
-        codec.publicUnspent
-      )
+    return this.withOptions('listUnspents', syncs, options, (s, owned) =>
+      ops.listUnspents.execute(s, skipSyncOf(owned?.skipSync))
     );
   }
 
@@ -593,25 +519,8 @@ export class RgbLibWebBackend {
       'createUtxos',
       true,
       params,
-      {
-        signs: true,
-        prepare: (p) => ({
-          num: p.num === undefined ? null : integer(p.num, 'num', 1, 255),
-          size:
-            p.size === undefined
-              ? null
-              : integer(p.size, 'size', 1, 0xffffffff),
-          feeRate: feeRate(p.feeRate),
-        }),
-      },
-      (s, p, v) =>
-        s.createUtxos(
-          p.upTo ?? true,
-          v.num,
-          v.size,
-          v.feeRate,
-          skipSyncOf(p.skipSync)
-        )
+      { signs: true, prepare: ops.createUtxos.prepare },
+      (s, _p, v) => ops.createUtxos.execute(s, v)
     );
   }
 
@@ -620,38 +529,29 @@ export class RgbLibWebBackend {
       'sendBtc',
       true,
       params,
-      {
-        signs: true,
-        prepare: (p) => ({
-          amount: u64(p.amount, 'amount', true),
-          feeRate: feeRate(p.feeRate),
-        }),
-      },
-      (s, p, v) =>
-        s.sendBtc(p.address, v.amount, v.feeRate, skipSyncOf(p.skipSync))
+      { signs: true, prepare: ops.sendBtc.prepare },
+      (s, _p, v) => ops.sendBtc.execute(s, v)
     );
   }
 
   estimateFeeRate(blocks: number) {
-    const checked = integer(blocks, 'blocks', 1, 0xffff);
-    return this.run('estimateFeeRate', true, async (s) => {
-      return codec.publicFeeEstimate(await s.estimateFeeRate(checked));
-    });
+    const checked = ops.estimateFeeRate.prepare(blocks);
+    return this.run('estimateFeeRate', true, (s) =>
+      ops.estimateFeeRate.execute(s, checked)
+    );
   }
 
   // ── rgb assets ────────────────────────────────────────────────────────────
 
   listAssets(options?: ListAssetsOptions) {
-    return this.withOptions('listAssets', false, options, async (s, owned) => {
-      // Validated in the queue, as on React Native; nothing has run yet.
-      const schemas = validateAssetSchemas(owned?.filterAssetSchemas);
-      return codec.publicAssets(await s.listAssets(schemas));
-    });
+    return this.withOptions('listAssets', false, options, async (s, owned) =>
+      ops.listAssets.execute(s, owned)
+    );
   }
 
   getAssetBalance(assetId: string) {
     return this.run('getAssetBalance', false, async (s) =>
-      codec.publicBalance(await s.getAssetBalance(assetId))
+      ops.getAssetBalance.execute(s, assetId)
     );
   }
 
@@ -660,16 +560,8 @@ export class RgbLibWebBackend {
       'issueAssetNia',
       false,
       params,
-      {
-        prepare: (p) => ({
-          amounts: issuanceAmounts(p.amounts).amounts,
-          precision: integer(p.precision, 'precision', 0, 18),
-        }),
-      },
-      async (s, p, v) =>
-        codec.publicNia(
-          await s.issueAssetNia(p.ticker, p.name, v.precision, v.amounts)
-        )
+      { prepare: ops.issueAssetNia.prepare },
+      (s, _p, v) => ops.issueAssetNia.execute(s, v)
     );
   }
 
@@ -678,23 +570,8 @@ export class RgbLibWebBackend {
       'issueAssetIfa',
       false,
       params,
-      {
-        prepare: (p) => ({
-          ...issuanceAmounts(p.amounts, p.inflationAmounts),
-          precision: integer(p.precision, 'precision', 0, 18),
-        }),
-      },
-      async (s, p, v) =>
-        codec.publicIfa(
-          await s.issueAssetIfa(
-            p.ticker,
-            p.name,
-            v.precision,
-            v.amounts,
-            v.inflationAmounts,
-            p.rejectListUrl ?? null
-          )
-        )
+      { prepare: ops.issueAssetIfa.prepare },
+      (s, _p, v) => ops.issueAssetIfa.execute(s, v)
     );
   }
 
@@ -703,25 +580,8 @@ export class RgbLibWebBackend {
       'inflate',
       true,
       params,
-      {
-        signs: true,
-        prepare: (p) => ({
-          amounts: p.inflationAmounts.map((n) =>
-            u64(n, 'inflationAmount', true)
-          ),
-          feeRate: feeRate(p.feeRate),
-          minConfirmations: integer(
-            p.minConfirmations ?? 1,
-            'minConfirmations',
-            1,
-            255
-          ),
-        }),
-      },
-      async (s, p, v) =>
-        codec.publicOperation(
-          await s.inflate(p.assetId, v.amounts, v.feeRate, v.minConfirmations)
-        )
+      { signs: true, prepare: ops.inflate.prepare },
+      (s, _p, v) => ops.inflate.execute(s, v)
     );
   }
 
@@ -734,41 +594,8 @@ export class RgbLibWebBackend {
       operation,
       true,
       params,
-      {
-        prepare: (p) => ({
-          witness: witness ?? p.witness ?? true,
-          duration: integer(
-            p.durationSeconds ?? 86400,
-            'durationSeconds',
-            1,
-            0xffffffff
-          ),
-          assignmentKind: resolveReceiveAssignment(p.assignmentKind, p.amount),
-          amount: p.amount === undefined ? null : u64(p.amount, 'amount', true),
-          minConfirmations: integer(
-            p.minConfirmations ?? 0,
-            'minConfirmations',
-            0,
-            255
-          ),
-        }),
-      },
-      async (s, p, v) =>
-        codec.publicReceive(
-          await s.receive(
-            v.witness,
-            p.assetId ?? null,
-            v.assignmentKind,
-            v.amount,
-            // The expiry starts when the invoice is made.
-            u64(
-              Math.floor(Date.now() / 1000) + v.duration,
-              'expirationTimestamp'
-            ),
-            [this.online!.proxyEndpoint],
-            v.minConfirmations
-          )
-        )
+      { prepare: (p) => ops.receive.prepare(p, witness) },
+      (s, _p, v) => ops.receive.execute(s, v, this.onlineContext())
     );
   }
 
@@ -777,19 +604,9 @@ export class RgbLibWebBackend {
   }
 
   decodeRGBInvoice(params: { invoice: string }) {
-    if (typeof params !== 'object' || params === null)
-      throw new ValidationError(
-        'decodeRGBInvoice needs a params object',
-        'params'
-      );
-    const { invoice } = params;
-    if (typeof invoice !== 'string' || invoice.length === 0)
-      throw new ValidationError(
-        'invoice must be a non-empty string',
-        'invoice'
-      );
+    const invoice = ops.decodeRGBInvoice.prepare(params);
     return this.run('decodeRGBInvoice', false, async (s) =>
-      codec.publicInvoice(await s.decodeInvoice(invoice), invoice)
+      ops.decodeRGBInvoice.execute(s, invoice)
     );
   }
 
@@ -798,50 +615,8 @@ export class RgbLibWebBackend {
       'onchainSend',
       true,
       params,
-      {
-        signs: true,
-        prepare: (p) => {
-          // The send always syncs; skipSync: true is refused, not ignored.
-          if (p.skipSync === true)
-            throw new RgbLibWebError(
-              'UNSUPPORTED_CAPABILITY',
-              'onchainSend always syncs on RGB_L1; skipSync: true is not supported',
-              'onchainSend'
-            );
-          return {
-            amount:
-              p.amount === undefined ? null : u64(p.amount, 'amount', true),
-            witnessAmount: p.witnessData
-              ? u64(p.witnessData.amountSat, 'witness amount', true)
-              : null,
-            blinding:
-              p.witnessData?.blinding === undefined
-                ? null
-                : u64(p.witnessData.blinding, 'blinding'),
-            feeRate: feeRate(p.feeRate),
-            minConfirmations: integer(
-              p.minConfirmations ?? 1,
-              'minConfirmations',
-              1,
-              255
-            ),
-          };
-        },
-      },
-      async (s, p, v) =>
-        codec.publicOperation(
-          await s.send(
-            p.invoice,
-            p.assetId ?? null,
-            v.amount,
-            v.witnessAmount,
-            v.blinding,
-            p.donation ?? false,
-            v.feeRate,
-            v.minConfirmations,
-            this.online!.proxyEndpoint
-          )
-        )
+      { signs: true, prepare: ops.onchainSend.prepare },
+      (s, _p, v) => ops.onchainSend.execute(s, v, this.onlineContext())
     );
   }
 
@@ -850,67 +625,48 @@ export class RgbLibWebBackend {
       'failTransfers',
       true,
       params,
-      {
-        prepare: (p) =>
-          p.batchTransferIdx === undefined
-            ? null
-            : integer(p.batchTransferIdx, 'batchTransferIdx', 1, 0x7fffffff),
-      },
-      (s, p, batchTransferIdx) =>
-        s.failTransfers(
-          batchTransferIdx,
-          p.noAssetOnly ?? false,
-          skipSyncOf(p.skipSync)
-        )
+      { prepare: ops.failTransfers.prepare },
+      (s, _p, v) => ops.failTransfers.execute(s, v)
     );
   }
 
   // ── history ───────────────────────────────────────────────────────────────
 
   listTransfers(assetId?: string) {
-    if (assetId !== undefined && typeof assetId !== 'string')
-      throw new ValidationError('assetId must be a string', 'assetId');
+    const filter = ops.listTransfers.prepare(assetId);
     return this.run('listTransfers', false, async (s) =>
-      (await s.listTransfers(assetId ?? null)).map(codec.publicTransfer)
+      ops.listTransfers.execute(s, filter)
     );
   }
 
   listTransactions(options?: ReadOptions) {
-    return this.withOptions(
-      'listTransactions',
-      syncs,
-      options,
-      async (s, owned) =>
-        (await s.listTransactions(skipSyncOf(owned?.skipSync))).map(
-          codec.publicTransaction
-        )
+    return this.withOptions('listTransactions', syncs, options, (s, owned) =>
+      ops.listTransactions.execute(s, skipSyncOf(owned?.skipSync))
     );
   }
 
-  private async refreshed(
-    s: WasmSession,
-    skipSync: boolean
-  ): Promise<RefreshTransfersResult> {
-    return codec.publicRefresh(await s.refresh(skipSync));
-  }
-
-  refresh(options?: ReadOptions) {
+  refresh(options?: ReadOptions): Promise<RefreshTransfersResult> {
     return this.withOptions(
       'refresh',
       // Always online; the flag is checked here, before any connect.
       (owned) => (skipSyncOf(owned?.skipSync), true),
       options,
-      (s, owned) => this.refreshed(s, skipSyncOf(owned?.skipSync))
+      (s, owned) => ops.refresh.execute(s, skipSyncOf(owned?.skipSync))
     );
   }
 
   refreshWallet(): Promise<void> {
     return this.run('refreshWallet', true, (s) =>
-      this.refreshed(s, false)
+      ops.refresh.execute(s, false)
     ).then(() => undefined);
   }
 
   syncWallet(): Promise<void> {
     return this.run('syncWallet', true, (s) => s.sync());
+  }
+
+  /** Read inside a queued task of an online operation: the connection is set. */
+  private onlineContext(): ops.OnlineContext {
+    return { proxyEndpoint: this.online!.proxyEndpoint };
   }
 }

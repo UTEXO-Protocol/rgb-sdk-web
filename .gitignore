@@ -18,3 +18,6 @@ playwright-report/
 # e2e output
 tests/e2e/.out/
 tests/e2e/.results/
+
+# codec test bundle
+tests/.codec-*/

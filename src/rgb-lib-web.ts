@@ -15,26 +15,26 @@ import type {
 import { RgbLibWebBackend } from './backend.js';
 import type { RgbLibWebParams, RgbLibWebUnlockParams } from './config.js';
 import type { RgbLibWebKeys } from './keys.js';
-import type { RgbLibWasmRuntime } from './runtime.js';
+import type { RgbLibWasmRuntime } from './runtime/types.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
  * the 29 `SharedWalletApi` methods and no extension.
  *
  * ```ts
- * import init, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
  * import { UTEXOWallet } from '@utexo/rgb-sdk';
  * import { RgbLibWeb } from '@utexo/rgb-sdk-web';
  *
- * await init();
  * const wallet = new UTEXOWallet({
- *   engine: new RgbLibWeb({ network: 'utexo' }, mnemonic, rgbLibWasm),
+ *   engine: new RgbLibWeb({ network: 'utexo' }, mnemonic),
  * });
  * await wallet.init();
  * ```
  *
- * Construction validates the arguments only; `init()` opens the wallet and
- * restores its IndexedDB state. The first operation that needs the network
+ * Construction validates the arguments only. `init()` loads
+ * `@utexo/rgb-lib-wasm` once per page (from `wasmUrl` if set), then opens the
+ * wallet and restores its IndexedDB state. Pass `runtime` to use a module the
+ * app has already initialized, or a test double. The first operation that needs the network
  * connects with the constructor's connection settings, then the network
  * defaults (regtest has none); `unlock(params)` connects explicitly.
  * Methods the runtime cannot perform reject with `UNSUPPORTED_CAPABILITY`
@@ -53,7 +53,7 @@ export class RgbLibWeb implements SharedWalletApi<
   constructor(
     params: RgbLibWebParams,
     keys: RgbLibWebKeys,
-    runtime: RgbLibWasmRuntime
+    runtime?: RgbLibWasmRuntime
   ) {
     this.backend = new RgbLibWebBackend(params, keys, runtime);
   }

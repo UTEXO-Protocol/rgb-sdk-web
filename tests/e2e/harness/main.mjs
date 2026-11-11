@@ -1,20 +1,21 @@
 /**
  * E2E harness page: the BUILT engine (`dist/`) behind the `@utexo/rgb-sdk`
  * facade, over the real `@utexo/rgb-lib-wasm`, exposed on `window.harness`.
+ * The page passes no runtime: `init()` loads the WASM from its default URL,
+ * next to the bundle, as in an app.
  *
- *   boot(cfgJson)        — init wasm → new RgbLibWeb → UTEXOWallet → init → unlock
+ *   boot(cfgJson)        — new RgbLibWeb → UTEXOWallet → init → unlock
  *   call(method, args)   — call a wallet method
  *   get(property)        — read a wallet property ('capabilities')
  *
  * Results cross the page boundary as JSON `{ ok, value | error }`; an error
  * keeps `code` and `operation`, so specs can assert engine error codes.
  */
-import init, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
+import { generateKeys } from '@utexo/rgb-sdk-core';
 import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb } from '../../../dist/index.mjs';
 
 let wallet = null;
-let wasmReady = null;
 const statusEl = document.getElementById('status');
 
 const enc = (v) =>
@@ -54,16 +55,9 @@ window.harness = {
   boot: (cfgJson) =>
     run(async () => {
       const cfg = JSON.parse(cfgJson);
-      wasmReady ??= init({ module_or_path: './rgb_lib_wasm_bindings_bg.wasm' });
-      await wasmReady;
-      const mnemonic =
-        cfg.mnemonic ?? rgbLibWasm.generateKeys('regtest').mnemonic;
+      const mnemonic = cfg.mnemonic ?? (await generateKeys('regtest')).mnemonic;
       const dataDir = cfg.dataDir ?? `e2e-${Date.now().toString(16)}`;
-      const engine = new RgbLibWeb(
-        { network: 'regtest', dataDir },
-        mnemonic,
-        rgbLibWasm
-      );
+      const engine = new RgbLibWeb({ network: 'regtest', dataDir }, mnemonic);
       wallet = new UTEXOWallet({ engine });
       await wallet.init();
       if (cfg.unlock !== false) {

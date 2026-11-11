@@ -18,8 +18,23 @@ This package has no Lightning.
 |---|---|
 | 1. Remove RLN, depend on the split core and `@utexo/rgb-lib-wasm` 1.0.0-beta.4 | done |
 | 2. Move `RgbLibWeb` and its tests here | done |
-| 3. Load the WASM runtime inside the package | next |
-| 4. One-call start: `RgbLibWeb.create()`, `generateKeys` | planned |
+| 3. Load the WASM runtime inside the package | done |
+| 4. One-call start: `RgbLibWeb.create()`, `generateKeys` | next |
+
+Today the app passes nothing but the options and the keys; `init()` loads the
+WASM once per page:
+
+```ts
+import { RgbLibWeb } from '@utexo/rgb-sdk-web';
+
+const wallet = new RgbLibWeb({ network: 'testnet' }, mnemonic);
+await wallet.init();
+```
+
+`wasmUrl` points the loader at `rgb_lib_wasm_bindings_bg.wasm` when the bundler
+does not serve it next to the `@utexo/rgb-lib-wasm` JS file. The third
+constructor argument, `runtime`, takes a module the app already initialized, or
+a test double.
 
 The planned start:
 

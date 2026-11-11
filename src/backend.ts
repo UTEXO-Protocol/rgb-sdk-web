@@ -38,7 +38,8 @@ import {
 import { readMnemonic, resolveKeys } from './keys.js';
 import type { ResolvedKeys, RgbLibWebKeys } from './keys.js';
 import * as map from './mappers.js';
-import type { RgbLibWasmRuntime } from './runtime.js';
+import { loadRgbLibWasm } from './runtime/load.js';
+import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './session.js';
 
 // Ported from `@utexo/rgb-lib-rn` (`rgb-lib/backend.ts`): the same admission,
@@ -161,18 +162,26 @@ export class RgbLibWebBackend {
   constructor(
     params: RgbLibWebParams,
     keys: RgbLibWebKeys,
-    private readonly runtime: RgbLibWasmRuntime
+    /** Undefined: `init()` loads `@utexo/rgb-lib-wasm` itself. */
+    private readonly runtime: RgbLibWasmRuntime | undefined
   ) {
     validateWalletParams(params);
     if (
-      !runtime ||
-      typeof runtime.WasmWallet?.create !== 'function' ||
-      typeof runtime.WasmInvoice !== 'function' ||
-      typeof runtime.restoreKeys !== 'function'
+      runtime !== undefined &&
+      (!runtime ||
+        typeof runtime.WasmWallet?.create !== 'function' ||
+        typeof runtime.WasmInvoice !== 'function' ||
+        typeof runtime.restoreKeys !== 'function')
     ) {
       throw new RgbLibWebError(
         'INVALID_CONFIG',
-        'Pass the @utexo/rgb-lib-wasm module (import * as rgbLibWasm from "@utexo/rgb-lib-wasm") as the third argument'
+        'runtime must be the @utexo/rgb-lib-wasm module, initialized; omit it to let init() load the module'
+      );
+    }
+    if (runtime !== undefined && params.wasmUrl !== undefined) {
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        'Pass either runtime or wasmUrl: wasmUrl is used only when init() loads the module itself'
       );
     }
     this.keys = resolveKeys(keys, params.network);
@@ -389,8 +398,10 @@ export class RgbLibWebBackend {
         ? await readMnemonic(this.keys.readMnemonic, 'init')
         : null;
       try {
+        const runtime =
+          this.runtime ?? (await loadRgbLibWasm(this.params.wasmUrl, 'init'));
         this.session = await WasmSession.open(
-          this.runtime,
+          runtime,
           {
             network: this.params.network,
             dataDir: this.params.dataDir ?? ':memory:',

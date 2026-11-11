@@ -17,7 +17,7 @@ import type {
 } from './dto.js';
 import { RgbLibWebError } from './errors.js';
 import type { RgbLibWebPublicKeys } from './keys.js';
-import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './runtime.js';
+import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './runtime/types.js';
 
 /**
  * One open rgb-lib-wasm wallet. It plays the part of the React Native bridge

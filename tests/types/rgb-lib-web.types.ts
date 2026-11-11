@@ -14,3 +14,13 @@ void wallet.unlock({ indexerUrl: 'https://esplora.example' });
 
 // @ts-expect-error watch-only keys need all three public keys
 new RgbLibWeb({ network: 'regtest' }, { accountXpubVanilla: 'tpub' }, runtime);
+
+// The runtime is optional: init() loads the module, from wasmUrl if set.
+new RgbLibWeb({ network: 'testnet' }, 'mnemonic');
+new RgbLibWeb({ network: 'testnet', wasmUrl: '/rgb.wasm' }, 'mnemonic');
+new RgbLibWeb(
+  { network: 'testnet', wasmUrl: new URL('https://cdn.example/rgb.wasm') },
+  'mnemonic'
+);
+// @ts-expect-error wasmUrl is a string or a URL
+new RgbLibWeb({ network: 'testnet', wasmUrl: 42 }, 'mnemonic');

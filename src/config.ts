@@ -20,6 +20,12 @@ export interface RgbLibWebOptions {
   maxAllocationsPerUtxo?: number;
   /** Return one pinned address instead of a new one on each call. */
   reuseAddresses?: boolean;
+  /**
+   * Where `init()` loads `rgb_lib_wasm_bindings_bg.wasm` from when no runtime
+   * is passed. Default: next to the `@utexo/rgb-lib-wasm` JS file, as the
+   * app's bundler places it. One page loads the WASM once, from one URL.
+   */
+  wasmUrl?: string | URL;
 }
 
 /** Mint lock bounds in blocks; `min` must not exceed `max`. */
@@ -168,6 +174,15 @@ export function validateWalletParams(params: RgbLibWebParams) {
     typeof params.reuseAddresses !== 'boolean'
   ) {
     invalidConfig('reuseAddresses must be a boolean');
+  }
+  if (
+    params.wasmUrl !== undefined &&
+    !(
+      (typeof params.wasmUrl === 'string' && params.wasmUrl.length > 0) ||
+      (typeof URL === 'function' && params.wasmUrl instanceof URL)
+    )
+  ) {
+    invalidConfig('wasmUrl must be a non-empty string or a URL');
   }
 }
 

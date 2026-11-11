@@ -1,15 +1,9 @@
 /**
- * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.4) this adapter calls,
- * described by shape. The app passes the module it imported; this package
- * never imports it, so the facade does not load the 16 MB WASM file.
+ * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.4) this engine calls,
+ * described by shape. `init()` loads the real module (`load.ts`); tests and
+ * custom builds can pass their own as the `runtime` constructor argument.
  *
- * ```ts
- * import init, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
- * await init();
- * const engine = new RgbLibWeb({ network: 'regtest' }, mnemonic, rgbLibWasm);
- * ```
- *
- * `tests/types/rgb-lib-wasm.types.ts` checks that the real module matches.
+ * `tests/types/` checks that the real module matches.
  * Values typed `unknown` are JS objects built by serde-wasm-bindgen; u64
  * values in them arrive as `bigint`.
  */

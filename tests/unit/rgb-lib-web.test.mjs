@@ -63,9 +63,9 @@ describe('RgbLibWeb construction', () => {
     assert.deepEqual(names(), []);
   });
 
-  it('rejects a missing runtime, bad keys and an Electrum indexer', () => {
+  it('rejects a runtime without the module API, bad keys and an Electrum indexer', () => {
     assert.throws(
-      () => new RgbLibWeb({ network: 'regtest' }, KEYS.mnemonic, undefined),
+      () => new RgbLibWeb({ network: 'regtest' }, KEYS.mnemonic, {}),
       (e) => isEngineError(e, 'INVALID_CONFIG')
     );
     assert.throws(

@@ -819,7 +819,7 @@ export class RgbLibWebBackend {
         );
       // In the task: a connect queued ahead of this one (unlock() called
       // first, without awaiting) has finished by now and counts too.
-      if (this.online) throw this.restoreTooLate();
+      if (this.online) throw this.restoreTooLate('restoreFromVss');
       await ops.restoreFromVss.execute(s, prepared);
       // The local state is now the server copy: nothing to protect.
       this.cloudChecked = true;
@@ -827,12 +827,41 @@ export class RgbLibWebBackend {
     });
   }
 
-  private restoreTooLate(): RgbLibWebError {
+  private restoreTooLate(operation: string): RgbLibWebError {
     return new RgbLibWebError(
       'WALLET_INVALID_STATE',
-      'restoreFromVss() runs only between init() and the first connection; destroy the wallet, create it again and restore before unlock()',
-      'restoreFromVss'
+      `${operation}() runs only between init() and the first connection; destroy the wallet, create it again and restore before unlock()`,
+      operation
     );
+  }
+
+  // ── byte backup (BackupBytesApi, ADR-0003 B3) ───────────────────────────
+
+  /** The encrypted backup as bytes. Works offline, on any wallet. */
+  exportBackup(params: { password: string }): Promise<Uint8Array> {
+    const prepared = ops.exportBackup.prepare(params);
+    return this.run('exportBackup', false, (s) =>
+      ops.exportBackup.execute(s, prepared)
+    );
+  }
+
+  /**
+   * Restores from `exportBackup()` bytes, with the rules of
+   * `restoreFromVss()`: after `init()`, before the first connection, and
+   * `overwrite` for a wallet with local data. Flushed before it resolves.
+   */
+  restoreBackup(params: {
+    bytes: Uint8Array;
+    password: string;
+    overwrite?: boolean;
+  }): Promise<void> {
+    // Not snapshot(): it would turn the Uint8Array into a plain object.
+    // prepare() copies the bytes.
+    const prepared = ops.restoreBackup.prepare(params);
+    return this.run('restoreBackup', false, async (s) => {
+      if (this.online) throw this.restoreTooLate('restoreBackup');
+      await ops.restoreBackup.execute(s, prepared);
+    });
   }
 
   /**

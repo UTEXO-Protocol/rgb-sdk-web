@@ -28,9 +28,18 @@ let captureLabel = 'unlabeled';
 const captured = [];
 const statusEl = document.getElementById('status');
 
+// Bytes cross the page boundary as { $bytes: [...] }, both ways.
 const enc = (v) =>
   JSON.stringify(v ?? null, (_k, x) =>
-    typeof x === 'bigint' ? x.toString() : x
+    typeof x === 'bigint'
+      ? x.toString()
+      : x instanceof Uint8Array
+        ? { $bytes: Array.from(x) }
+        : x
+  );
+const dec = (json) =>
+  JSON.parse(json, (_k, x) =>
+    Array.isArray(x?.$bytes) ? Uint8Array.from(x.$bytes) : x
   );
 
 async function run(fn) {
@@ -131,7 +140,7 @@ window.harness = {
       if (typeof fn !== 'function') {
         throw new Error(`harness.call: ${method} is not a wallet method`);
       }
-      return await fn.apply(w, JSON.parse(argsJson));
+      return await fn.apply(w, dec(argsJson));
     }),
 
   get: (property) => run(() => live()[property]),

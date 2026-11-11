@@ -179,6 +179,8 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
     disableVssBackup: () => undefined,
     vssBackup: async () => 3,
     ensureInitialBackup: async () => 4,
+    backup: (password) => new TextEncoder().encode(`backup:${password}`),
+    restoreBackup: () => undefined,
     vssRestoreBackup: async () => undefined,
     vssBackupInfo: async () => ({
       backup_exists: false,

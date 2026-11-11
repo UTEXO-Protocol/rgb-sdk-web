@@ -1,7 +1,8 @@
-// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods and
-// backupNow(), plus the engine-only restoreFromVss(). Each method passes through `backend.guarded()` (synchronous
-// argument errors become rejected Promises) to RgbLibWebBackend; no wallet
-// logic here.
+// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods, the
+// VssBackupApi and BackupBytesApi extensions, and the engine-only
+// restoreFromVss(). Each method passes through `backend.guarded()`
+// (synchronous argument errors become rejected Promises) to RgbLibWebBackend;
+// no wallet logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
 
 import type {
@@ -16,6 +17,7 @@ import type {
   ReadOptions,
   ReceiveParams,
   SendBtcBeginRequestModel,
+  BackupBytesApi,
   SharedWalletApi,
   VssBackupApi,
 } from '@utexo/rgb-sdk-core';
@@ -25,8 +27,9 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
- * the 29 `SharedWalletApi` methods and the `VssBackupApi` extension
- * (`backupNow()`; ADR-0003), plus `restoreFromVss()` on the engine only.
+ * the 29 `SharedWalletApi` methods and the `VssBackupApi` (`backupNow()`)
+ * and `BackupBytesApi` (`exportBackup()`, `restoreBackup()`) extensions
+ * (ADR-0003), plus `restoreFromVss()` on the engine only.
  *
  * ```ts
  * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
@@ -57,7 +60,10 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
  * (ADR-0001).
  */
 export class RgbLibWeb
-  implements SharedWalletApi<RgbLibWebUnlockParams | undefined>, VssBackupApi
+  implements
+    SharedWalletApi<RgbLibWebUnlockParams | undefined>,
+    VssBackupApi,
+    BackupBytesApi
 {
   /** Embedded, never read from core: a newer core must not make this engine claim more. */
   readonly contractVersion = '1' as const;
@@ -261,5 +267,30 @@ export class RgbLibWeb
    */
   backupNow(): Promise<number> {
     return this.backend.guarded('backupNow', () => this.backend.backupNow());
+  }
+
+  /**
+   * The encrypted backup of the whole wallet state, as bytes the app stores
+   * where it wants. Needs a nonempty password; works offline.
+   */
+  exportBackup(params: { password: string }): Promise<Uint8Array> {
+    return this.backend.guarded('exportBackup', () =>
+      this.backend.exportBackup(params)
+    );
+  }
+
+  /**
+   * Restores from `exportBackup()` bytes. Call it after `init()` and before
+   * `unlock()` or any online operation; a wallet with local data is refused
+   * unless `overwrite: true`. The restored state is saved before it resolves.
+   */
+  restoreBackup(params: {
+    bytes: Uint8Array;
+    password: string;
+    overwrite?: boolean;
+  }): Promise<void> {
+    return this.backend.guarded('restoreBackup', () =>
+      this.backend.restoreBackup(params)
+    );
   }
 }

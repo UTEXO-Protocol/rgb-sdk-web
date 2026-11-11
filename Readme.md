@@ -110,6 +110,30 @@ await wallet.unlock();          // online
   warning and holds automatic uploads, so the first mutation does not replace
   it. `backupNow()` lifts the hold and replaces the server copy on purpose.
 
+## Byte backup
+
+`BackupBytesApi` from core: an encrypted backup as bytes, with no server. The
+app stores them where it wants (a file download, its own storage).
+
+```ts
+const bytes = await wallet.exportBackup({ password }); // Uint8Array
+// later, in an empty profile:
+await wallet.init();
+await wallet.restoreBackup({ bytes, password });       // before unlock()
+await wallet.unlock();
+```
+
+- `exportBackup()` works offline, on any wallet, watch-only included.
+- `restoreBackup()` follows the rules of `restoreFromVss()`: only between
+  `init()` and the first connection, and `{ overwrite: true }` for a wallet
+  with local data. The restored state is saved to IndexedDB before it
+  resolves.
+- A missing or empty password, or `bytes` that are not a nonempty
+  `Uint8Array`, is `INVALID_CONFIG` (as on React Native). Damaged bytes are
+  `INVALID_PARAMS`; a wrong password is `NATIVE_ERROR` ("Wrong password").
+  A failed restore changes nothing.
+- The `UTEXOWallet` facade forwards both methods.
+
 ## With the facade
 
 ```ts
@@ -220,7 +244,8 @@ issuing, a transfer.
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
 | VSS backup: zero config, `backupNow()`, automatic upload (ADR-0003 B1) | done |
 | VSS restore before connect, unrestored-backup hold (ADR-0003 B2) | done |
-| Byte backup, backup e2e (ADR-0003 B3–B4) | planned |
+| Byte backup: `exportBackup()`, `restoreBackup()`, with e2e (ADR-0003 B3) | done |
+| VSS backup and restore e2e against a VSS server (ADR-0003 B4) | planned |
 
 ## Development
 

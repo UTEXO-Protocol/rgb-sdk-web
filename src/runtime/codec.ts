@@ -1145,6 +1145,13 @@ export function decodeVssVersion(value: unknown): number {
   return value;
 }
 
+/** `backup`: the encrypted backup, copied so the caller owns it. */
+export function decodeBackupBytes(value: unknown): Uint8Array {
+  if (!(value instanceof Uint8Array) || value.length === 0)
+    rejected('Invalid backup bytes');
+  return value.slice();
+}
+
 /** `vssBackupInfo`: only `backup_exists` is read. */
 export function decodeVssBackupExists(value: unknown): boolean {
   const exists = (value as { backup_exists?: unknown } | null)?.backup_exists;

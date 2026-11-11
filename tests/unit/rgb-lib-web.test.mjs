@@ -54,7 +54,7 @@ runEngineConformanceChecks({
   name: 'adapters/rgb-lib-wasm RgbLibWeb',
   engineClass: RgbLibWeb,
   createEngineSync: () => create().engine,
-  extensions: ['vssBackup'],
+  extensions: ['vssBackup', 'backupBytes'],
   describe,
   it,
   expect,

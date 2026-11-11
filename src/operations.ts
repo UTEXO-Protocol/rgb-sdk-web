@@ -694,12 +694,7 @@ export const restoreFromVss = {
    * before it resolves.
    */
   async execute(s: WasmSession, prepared: { overwrite: boolean }) {
-    if (!prepared.overwrite && hasLocalData(s))
-      throw new RgbLibWebError(
-        'WALLET_INVALID_STATE',
-        'This wallet already has local data; pass { overwrite: true } to replace it with the VSS backup',
-        'restoreFromVss'
-      );
+    refuseLocalData(s, prepared.overwrite, 'restoreFromVss');
     await s.wallet.vssRestoreBackup();
   },
 };
@@ -723,3 +718,90 @@ export const vssBackupExists = {
   execute: async (s: WasmSession) =>
     codec.decodeVssBackupExists(await s.wallet.vssBackupInfo()),
 };
+
+/** RN parity: a backup without a nonempty password is INVALID_CONFIG. */
+function backupPassword(params: unknown, operation: string): string {
+  const password = (params as { password?: unknown }).password;
+  if (typeof password !== 'string' || password.length === 0)
+    throw new RgbLibWebError(
+      'INVALID_CONFIG',
+      `${operation} requires a nonempty password`,
+      operation
+    );
+  return password;
+}
+
+function backupParams(params: unknown, operation: string): object {
+  if (typeof params !== 'object' || params === null)
+    throw new RgbLibWebError(
+      'INVALID_CONFIG',
+      `${operation} needs a params object`,
+      operation
+    );
+  return params;
+}
+
+/** `BackupBytesApi.exportBackup`: the encrypted backup, as an owned copy. */
+export const exportBackup = {
+  prepare(params: unknown): { password: string } {
+    return {
+      password: backupPassword(
+        backupParams(params, 'exportBackup'),
+        'exportBackup'
+      ),
+    };
+  },
+  async execute(s: WasmSession, prepared: { password: string }) {
+    const bytes = codec.decodeBackupBytes(s.wallet.backup(prepared.password));
+    // backup() records the backup time and queues a save: flush it first.
+    return s.persisted(bytes);
+  },
+};
+
+/** `BackupBytesApi.restoreBackup`, between init() and the first connection. */
+export const restoreBackup = {
+  prepare(params: unknown): {
+    bytes: Uint8Array;
+    password: string;
+    overwrite: boolean;
+  } {
+    const owned = backupParams(params, 'restoreBackup') as {
+      bytes?: unknown;
+      overwrite?: unknown;
+    };
+    const { bytes, overwrite } = owned;
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0)
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        'restoreBackup requires bytes: a nonempty Uint8Array',
+        'restoreBackup'
+      );
+    const password = backupPassword(owned, 'restoreBackup');
+    if (overwrite !== undefined && typeof overwrite !== 'boolean')
+      throw new ValidationError('overwrite must be a boolean', 'overwrite');
+    // An owned copy: the caller's buffer may change before the task runs.
+    return { bytes: bytes.slice(), password, overwrite: overwrite === true };
+  },
+  async execute(
+    s: WasmSession,
+    prepared: { bytes: Uint8Array; password: string; overwrite: boolean }
+  ) {
+    refuseLocalData(s, prepared.overwrite, 'restoreBackup');
+    s.wallet.restoreBackup(prepared.bytes, prepared.password);
+    // The runtime only queues the save of the restored state.
+    await s.persisted(undefined);
+  },
+};
+
+function refuseLocalData(
+  s: WasmSession,
+  overwrite: boolean,
+  operation: string
+) {
+  if (!overwrite && hasLocalData(s))
+    throw new RgbLibWebError(
+      'WALLET_INVALID_STATE',
+      'This wallet already has local data; pass { overwrite: true } to replace it with the backup',
+      operation
+    );
+}

@@ -1697,6 +1697,80 @@ export const golden = {
       "listAssets",
     ],
   },
+  "handmade: listAssets — BFA asset": {
+    result: {
+      ok: true,
+      value: {
+        nia: [
+          {
+            assetId: "rgb:lOKTMMxy-CNrTQRP-TuKtHNs-VSPlEuk-pobg33H-kAB0bdQ",
+            name: "Capture NIA",
+            details: undefined,
+            precision: 2,
+            timestamp: 1794395080,
+            addedAt: 1794395080,
+            balance: {
+              settled: 1500,
+              future: 1500,
+              spendable: 1500,
+            },
+            media: undefined,
+            ticker: "CAPN",
+            issuedSupply: 1500,
+          },
+        ],
+        ifa: [
+          {
+            assetId: "rgb:K0cOwU~O-pNE3dtY-SscYX7v-lD9fEL3-AimDJAz-PpxkYQE",
+            name: "Capture IFA",
+            details: undefined,
+            precision: 0,
+            timestamp: 1794395080,
+            addedAt: 1794395080,
+            balance: {
+              settled: 500,
+              future: 700,
+              spendable: 500,
+            },
+            media: undefined,
+            ticker: "CAPI",
+            initialSupply: 500,
+            maxSupply: 1000,
+            knownCirculatingSupply: 700,
+            rejectListUrl: undefined,
+          },
+        ],
+        cfa: [],
+        uda: [],
+        bfa: [
+          {
+            assetId: "rgb:handmade-bfa",
+            name: "Bridged",
+            details: "bridged from EVM",
+            precision: 6,
+            timestamp: 1794395080,
+            addedAt: 1794395080,
+            balance: {
+              settled: 500,
+              future: 700,
+              spendable: 500,
+            },
+            media: {
+              filePath: "/media/bfa",
+              digest: "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+              mime: "image/svg+xml",
+            },
+            ticker: "BFA",
+            initialSupply: 21000000000000,
+            rejectListUrl: "https://reject.example/list",
+          },
+        ],
+      },
+    },
+    calls: [
+      "listAssets",
+    ],
+  },
   "handmade: listAssets — absent buckets (Option<Vec> = None)": {
     result: {
       ok: true,
@@ -1735,7 +1809,7 @@ export const golden = {
             updatedStatus: "Failed",
             failure: {
               name: "RGB_LIB_InsufficientAssignments",
-              message: "InsufficientAssignments (asset_id: rgb:handmade, available: [object Object])",
+              message: "InsufficientAssignments (asset_id: rgb:handmade, available: {fungible: 5, non_fungible: false, inflation: 0, link: true, mint: 18446744073709551615})",
             },
           },
         },
@@ -1770,14 +1844,10 @@ export const golden = {
   },
   "negative: listAssets — Assets as a Map": {
     result: {
-      ok: true,
-      value: {
-        nia: [],
-        ifa: [],
-        cfa: [],
-        uda: [],
-        bfa: [],
-      },
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "listAssets",
+      message: "Invalid rgb-lib-wasm assets",
     },
     calls: [
       "listAssets",
@@ -1797,15 +1867,10 @@ export const golden = {
   },
   "negative: refresh — refresh result as a plain object": {
     result: {
-      ok: true,
-      value: {
-        transfers: {
-          "1": {
-            updatedStatus: "Settled",
-            failure: undefined,
-          },
-        },
-      },
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm refresh result",
     },
     calls: [
       "refresh",
@@ -1914,9 +1979,9 @@ export const golden = {
   "negative: getBtcBalance — settled = u64::MAX + 1": {
     result: {
       ok: false,
-      code: "INVALID_AMOUNT",
+      code: "INVALID_NATIVE_RESPONSE",
       operation: "getBtcBalance",
-      message: "settled is outside the supported u64 range",
+      message: "Invalid rgb-lib-wasm settled balance",
     },
     calls: [
       "sync",
@@ -2002,9 +2067,9 @@ export const golden = {
   "negative: listAssets — timestamp below i64::MIN": {
     result: {
       ok: false,
-      code: "AMOUNT_OVERFLOW",
+      code: "INVALID_NATIVE_RESPONSE",
       operation: "listAssets",
-      message: "timestamp cannot be represented by the numeric SDK field",
+      message: "Invalid rgb-lib-wasm timestamp",
     },
     calls: [
       "listAssets",
@@ -2054,6 +2119,142 @@ export const golden = {
       "getFeeEstimation",
     ],
   },
+  "negative: listAssets — precision = 255 (u8::MAX)": {
+    result: {
+      ok: true,
+      value: {
+        nia: [
+          {
+            assetId: "rgb:lOKTMMxy-CNrTQRP-TuKtHNs-VSPlEuk-pobg33H-kAB0bdQ",
+            name: "Capture NIA",
+            details: undefined,
+            precision: 255,
+            timestamp: 1794395080,
+            addedAt: 1794395080,
+            balance: {
+              settled: 1500,
+              future: 1500,
+              spendable: 1500,
+            },
+            media: undefined,
+            ticker: "CAPN",
+            issuedSupply: 1500,
+          },
+        ],
+        ifa: [
+          {
+            assetId: "rgb:K0cOwU~O-pNE3dtY-SscYX7v-lD9fEL3-AimDJAz-PpxkYQE",
+            name: "Capture IFA",
+            details: undefined,
+            precision: 0,
+            timestamp: 1794395080,
+            addedAt: 1794395080,
+            balance: {
+              settled: 500,
+              future: 700,
+              spendable: 500,
+            },
+            media: undefined,
+            ticker: "CAPI",
+            initialSupply: 500,
+            maxSupply: 1000,
+            knownCirculatingSupply: 700,
+            rejectListUrl: undefined,
+          },
+        ],
+        cfa: [],
+        uda: [],
+        bfa: [],
+      },
+    },
+    calls: [
+      "listAssets",
+    ],
+  },
+  "negative: listAssets — precision = 256": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "listAssets",
+      message: "Invalid rgb-lib-wasm precision",
+    },
+    calls: [
+      "listAssets",
+    ],
+  },
+  "negative: listUnspents — vout = -1": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "listUnspents",
+      message: "Invalid rgb-lib-wasm vout",
+    },
+    calls: [
+      "sync",
+      "listUnspents",
+    ],
+  },
+  "negative: listUnspents — pending blinded = 2^32": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "listUnspents",
+      message: "Invalid rgb-lib-wasm pending blinded",
+    },
+    calls: [
+      "sync",
+      "listUnspents",
+    ],
+  },
+  "negative: refresh — refresh key = 2^31": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm batch transfer idx",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: refresh — refresh key = i32::MIN (valid)": {
+    result: {
+      ok: true,
+      value: {
+        transfers: {
+          "-2147483648": {
+            updatedStatus: "Settled",
+            failure: undefined,
+          },
+        },
+      },
+    },
+    calls: [
+      "refresh",
+    ],
+  },
+  "negative: invoiceData — unknownQueryParams as a Map": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "decodeRGBInvoice",
+      message: "Invalid rgb-lib-wasm query params",
+    },
+    calls: [
+      "WasmInvoice",
+    ],
+  },
+  "negative: refresh — nested failure u64 = 2^64": {
+    result: {
+      ok: false,
+      code: "INVALID_NATIVE_RESPONSE",
+      operation: "refresh",
+      message: "Invalid rgb-lib-wasm refresh failure details",
+    },
+    calls: [
+      "refresh",
+    ],
+  },
   "negative: refresh — nested failure with BigInt details": {
     result: {
       ok: true,
@@ -2063,7 +2264,7 @@ export const golden = {
             updatedStatus: "Failed",
             failure: {
               name: "RGB_LIB_InsufficientAssignments",
-              message: "InsufficientAssignments (asset_id: rgb:handmade, available: [object Object])",
+              message: "InsufficientAssignments (asset_id: rgb:handmade, available: {fungible: 1152921504606846976, non_fungible: false, inflation: 9223372036854775809, link: false, mint: 18446744073709551615})",
             },
           },
         },

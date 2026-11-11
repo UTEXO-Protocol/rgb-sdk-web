@@ -26,10 +26,30 @@ export const FIXTURE_DIR = path.resolve(
   `../../fixtures/rgb-lib-wasm-${pkg.version}`
 );
 
-/** At most this many samples per method; distinct shapes first. */
+/** Samples per method at least; every distinct shape is kept even beyond it. */
 const PER_METHOD = 4;
 
-const shape = (types) => Object.keys(types).join('|');
+/**
+ * Methods whose results may fail to encode, method → reason. Empty: every
+ * recorded value must be kept, or the capture fails.
+ */
+const ALLOWED_SKIPS = {};
+
+/**
+ * The shape of one value: every path with its kind, array and Map positions
+ * folded, so two lists of different length have one shape, while a field
+ * that is `bigint` in one sample and `undefined` in another makes two.
+ */
+export function shape(types) {
+  const parts = Object.entries(types).map(
+    ([p, kind]) =>
+      `${p
+        .replace(/\[\d+\]/g, '[]')
+        .replace(/<\d+>/g, '<>')
+        .replace(/\{\d+\}/g, '{}')}:${kind}`
+  );
+  return [...new Set(parts)].sort().join('|');
+}
 
 function pick(records) {
   const seen = new Set();
@@ -41,15 +61,15 @@ function pick(records) {
     if (!byShape.has(key)) byShape.set(key, []);
     byShape.get(key).push(r);
   }
-  // One per shape first, then the rest in capture order.
-  const firsts = [...byShape.values()].map((list) => list[0]);
-  const rest = records.filter((r) => seen.has(r.source) && !firsts.includes(r));
-  const out = [];
-  for (const r of [...firsts, ...rest]) {
-    if (out.length >= PER_METHOD) break;
-    if (!out.some((o) => o.source === r.source)) out.push(r);
+  // Every distinct shape, then the rest in capture order up to PER_METHOD.
+  const out = [...byShape.values()].map((list) => list[0]);
+  for (const list of byShape.values()) {
+    for (const r of list.slice(1)) {
+      if (out.length >= PER_METHOD) break;
+      out.push(r);
+    }
   }
-  return out;
+  return { samples: out, shapes: byShape.size };
 }
 
 const header = (
@@ -61,6 +81,17 @@ export const meta = ${JSON.stringify(meta, null, 2)};
 `;
 
 export function writeFixtures(records, { capturedAt }) {
+  // Fail before the old fixtures are removed.
+  const skipped = records.filter(
+    (r) => r.skipped !== undefined && !(r.method in ALLOWED_SKIPS)
+  );
+  if (skipped.length > 0) {
+    throw new Error(
+      `values that cannot be kept exactly:\n${skipped
+        .map((r) => `  ${r.method} (${r.label}): ${r.skipped}`)
+        .join('\n')}`
+    );
+  }
   fs.mkdirSync(FIXTURE_DIR, { recursive: true });
   for (const f of fs.readdirSync(FIXTURE_DIR)) {
     if (f.endsWith('.mjs') && !/^(negative|handmade)\.mjs$/.test(f)) {
@@ -78,7 +109,7 @@ export function writeFixtures(records, { capturedAt }) {
   const methods = [...new Set(values.map((r) => r.method))].sort();
   const written = {};
   for (const method of methods) {
-    const samples = pick(values.filter((r) => r.method === method));
+    const { samples, shapes } = pick(values.filter((r) => r.method === method));
     const body = samples
       .map(
         (s) =>
@@ -89,7 +120,7 @@ export function writeFixtures(records, { capturedAt }) {
       path.join(FIXTURE_DIR, `${method}.mjs`),
       `${header({ ...base, method })}\nexport const samples = [\n${body}\n];\n`
     );
-    written[method] = samples.length;
+    written[method] = { samples: samples.length, shapes };
   }
   const errors = [];
   for (const r of records.filter((x) => !x.ok)) {

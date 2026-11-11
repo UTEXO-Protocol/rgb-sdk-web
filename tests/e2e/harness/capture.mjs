@@ -19,6 +19,7 @@ export function recordingRuntime(mod, sink) {
         types: describeTypes(value),
       });
     } catch (error) {
+      // writeFixtures() fails on this unless the method is in ALLOWED_SKIPS.
       sink({ method, ok: true, skipped: String(error?.message ?? error) });
     }
   };

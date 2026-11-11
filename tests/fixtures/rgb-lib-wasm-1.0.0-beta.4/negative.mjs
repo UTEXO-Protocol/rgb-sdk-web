@@ -4,6 +4,7 @@
 // shows as a difference between the two (fixed in ADR-0002 step 1).
 import * as getBtcBalance from './getBtcBalance.mjs';
 import * as getFeeEstimation from './getFeeEstimation.mjs';
+import * as invoiceData from './invoiceData.mjs';
 import * as listAssets from './listAssets.mjs';
 import * as listTransactions from './listTransactions.mjs';
 import * as listTransfers from './listTransfers.mjs';
@@ -14,6 +15,7 @@ export const meta = {
   runtime: '@utexo/rgb-lib-wasm',
   version: '1.0.0-beta.4',
   source: 'handmade',
+  rustCommit: 'f0e266f039744896baa39e3a35766ef01c0f369a', // tag v1.0.0-beta.4
 };
 
 const balance = sample(getBtcBalance, 'sender: funded, colorable UTXOs');
@@ -25,6 +27,7 @@ const transactions = sample(
   'sender: funded, colorable UTXOs'
 );
 const fee = sample(getFeeEstimation, 'sender: empty wallet');
+const invoice = sample(invoiceData, 'sender: decode named invoice');
 
 const settled = (value) => (v) => {
   v.vanilla.settled = value;
@@ -196,6 +199,88 @@ export const cases = [
     expect: 'INVALID_NATIVE_RESPONSE',
     value: String(fee),
   },
+  // ── Rust integer ranges (u8, u32, i32) ────────────────────────────────
+  {
+    method: 'listAssets',
+    label: 'precision = 255 (u8::MAX)',
+    kind: 'boundary',
+    expect: 'ok',
+    value: variant(assets, (v) => {
+      v.nia[0].precision = 255;
+    }),
+  },
+  {
+    method: 'listAssets',
+    label: 'precision = 256',
+    kind: 'boundary',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(assets, (v) => {
+      v.nia[0].precision = 256;
+    }),
+  },
+  {
+    method: 'listUnspents',
+    label: 'vout = -1',
+    kind: 'boundary',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(unspents, (v) => {
+      v[0].utxo.outpoint.vout = -1;
+    }),
+  },
+  {
+    method: 'listUnspents',
+    label: 'pending blinded = 2^32',
+    kind: 'boundary',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(unspents, (v) => {
+      v[0].pendingBlinded = 2 ** 32;
+    }),
+  },
+  {
+    method: 'refresh',
+    label: 'refresh key = 2^31',
+    kind: 'boundary',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [2 ** 31, { updatedStatus: 'Settled', failure: undefined }],
+    ]),
+  },
+  {
+    method: 'refresh',
+    label: 'refresh key = i32::MIN (valid)',
+    kind: 'boundary',
+    expect: 'ok',
+    value: new Map([
+      [-(2 ** 31), { updatedStatus: 'Settled', failure: undefined }],
+    ]),
+  },
+  // ── containers ────────────────────────────────────────────────────────
+  {
+    method: 'invoiceData',
+    label: 'unknownQueryParams as a Map',
+    kind: 'wrong-container',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: variant(invoice, (v) => {
+      v.unknownQueryParams = new Map([['x', '1']]);
+    }),
+  },
+  {
+    method: 'refresh',
+    label: 'nested failure u64 = 2^64',
+    kind: 'boundary',
+    expect: 'INVALID_NATIVE_RESPONSE',
+    value: new Map([
+      [
+        3,
+        {
+          updatedStatus: 'Failed',
+          failure: {
+            InsufficientBitcoins: { needed: 2n ** 64n, available: 0n },
+          },
+        },
+      ],
+    ]),
+  },
   // ── nested error with BigInt ───────────────────────────────────────────
   {
     method: 'refresh',
@@ -213,8 +298,9 @@ export const cases = [
               available: {
                 fungible: 2n ** 60n,
                 non_fungible: false,
-                inflation: 0n,
-                replace: 0,
+                inflation: 2n ** 63n + 1n,
+                link: false,
+                mint: 2n ** 64n - 1n,
               },
             },
           },

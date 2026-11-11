@@ -1,5 +1,6 @@
 import { isEngineError, SDKError } from '@utexo/rgb-sdk-core';
 import type { EngineError, WalletProtocol } from '@utexo/rgb-sdk-core';
+import { RGB_LIB_MESSAGES } from './rgb-lib-messages.generated.js';
 
 /** Ported from `@utexo/rgb-lib-rn` (`wallet-errors.ts`, `rgb-lib/errors.ts`). */
 export type RgbLibWebErrorCode =
@@ -66,19 +67,13 @@ export function asCause(value: unknown): Error | undefined {
 }
 
 /**
- * rgb-lib-wasm rejects with the error's display string, without the variant
- * name, so the code comes from the message. The texts are rgb-lib's
- * `#[error(...)]` strings.
+ * The code of a beta.4 error message: the rgb-lib-rn variant rules, applied
+ * by scripts/rgb-lib-errors.mjs. A text the table does not know, such as a
+ * changed text in another runtime version, is NATIVE_ERROR.
  */
 export function rgbLibWasmErrorCode(message: string): RgbLibWebErrorCode {
-  if (/^Asset with id \S+ not found$/.test(message)) return 'ASSET_NOT_FOUND';
-  if (message === 'Operation not allowed on watch only wallet')
-    return 'UNSUPPORTED_CAPABILITY';
-  if (message.startsWith('Wallet is offline')) return 'WALLET_OFFLINE';
-  if (message.startsWith('Invalid') || message.startsWith('Amount 0'))
-    return 'INVALID_PARAMS';
-  if (message.startsWith('Insufficient')) return 'INSUFFICIENT_FUNDS';
-  return 'NATIVE_ERROR';
+  const row = RGB_LIB_MESSAGES.find(([, , pattern]) => pattern.test(message));
+  return row?.[1] ?? 'NATIVE_ERROR';
 }
 
 /** A WASM rejection as an engine error; engine errors pass through. */

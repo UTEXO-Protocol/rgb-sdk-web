@@ -199,7 +199,8 @@ export async function runCase(mods, c) {
       result = outcome(error);
     }
     const calls = runtime.calls.slice(start).map((x) => x.name);
-    await engine.destroy().catch(() => undefined);
+    // A failing cleanup fails the case.
+    await engine.destroy();
     return { result, calls };
   } finally {
     Date.now = realNow;

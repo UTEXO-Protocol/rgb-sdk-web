@@ -12,23 +12,11 @@ const mods = await loadFixtures();
 const cases = collectCases(mods);
 
 /**
- * Where the current code differs from what a strict decoder must do. ADR-0002
- * step 1 fixes these; remove each entry with its fix.
+ * Where the current code differs from what a strict decoder must do, case name
+ * → reason. Empty since ADR-0002 step 1. A new negative case that the code
+ * gets wrong fails until it is fixed or listed here with its reason.
  */
-const KNOWN_DEFECTS = {
-  'negative: listAssets — Assets as a Map':
-    'a Map is read as the Assets object: the lists come back empty, no error',
-  'negative: refresh — refresh result as a plain object':
-    'a plain object is accepted as the refresh Map',
-  'negative: getBtcBalance — settled = u64::MAX + 1':
-    'the input validator answers: INVALID_AMOUNT, not INVALID_NATIVE_RESPONSE',
-  'negative: listAssets — timestamp below i64::MIN':
-    'AMOUNT_OVERFLOW, not INVALID_NATIVE_RESPONSE',
-  'negative: refresh — nested failure with BigInt details':
-    'nested failure details become "[object Object]"',
-  'handmade: refresh — failures: unit, struct with u64, nested struct':
-    'nested failure details become "[object Object]"',
-};
+const KNOWN_DEFECTS = {};
 
 function defect(c, outcome) {
   const text = toSource(outcome.result);
@@ -53,6 +41,39 @@ describe('golden RgbLibWeb results for rgb-lib-wasm fixtures', () => {
       assert.deepStrictEqual(outcomes[c.name], golden[c.name]);
     });
   }
+
+  it('shows every nested refresh failure field, numbers exact', () => {
+    // Independent of the golden file: every key and every BigInt of a
+    // failure in the fixture must appear in the public message as is.
+    const leaves = (value, out = { keys: [], bigints: [] }) => {
+      if (typeof value === 'bigint') out.bigints.push(value.toString());
+      else if (value && typeof value === 'object')
+        for (const [k, v] of Object.entries(value)) {
+          out.keys.push(k);
+          leaves(v, out);
+        }
+      return out;
+    };
+    let checked = 0;
+    for (const c of cases.filter((x) => x.method === 'refresh')) {
+      const outcome = outcomes[c.name];
+      if (!outcome?.result.ok) continue;
+      for (const [idx, item] of c.value) {
+        if (item.failure === undefined || typeof item.failure === 'string')
+          continue;
+        const [variant, fields] = Object.entries(item.failure)[0];
+        const { message } = outcome.result.value.transfers[idx].failure;
+        assert.ok(message.startsWith(`${variant} (`), message);
+        const { keys, bigints } = leaves(fields);
+        for (const k of keys)
+          assert.ok(message.includes(`${k}: `), `${k} in ${message}`);
+        for (const n of bigints)
+          assert.ok(message.includes(`: ${n}`), `${n} in ${message}`);
+        checked += 1;
+      }
+    }
+    assert.ok(checked >= 3, `checked ${checked} nested failures`);
+  });
 
   it('differs from the strict rules only by the known defects', () => {
     const found = cases

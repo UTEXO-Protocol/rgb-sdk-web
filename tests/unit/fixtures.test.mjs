@@ -10,6 +10,9 @@ import { createRequire } from 'node:module';
 import { describeTypes, toSource } from '../fixtures/source.mjs';
 import { loadFixtures } from '../golden/runner.mjs';
 
+/** The rgb-lib-wasm commit the handmade shapes follow (tag v1.0.0-beta.4). */
+const RUST_COMMIT = 'f0e266f039744896baa39e3a35766ef01c0f369a';
+
 const require = createRequire(import.meta.url);
 const pkgDir = path.dirname(
   require.resolve('@utexo/rgb-lib-wasm/package.json')
@@ -112,9 +115,37 @@ describe('rgb-lib-wasm fixtures', () => {
     assert.ok(mods.errors.samples.length > 0, 'runtime rejections');
   });
 
+  it('build AssignmentsCollection as beta.4 does', () => {
+    // src/wallet/online.rs: no rename_all, so the fields stay snake_case.
+    const found = [];
+    const walk = (value) => {
+      if (value instanceof Map) return value.forEach(walk);
+      if (value === null || typeof value !== 'object') return;
+      if ('non_fungible' in value) found.push(value);
+      Object.values(value).forEach(walk);
+    };
+    for (const file of HANDMADE) mods[file].cases.forEach((c) => walk(c.value));
+    assert.ok(found.length >= 2);
+    for (const a of found) {
+      assert.deepEqual(Object.keys(a).sort(), [
+        'fungible',
+        'inflation',
+        'link',
+        'mint',
+        'non_fungible',
+      ]);
+      assert.equal(typeof a.fungible, 'bigint');
+      assert.equal(typeof a.inflation, 'bigint');
+      assert.equal(typeof a.mint, 'bigint');
+      assert.equal(typeof a.non_fungible, 'boolean');
+      assert.equal(typeof a.link, 'boolean');
+    }
+  });
+
   it('mark handmade samples as handmade, with what they are built on', () => {
     for (const file of HANDMADE) {
       assert.equal(mods[file].meta.source, 'handmade', file);
+      assert.equal(mods[file].meta.rustCommit, RUST_COMMIT, file);
       for (const c of mods[file].cases) {
         assert.equal(typeof c.method, 'string');
         assert.equal(typeof c.label, 'string');

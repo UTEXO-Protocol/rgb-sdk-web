@@ -74,10 +74,14 @@ function invalid(field: string): never {
     `Invalid rgb-lib-wasm ${field}`
   );
 }
-/** A JS object; serde-wasm-bindgen gives `Map`s for Rust maps. */
+/**
+ * A plain JS object (a Rust struct). serde-wasm-bindgen gives a `Map` for a
+ * Rust map and an array for a `Vec`; neither stands in for a struct.
+ */
 function record(value: unknown, field: string): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    invalid(field);
+  if (value === null || typeof value !== 'object') invalid(field);
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) invalid(field);
   return value as Record<string, unknown>;
 }
 function list(value: unknown, field: string): unknown[] {
@@ -95,15 +99,42 @@ function bool(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') invalid(field);
   return value;
 }
-/** u8 / u32 / i32 fields, which arrive as numbers. */
-function int(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value)) invalid(field);
+/** Ranges of the Rust integer types that arrive as numbers. */
+const INT_RANGES = {
+  u8: [0, 0xff],
+  u32: [0, 0xffff_ffff],
+  i32: [-0x8000_0000, 0x7fff_ffff],
+} as const;
+
+/** A u8 / u32 / i32 field; outside the Rust type's range it is a broken response. */
+function int(
+  value: unknown,
+  field: string,
+  type: keyof typeof INT_RANGES
+): number {
+  const [min, max] = INT_RANGES[type];
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < min ||
+    value > max
+  )
+    invalid(field);
   return value;
 }
-/** u64 / i64 fields arrive as BigInt; the exact value becomes a decimal string. */
+const U64_MAX = 2n ** 64n - 1n;
+const I64_MIN = -(2n ** 63n);
+const I64_MAX = 2n ** 63n - 1n;
+
+/**
+ * u64 / i64 fields arrive as BigInt; the exact value becomes a decimal string.
+ * A value outside the Rust type's range is a broken response, so it fails
+ * here as INVALID_NATIVE_RESPONSE, before any numeric conversion.
+ */
 function dec(value: unknown, field: string, signed = false): string {
   if (typeof value === 'bigint') {
-    if (!signed && value < 0n) invalid(field);
+    const [min, max] = signed ? [I64_MIN, I64_MAX] : [0n, U64_MAX];
+    if (value < min || value > max) invalid(field);
     return value.toString();
   }
   if (
@@ -131,7 +162,10 @@ function optAssignment(value: unknown): DtoAssignment | null {
 }
 function outpoint(value: unknown): DtoOutpoint {
   const v = record(value, 'outpoint');
-  return { txid: str(v.txid, 'outpoint txid'), vout: int(v.vout, 'vout') };
+  return {
+    txid: str(v.txid, 'outpoint txid'),
+    vout: int(v.vout, 'vout', 'u32'),
+  };
 }
 function balance(value: unknown): DtoBalance {
   const v = record(value, 'balance');
@@ -160,7 +194,7 @@ function asset(value: unknown, schema: 'Nia' | 'Ifa' | 'Bfa'): DtoAsset {
     ticker: optStr(v.ticker, 'ticker'),
     name: str(v.name, 'asset name'),
     details: optStr(v.details, 'details'),
-    precision: int(v.precision, 'precision'),
+    precision: int(v.precision, 'precision', 'u8'),
     issuedSupply: optDec(v.issuedSupply, 'issued supply'),
     initialSupply: optDec(v.initialSupply, 'initial supply'),
     maxSupply: optDec(v.maxSupply, 'max supply'),
@@ -178,8 +212,8 @@ function asset(value: unknown, schema: 'Nia' | 'Ifa' | 'Bfa'): DtoAsset {
 function transfer(value: unknown): DtoTransfer {
   const v = record(value, 'transfer');
   return {
-    idx: int(v.idx, 'transfer idx'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx'),
+    idx: int(v.idx, 'transfer idx', 'i32'),
+    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
     createdAt: dec(v.createdAt, 'createdAt', true),
     updatedAt: dec(v.updatedAt, 'updatedAt', true),
     status: str(v.status, 'transfer status'),
@@ -226,7 +260,7 @@ function transaction(value: unknown): DtoTransaction {
     fee: dec(v.fee, 'fee'),
     confirmationTime: time
       ? {
-          height: int(time.height, 'height'),
+          height: int(time.height, 'height', 'u32'),
           timestamp: dec(time.timestamp, 'confirmation timestamp'),
         }
       : null,
@@ -250,7 +284,7 @@ function unspent(value: unknown): DtoUnspent {
         settled: bool(a.settled, 'settled'),
       };
     }),
-    pendingBlinded: int(v.pendingBlinded, 'pending blinded'),
+    pendingBlinded: int(v.pendingBlinded, 'pending blinded', 'u32'),
   };
 }
 function receive(value: unknown): DtoReceive {
@@ -259,7 +293,7 @@ function receive(value: unknown): DtoReceive {
     invoice: str(v.invoice, 'invoice'),
     recipientId: str(v.recipientId, 'recipient ID'),
     expirationTimestamp: dec(v.expirationTimestamp, 'expiration'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx'),
+    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
     publicKey: str(v.publicKey, 'public key'),
   };
 }
@@ -267,17 +301,16 @@ function operation(value: unknown): DtoOperation {
   const v = record(value, 'operation result');
   return {
     txid: str(v.txid, 'txid'),
-    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx'),
+    batchTransferIdx: int(v.batchTransferIdx, 'batch transfer idx', 'i32'),
     entropy: dec(v.entropy, 'entropy'),
   };
 }
 /** Raw invoice data; u64 values still BigInt, as `send()` needs them. */
 function invoiceData(value: unknown) {
   const v = record(value, 'invoice data');
-  const params =
-    v.unknownQueryParams instanceof Map
-      ? Object.fromEntries(v.unknownQueryParams)
-      : record(v.unknownQueryParams ?? {}, 'query params');
+  // A HashMap<String, String>, built as a plain object
+  // (serialize_maps_as_objects in bindings/wasm/src/lib.rs).
+  const params = record(v.unknownQueryParams ?? {}, 'query params');
   const expiration = optDec(v.expirationTimestamp, 'invoice expiration');
   const wasmNetwork = str(v.network, 'invoice network');
   const dto: DtoInvoice = {
@@ -299,6 +332,28 @@ function invoiceData(value: unknown) {
   };
   return { dto, wasmNetwork, raw: v };
 }
+/**
+ * One value of a refresh failure's fields, as text: nested structs and lists
+ * in full, u64 values exact (BigInt, never rounded through `number`).
+ */
+function detail(value: unknown, depth = 0): string {
+  if (depth > 8) invalid('refresh failure details');
+  if (value === null || value === undefined) return 'null';
+  // Every BigInt field of the beta.4 Error enum is a u64.
+  if (typeof value === 'bigint') {
+    if (value < 0n || value > U64_MAX) invalid('refresh failure details');
+    return value.toString();
+  }
+  if (typeof value !== 'object') return String(value);
+  if (Array.isArray(value))
+    return `[${value.map((v) => detail(v, depth + 1)).join(', ')}]`;
+  const entries =
+    value instanceof Map
+      ? [...value.entries()].map(([k, v]) => [detail(k, depth + 1), v] as const)
+      : Object.entries(record(value, 'refresh failure details'));
+  return `{${entries.map(([k, v]) => `${k}: ${detail(v, depth + 1)}`).join(', ')}}`;
+}
+
 /** A refresh failure (`Error`, externally tagged) named like the RN bridge. */
 function refreshFailure(value: unknown): { name: string; message: string } {
   if (typeof value === 'string')
@@ -306,14 +361,18 @@ function refreshFailure(value: unknown): { name: string; message: string } {
   const entries = Object.entries(record(value, 'refresh failure'));
   if (entries.length !== 1) invalid('refresh failure');
   const [variant, fields] = entries[0]!;
+  // A struct variant keeps its `key: value` list; a tuple or newtype variant
+  // is shown as its value.
   const details =
-    fields !== null && typeof fields === 'object'
-      ? Object.entries(fields)
-          .map(([k, v]) => `${k}: ${String(v)}`)
-          .join(', ')
-      : fields === null || fields === undefined
-        ? ''
-        : String(fields);
+    fields === null || fields === undefined
+      ? ''
+      : typeof fields === 'object' &&
+          !Array.isArray(fields) &&
+          !(fields instanceof Map)
+        ? Object.entries(record(fields, 'refresh failure fields'))
+            .map(([k, v]) => `${k}: ${detail(v)}`)
+            .join(', ')
+        : detail(fields);
   return {
     name: `RGB_LIB_${variant}`,
     message: details ? `${variant} (${details})` : variant,
@@ -525,7 +584,8 @@ export class WasmSession {
     const signed = this.wallet.signPsbt(psbt);
     return int(
       await this.wallet.createUtxosEnd(online, signed, skipSync),
-      'created UTXOs'
+      'created UTXOs',
+      'u8'
     );
   }
 
@@ -745,15 +805,13 @@ export class WasmSession {
       [],
       skipSync
     );
-    const entries =
-      result instanceof Map
-        ? [...result.entries()]
-        : Object.entries(record(result, 'refresh result'));
-    return entries.map(([key, item]) => {
-      const idx = typeof key === 'number' ? key : Number(key);
+    // RefreshResult is HashMap<i32, RefreshedTransfer>: a Map with number keys.
+    if (!(result instanceof Map)) invalid('refresh result');
+    return [...result.entries()].map(([key, item]) => {
+      const idx = key as unknown;
       const v = record(item, 'refreshed transfer');
       return {
-        batchTransferIdx: int(idx, 'batch transfer idx'),
+        batchTransferIdx: int(idx, 'batch transfer idx', 'i32'),
         updatedStatus: optStr(v.updatedStatus, 'updated status'),
         failure:
           v.failure === null || v.failure === undefined

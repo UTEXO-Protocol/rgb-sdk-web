@@ -189,6 +189,8 @@ export async function runCase(mods, c) {
       network: 'regtest',
       mnemonic: KEYS.mnemonic,
       runtime,
+      // The golden calls are the operation's own; VSS uploads are tested apart.
+      vssUrl: null,
       ...ONLINE,
     });
     await engine.init();

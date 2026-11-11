@@ -1135,6 +1135,16 @@ export function publicOperation(value: Operation) {
   return { txid: value.txid, batchTransferIdx: value.batchTransferIdx };
 }
 
+/**
+ * `vssBackup` / `ensureInitialBackup`: the server version, an i64 the binding
+ * sends as an f64. A non-negative safe integer, or INVALID_NATIVE_RESPONSE.
+ */
+export function decodeVssVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    rejected('Invalid VSS backup version');
+  return value;
+}
+
 /** `getFeeEstimation`: an f64 in sat/vB. */
 export function decodeFeeEstimate(value: unknown): number {
   if (

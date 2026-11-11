@@ -1,6 +1,7 @@
-// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods. Each method
-// passes through `backend.guarded()` (synchronous argument errors become
-// rejected Promises) to RgbLibWebBackend; no wallet logic here.
+// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods and
+// backupNow(). Each method passes through `backend.guarded()` (synchronous
+// argument errors become rejected Promises) to RgbLibWebBackend; no wallet
+// logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
 
 import type {
@@ -16,6 +17,7 @@ import type {
   ReceiveParams,
   SendBtcBeginRequestModel,
   SharedWalletApi,
+  VssBackupApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebBackend } from './backend.js';
 import { splitConfig } from './config.js';
@@ -23,7 +25,8 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
- * the 29 `SharedWalletApi` methods and no extension.
+ * the 29 `SharedWalletApi` methods and the `VssBackupApi` extension
+ * (`backupNow()`; ADR-0003).
  *
  * ```ts
  * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
@@ -53,9 +56,9 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
  * Methods the runtime cannot perform reject with `UNSUPPORTED_CAPABILITY`
  * (ADR-0001).
  */
-export class RgbLibWeb implements SharedWalletApi<
-  RgbLibWebUnlockParams | undefined
-> {
+export class RgbLibWeb
+  implements SharedWalletApi<RgbLibWebUnlockParams | undefined>, VssBackupApi
+{
   /** Embedded, never read from core: a newer core must not make this engine claim more. */
   readonly contractVersion = '1' as const;
   readonly protocol = 'RGB_L1' as const;
@@ -234,5 +237,17 @@ export class RgbLibWeb implements SharedWalletApi<
   }
   syncWallet() {
     return this.backend.syncWallet();
+  }
+
+  // ── VssBackupApi (ADR-0003) ───────────────────────────────────────────────
+
+  /**
+   * Uploads an encrypted backup to the VSS server now; resolves with the new
+   * server version. VSS is on by default (see `vssUrl`): every successful
+   * mutation also queues an upload, so this is for an explicit checkpoint.
+   * Rejects with `INVALID_CONFIG` when VSS is off.
+   */
+  backupNow(): Promise<number> {
+    return this.backend.guarded('backupNow', () => this.backend.backupNow());
   }
 }

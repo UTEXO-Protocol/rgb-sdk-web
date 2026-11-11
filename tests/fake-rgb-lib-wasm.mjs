@@ -175,6 +175,10 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
       ]),
     failTransfers: async () => true,
     getFeeEstimation: async () => 1.2,
+    configureVssBackup: () => undefined,
+    disableVssBackup: () => undefined,
+    vssBackup: async () => 3,
+    ensureInitialBackup: async () => 4,
     ...overrides,
   };
 

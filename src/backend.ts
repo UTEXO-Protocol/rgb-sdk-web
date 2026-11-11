@@ -26,7 +26,7 @@
  * Called by: `rgb-lib-web.ts`. Depends on: `operations.ts`, `runtime/`
  * (session, load), `config.ts`, `keys.ts`, `errors.ts`.
  */
-import { ValidationError } from '@utexo/rgb-sdk-core';
+import { ValidationError, logger } from '@utexo/rgb-sdk-core';
 import type {
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
@@ -45,6 +45,7 @@ import type {
 import {
   configEquals,
   resolveConfig,
+  resolveVss,
   splitWalletParams,
   validateWalletParams,
 } from './config.js';
@@ -53,6 +54,7 @@ import type {
   RgbLibWebOptions,
   RgbLibWebParams,
   RgbLibWebUnlockParams,
+  VssSetting,
 } from './config.js';
 import {
   RgbLibWebError,
@@ -98,6 +100,25 @@ function definedOnly<T extends object>(value: T): T {
   ) as T;
 }
 
+/**
+ * Operations that change the wallet state; each queues an automatic VSS
+ * upload when it succeeds. The upload itself skips when nothing changed.
+ */
+const AUTO_BACKUP: ReadonlySet<string> = new Set([
+  'createUtxos',
+  'sendBtc',
+  'issueAssetNia',
+  'issueAssetIfa',
+  'inflate',
+  'blindReceive',
+  'witnessReceive',
+  'onchainReceive',
+  'onchainSend',
+  'failTransfers',
+  'refresh',
+  'refreshWallet',
+]);
+
 /** One backend owns one WASM wallet, one queue and one wallet profile. */
 export class RgbLibWebBackend {
   private readonly queue = new SerialExecutor();
@@ -120,6 +141,12 @@ export class RgbLibWebBackend {
   private readonly accepted = new Set<Promise<unknown>>();
   private disposeRequested = false;
   private disposed = false;
+  /** The VSS options, resolved before init(); holds no derived key. */
+  private readonly vss: VssSetting;
+  /** VSS is configured on the open wallet (set by init()). */
+  private vssOn = false;
+  /** An automatic upload is queued and has not started yet. */
+  private backupWaiting = false;
 
   constructor(
     params: RgbLibWebParams,
@@ -149,7 +176,9 @@ export class RgbLibWebBackend {
     this.keys = resolveKeys(keys, params.network);
     const { options, connection } = splitWalletParams(params);
     // A URL object stays the caller's and can change; keep its normalized href.
-    const { wasmUrl, ...fixed } = options;
+    // The VSS options live only in `this.vss`, resolved and owned.
+    this.vss = resolveVss(options);
+    const { wasmUrl, vss: _vss, vssUrl: _vssUrl, ...fixed } = options;
     this.params = Object.freeze({
       ...fixed,
       ...(wasmUrl !== undefined ? { wasmUrl: normalizeWasmUrl(wasmUrl) } : {}),
@@ -222,10 +251,44 @@ export class RgbLibWebBackend {
     } catch (error) {
       return Promise.reject(toPublicError(error, operation));
     }
+    // A mutation queues its upload from inside its own task, once it
+    // succeeded: so the upload is queued before the operation settles (and
+    // before a destroy()'s close), in a fixed order.
+    const task = AUTO_BACKUP.has(operation)
+      ? async (session: WasmSession) => {
+          const result = await action(session);
+          this.scheduleBackup();
+          return result;
+        }
+      : action;
     return this.publicly(
       operation,
-      this.track(this.execute(operation, requiresOnline, action))
+      this.track(this.execute(operation, requiresOnline, task))
     );
+  }
+
+  /**
+   * Queues one automatic VSS upload after a mutation, unless one is already
+   * waiting (it will include this change). It runs as its own task, so the
+   * mutation resolves without waiting for the network; destroy() waits for
+   * it. A failed upload is logged, without the key, and fails nothing.
+   */
+  private scheduleBackup(): void {
+    if (!this.vssOn || this.backupWaiting || this.disposed) return;
+    this.backupWaiting = true;
+    const upload = this.queue
+      .run(async () => {
+        this.backupWaiting = false;
+        if (this.session) await ops.autoBackup.execute(this.session);
+      })
+      .catch((error: unknown) => {
+        const e = toBackendError(error, 'vssBackup');
+        logger.warn('RgbLibWeb: automatic VSS backup failed', {
+          code: e.code,
+          message: e.message,
+        });
+      });
+    this.track(upload);
   }
 
   private execute<T>(
@@ -370,7 +433,7 @@ export class RgbLibWebBackend {
         if (this.keys.readMnemonic) {
           mnemonic = await readMnemonic(this.keys.readMnemonic, 'init');
         }
-        this.session = await WasmSession.open(
+        const session = await WasmSession.open(
           runtime,
           {
             network: this.params.network,
@@ -381,6 +444,15 @@ export class RgbLibWebBackend {
           mnemonic,
           this.keys.publicKeys
         );
+        try {
+          // No upload here: a restore (ADR-0003 B2) may still run before the
+          // wallet connects, and an upload now would replace the cloud copy.
+          this.vssOn = ops.configureVss(session, this.vss, mnemonic);
+        } catch (error) {
+          await session.close().catch(() => undefined);
+          throw error;
+        }
+        this.session = session;
       } catch (error) {
         throw toBackendError(error, 'init');
       } finally {
@@ -688,6 +760,27 @@ export class RgbLibWebBackend {
 
   syncWallet(): Promise<void> {
     return this.run('syncWallet', true, (s) => s.sync());
+  }
+
+  // ── VSS backup (ADR-0003) ────────────────────────────────────────────────
+
+  /** Uploads now and returns the server version. No indexer connection needed. */
+  backupNow(): Promise<number> {
+    if (this.vss.kind === 'off')
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        'VSS backup is off (vssUrl: null)',
+        'backupNow'
+      );
+    return this.run('backupNow', false, (s) => {
+      if (!this.vssOn)
+        throw new RgbLibWebError(
+          'INVALID_CONFIG',
+          'VSS backup needs the mnemonic or an explicit vss config; this wallet was opened watch-only',
+          'backupNow'
+        );
+      return ops.backupNow.execute(s);
+    });
   }
 
   /** Read inside a queued task of an online operation: the connection is set. */

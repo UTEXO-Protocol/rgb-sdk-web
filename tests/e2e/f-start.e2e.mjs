@@ -4,8 +4,15 @@
  * network operation connects with the config's connection settings.
  */
 import { test, expect } from '@playwright/test';
+import { deriveVssSigningKeyFromMnemonic } from '@utexo/rgb-sdk-core';
 import { fund } from './stand.mjs';
-import { startWallet, wcall, wget, wirePageLogging } from './client.mjs';
+import {
+  startWallet,
+  wcall,
+  wcallError,
+  wget,
+  wirePageLogging,
+} from './client.mjs';
 
 test('F: generateKeys + RgbLibWeb.create(), then address and balance', async ({
   page,
@@ -63,4 +70,25 @@ test('F: create() rejects an Electrum indexer before opening', async ({
   const env = JSON.parse(res);
   expect(env.ok).toBe(false);
   expect(env.error.code).toBe('UNSUPPORTED_CAPABILITY');
+});
+
+test('F: the real runtime takes the derived VSS identity; an unreachable server fails backupNow only', async ({
+  page,
+}) => {
+  wirePageLogging(page);
+  // Nothing listens on this local port: the connection is refused.
+  const { mnemonic } = await startWallet(page, {
+    vssUrl: 'http://127.0.0.1:59999/vss',
+  });
+  const error = await wcallError(page, 'backupNow');
+  expect(error.operation).toBe('backupNow');
+  // The runtime reached the network: it took the derived identity.
+  expect(error.code).toBe('NATIVE_ERROR');
+  expect(error.detail.message).toMatch(/^VSS error/);
+  const key = deriveVssSigningKeyFromMnemonic(mnemonic);
+  expect(JSON.stringify(error)).not.toContain(key);
+  expect(error.message).not.toContain(key);
+  // The wallet still works after the failed upload.
+  expect((await wcall(page, 'getAddress')).startsWith('bcrt1p')).toBe(true);
+  await wcall(page, 'destroy');
 });

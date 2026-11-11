@@ -59,7 +59,7 @@ window.harness = {
   ready: false,
 
   /**
-   * cfg: { indexerUrl, proxyEndpoint, mnemonic?, dataDir?, unlock? }.
+   * cfg: { indexerUrl, proxyEndpoint, mnemonic?, dataDir?, unlock?, vssUrl? }.
    * A fresh dataDir per boot unless the spec passes one (persistence specs).
    */
   boot: (cfgJson) =>
@@ -79,6 +79,8 @@ window.harness = {
         network: 'regtest',
         dataDir,
         mnemonic,
+        // The stand has no VSS server: off unless the spec sets one.
+        vssUrl: cfg.vssUrl ?? null,
         ...(runtime ? { runtime } : {}),
       });
       wallet = new UTEXOWallet({ engine });
@@ -111,6 +113,7 @@ window.harness = {
         ...(cfg.dataDir ? { dataDir: cfg.dataDir } : {}),
         indexerUrl: cfg.indexerUrl,
         proxyEndpoint: cfg.proxyEndpoint,
+        vssUrl: cfg.vssUrl ?? null,
       });
       statusEl.textContent = 'wallet started';
       return { mnemonic: keys.mnemonic, keys };

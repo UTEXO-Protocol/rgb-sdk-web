@@ -26,6 +26,8 @@ function create({ params = {}, keys = KEYS.mnemonic, ...fake } = {}) {
   const runtime = createFakeRuntime(fake);
   const engine = new RgbLibWeb({
     network: 'regtest',
+    // VSS has its own tests (vss.test.mjs); here it would add calls.
+    vssUrl: null,
     ...params,
     keys,
     runtime,
@@ -52,7 +54,7 @@ runEngineConformanceChecks({
   name: 'adapters/rgb-lib-wasm RgbLibWeb',
   engineClass: RgbLibWeb,
   createEngineSync: () => create().engine,
-  extensions: [],
+  extensions: ['vssBackup'],
   describe,
   it,
   expect,

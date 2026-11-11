@@ -56,7 +56,9 @@ export class WasmSession {
     readonly wallet: RgbLibWasmWallet,
     /** The wallet's network as the runtime names it (`Regtest`, …). */
     readonly wasmNetwork: string,
-    readonly identity: { id: string; network: string }
+    readonly identity: { id: string; network: string },
+    /** Names the VSS store (`wallet_<masterFingerprint>`). */
+    readonly masterFingerprint: string
   ) {}
 
   /**
@@ -126,10 +128,13 @@ export class WasmSession {
         reuseAddresses: options.reuseAddresses,
       })
     );
-    return new WasmSession(runtime, wallet, wasmNetwork, {
-      id,
-      network: bridgeNetwork,
-    });
+    return new WasmSession(
+      runtime,
+      wallet,
+      wasmNetwork,
+      { id, network: bridgeNetwork },
+      keys.masterFingerprint
+    );
   }
 
   /** Writes pending state to IndexedDB, then releases the WASM wallet. */

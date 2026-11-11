@@ -19,7 +19,11 @@
  * Called by: `backend.ts`. Depends on: `runtime/session.ts` (the wallet),
  * `runtime/codec.ts` (results), `config.ts` (`integer()`), `errors.ts`.
  */
-import { ValidationError } from '@utexo/rgb-sdk-core';
+import {
+  ValidationError,
+  deriveVssSigningKeyFromMnemonic,
+  getBackupStoreId,
+} from '@utexo/rgb-sdk-core';
 import type {
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
@@ -33,6 +37,7 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import * as codec from './runtime/codec.js';
 import { integer } from './config.js';
+import type { VssSetting } from './config.js';
 import { RgbLibWebError } from './errors.js';
 import type { WasmSession } from './runtime/session.js';
 
@@ -623,5 +628,47 @@ export const refresh = {
         await s.wallet.refresh(s.connected(), null, [], skipSync)
       )
     );
+  },
+};
+
+// ── VSS backup (ADR-0003) ───────────────────────────────────────────────────
+
+/**
+ * Configures VSS on the opened wallet, inside the open task. The derived
+ * signing key goes straight to the runtime and is not kept here. Returns
+ * whether VSS is on: a derived identity needs the mnemonic, so a watch-only
+ * wallet stays off unless it has an explicit `vss` config.
+ */
+export function configureVss(
+  s: WasmSession,
+  setting: VssSetting,
+  mnemonic: string | null
+): boolean {
+  if (setting.kind === 'off') return false;
+  if (setting.kind === 'explicit') {
+    const c = setting.config;
+    s.wallet.configureVssBackup(c.serverUrl, c.storeId, c.signingKey);
+    return true;
+  }
+  if (mnemonic === null) return false;
+  s.wallet.configureVssBackup(
+    setting.serverUrl,
+    getBackupStoreId(s.masterFingerprint),
+    deriveVssSigningKeyFromMnemonic(mnemonic)
+  );
+  return true;
+}
+
+export const backupNow = {
+  /** Uploads now; the new server version. */
+  execute: async (s: WasmSession) =>
+    codec.decodeVssVersion(await s.wallet.vssBackup()),
+};
+
+export const autoBackup = {
+  /** Uploads only when the wallet changed since the last backup. */
+  async execute(s: WasmSession): Promise<number | null> {
+    const version = await s.wallet.ensureInitialBackup();
+    return version === null ? null : codec.decodeVssVersion(version);
   },
 };

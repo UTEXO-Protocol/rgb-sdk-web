@@ -29,6 +29,17 @@ export interface RgbLibWasmWallet {
   goOnline(onlineOptions: unknown): Promise<unknown>;
   sync(online: unknown): Promise<void>;
   getAddress(): string;
+  /** VSS (ADR-0003). The key is a 64-hex secret key; checked by the binding. */
+  configureVssBackup(
+    serverUrl: string,
+    storeId: string,
+    signingKeyHex: string
+  ): void;
+  disableVssBackup(): void;
+  /** The new server version, as a JS number. */
+  vssBackup(): Promise<unknown>;
+  /** Uploads only when the wallet changed since the last backup; else null. */
+  ensureInitialBackup(): Promise<unknown>;
   getBtcBalance(): unknown;
   getAssetBalance(assetId: string): unknown;
   listAssets(filterAssetSchemas: unknown): unknown;

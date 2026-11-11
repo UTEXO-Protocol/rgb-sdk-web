@@ -8,8 +8,9 @@
 import {
   DEFAULT_INDEXER_URLS as CORE_DEFAULT_INDEXER_URLS,
   DEFAULT_TRANSPORT_ENDPOINTS as CORE_DEFAULT_TRANSPORT_ENDPOINTS,
+  DEFAULT_VSS_SERVER_URL,
 } from '@utexo/rgb-sdk-core';
-import type { Network } from '@utexo/rgb-sdk-core';
+import type { Network, VssBackupConfig } from '@utexo/rgb-sdk-core';
 import { RgbLibWebError, unsupported } from './errors.js';
 import type { RgbLibWebKeys } from './keys.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
@@ -33,6 +34,16 @@ export interface RgbLibWebOptions {
    * app's bundler places it. One page loads the WASM once, from one URL.
    */
   wasmUrl?: string | URL;
+  /**
+   * VSS (cloud) backup server. Default: the UTEXO server
+   * (`DEFAULT_VSS_SERVER_URL`); `null` turns VSS off. The identity is derived
+   * from the mnemonic on `init()`, as on the RLN web wallet: store
+   * `wallet_<masterFingerprint>`, signing key from the mnemonic. A watch-only
+   * wallet has no mnemonic, so it gets VSS only with `vss`.
+   */
+  vssUrl?: string | null;
+  /** An explicit VSS identity instead of the derived one; not with `vssUrl`. */
+  vss?: VssBackupConfig;
 }
 
 /** Mint lock bounds in blocks; `min` must not exceed `max`. */
@@ -246,6 +257,50 @@ export function validateWalletParams(params: RgbLibWebParams) {
   ) {
     invalidConfig('wasmUrl must be a non-empty string or a URL');
   }
+  resolveVss(params);
+}
+
+/** How the wallet gets its VSS identity; resolved once, before init(). */
+export type VssSetting =
+  | { kind: 'off' }
+  | { kind: 'derived'; serverUrl: string }
+  | { kind: 'explicit'; config: Readonly<VssBackupConfig> };
+
+/**
+ * Checks the VSS options. Messages never contain the signing key: it is a
+ * secret and is named only by its field.
+ */
+export function resolveVss(params: RgbLibWebOptions): VssSetting {
+  const { vssUrl, vss } = params;
+  if (vss !== undefined && vssUrl !== undefined)
+    invalidConfig('Pass either vss or vssUrl, not both');
+  if (vss !== undefined) {
+    if (!vss || typeof vss !== 'object')
+      invalidConfig('vss must be { serverUrl, storeId, signingKey }');
+    url(vss.serverUrl, ['https://', 'http://'], 'vss.serverUrl');
+    if (typeof vss.storeId !== 'string' || vss.storeId.length === 0)
+      invalidConfig('vss.storeId must be a non-empty string');
+    if (
+      typeof vss.signingKey !== 'string' ||
+      !/^[0-9a-fA-F]{64}$/.test(vss.signingKey)
+    )
+      invalidConfig('vss.signingKey must be 64 hex characters (32 bytes)');
+    return {
+      kind: 'explicit',
+      config: Object.freeze({
+        serverUrl: vss.serverUrl,
+        storeId: vss.storeId,
+        signingKey: vss.signingKey,
+      }),
+    };
+  }
+  if (vssUrl === null) return { kind: 'off' };
+  if (vssUrl === undefined)
+    return { kind: 'derived', serverUrl: DEFAULT_VSS_SERVER_URL };
+  return {
+    kind: 'derived',
+    serverUrl: url(vssUrl, ['https://', 'http://'], 'vssUrl'),
+  };
 }
 
 function url(value: string, protocols: readonly string[], field: string) {

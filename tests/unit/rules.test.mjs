@@ -18,6 +18,7 @@ function create({ keys = KEYS.mnemonic, ...fake } = {}) {
   const runtime = createFakeRuntime(fake);
   const engine = new RgbLibWeb({
     network: 'regtest',
+    vssUrl: null,
     ...ONLINE,
     keys,
     runtime,

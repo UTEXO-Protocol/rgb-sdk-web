@@ -58,6 +58,8 @@ One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 | `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys` | BFA mint locks and proxy auth |
 | `wasmUrl` | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS |
 | `runtime` | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl` |
+| `vssUrl` | VSS backup server; default the UTEXO server, `null` turns VSS off |
+| `vss` | an explicit VSS identity `{ serverUrl, storeId, signingKey }` instead of the derived one; not with `vssUrl` |
 
 Pass exactly one of `mnemonic` and `keys`, and at most one of `runtime` and
 `wasmUrl`. A `wasmUrl` is read once, at construction, and made absolute
@@ -69,12 +71,28 @@ Errors follow the `EngineError` shape of `@utexo/rgb-sdk-core`: a `code`
 an engine error from the runtime passes through as it is, so check errors with
 `isEngineError(error, code)`, not `instanceof`.
 
+## VSS backup
+
+VSS (cloud) backup is on by default, with no setup, as on the RLN web wallet:
+
+- `init()` derives the identity from the mnemonic with the core helpers:
+  store `wallet_<masterFingerprint>`, signing key from the mnemonic. The key
+  goes to the runtime only; it is not kept, logged or put in errors.
+- Each successful mutation (create UTXOs, send, issue, inflate, receive, fail
+  transfers, refresh) queues one upload. It runs as its own task after the
+  mutation, uploads only when the wallet changed, and a failure is logged
+  (`logger.warn`) without failing anything. `destroy()` waits for it.
+- Nothing is uploaded on `init()`: a restore may still run before the wallet
+  connects.
+- `backupNow()` uploads now and returns the server version.
+- A watch-only wallet has no mnemonic, so it gets VSS only with `vss`.
+
 ## Restore between open and connect
 
 ```ts
 const wallet = new RgbLibWeb({ network: 'testnet', mnemonic, dataDir: 'my-app' });
 await wallet.init();   // opened from IndexedDB, not online yet
-// restore from a backup here (planned: ADR-0003)
+// restore from a backup here (ADR-0003 B2, planned)
 await wallet.unlock(); // online
 ```
 
@@ -186,7 +204,8 @@ issuing, a transfer.
 | 2. Move `RgbLibWeb` and its tests here | done |
 | 3. Load the WASM runtime inside the package | done |
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
-| Backup and VSS (ADR-0003) | planned |
+| VSS backup: zero config, `backupNow()`, automatic upload (ADR-0003 B1) | done |
+| VSS restore, byte backup (ADR-0003 B2–B4) | planned |
 
 ## Development
 

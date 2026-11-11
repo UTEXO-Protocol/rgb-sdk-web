@@ -1,7 +1,9 @@
-import { RgbLibWebError, WasmRejection } from './errors.js';
+// Wallet keys: a mnemonic, a reader that returns it on init(), public keys, or
+// both (they must match). Public keys alone open a watch-only wallet. The
+// same key forms as on React Native (`rgb-lib/key-provider.ts`).
+// Used by: `config.ts`, `backend.ts`, `runtime/session.ts`.
 
-// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/key-provider.ts`); the same key
-// forms are accepted on both platforms.
+import { RgbLibWebError, WasmRejection } from './errors.js';
 
 type MaybePromise<T> = T | Promise<T>;
 

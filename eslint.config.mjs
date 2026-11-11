@@ -51,7 +51,7 @@ export default [
       '!tests/fixtures/rgb-lib-wasm-*/negative.mjs',
       'tests/golden/*.golden.mjs',
       // Generated: npm run errors:generate.
-      'src/*.generated.ts',
+      'src/**/*.generated.ts',
       'tests/fixtures/error-texts/*.mjs',
     ],
   },

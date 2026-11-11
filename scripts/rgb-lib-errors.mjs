@@ -7,7 +7,7 @@
 // the public `pub enum Error` of src/error.rs (not IndexerError or
 // InternalError: those reach JS wrapped in a public variant) and the
 // binding's own messages in bindings/wasm/src/lib.rs. Writes:
-//   src/rgb-lib-messages.generated.ts  message pattern → variant → code
+//   src/runtime/rgb-lib-messages.generated.ts  message pattern → variant → code
 //   tests/fixtures/error-texts/rgb-lib-wasm-<v>.mjs  every text, for tests
 // --check compares instead of writing and fails on any difference.
 import { execFileSync } from 'node:child_process';
@@ -250,7 +250,7 @@ const tableTs = `${banner}
 // rgb-lib-wasm rejects with the error's display text only. Each row is a text
 // whose code is not NATIVE_ERROR: [variant, code, pattern]. A {field} in the
 // Rust text matches any text.
-import type { RgbLibWebErrorCode } from './errors.js';
+import type { RgbLibWebErrorCode } from '../errors.js';
 
 export const RGB_LIB_WASM_VERSION = '${VERSION}';
 
@@ -308,7 +308,7 @@ ${entries
 `;
 
 const outputs = [
-  [join(root, 'src/rgb-lib-messages.generated.ts'), tableTs],
+  [join(root, 'src/runtime/rgb-lib-messages.generated.ts'), tableTs],
   [
     join(root, `tests/fixtures/error-texts/rgb-lib-wasm-${VERSION}.mjs`),
     textsMjs,

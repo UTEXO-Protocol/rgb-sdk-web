@@ -1,21 +1,3 @@
-import { ValidationError } from '@utexo/rgb-sdk-core';
-import type {
-  FailTransfersRequest,
-  InflateAssetIfaRequestModel,
-  IssueAssetIfaRequestModel,
-  IssueAssetNiaRequestModel,
-  ListAssetsOptions,
-  OnchainSendRequestModel,
-  ReceiveAssignmentKind,
-  ReceiveParams,
-  SendBtcBeginRequestModel,
-} from '@utexo/rgb-sdk-core';
-import { feeRate, issuanceAmounts, u64 } from './amounts.js';
-import * as codec from './codec.js';
-import { integer } from './config.js';
-import { RgbLibWebError } from './errors.js';
-import type { WasmSession } from './session.js';
-
 /**
  * The public operations (ADR-0002 step 4), each in two parts:
  *
@@ -30,7 +12,29 @@ import type { WasmSession } from './session.js';
  * Neither part enqueues work or connects: the backend does that, before the
  * task enters the queue. A synchronous WASM mutation is reported only after
  * `session.persisted()` has flushed it.
+ *
+ * Also here: the input rules shared by the operations (`skipSync`, receive
+ * assignments, asset schema filter, amounts, wire helpers).
+ *
+ * Called by: `backend.ts`. Depends on: `runtime/session.ts` (the wallet),
+ * `runtime/codec.ts` (results), `config.ts` (`integer()`), `errors.ts`.
  */
+import { ValidationError } from '@utexo/rgb-sdk-core';
+import type {
+  FailTransfersRequest,
+  InflateAssetIfaRequestModel,
+  IssueAssetIfaRequestModel,
+  IssueAssetNiaRequestModel,
+  ListAssetsOptions,
+  OnchainSendRequestModel,
+  ReceiveAssignmentKind,
+  ReceiveParams,
+  SendBtcBeginRequestModel,
+} from '@utexo/rgb-sdk-core';
+import * as codec from './runtime/codec.js';
+import { integer } from './config.js';
+import { RgbLibWebError } from './errors.js';
+import type { WasmSession } from './runtime/session.js';
 
 /** What `execute` needs from the backend's connection. */
 export interface OnlineContext {
@@ -50,6 +54,79 @@ function operation<A extends unknown[], V, X extends unknown[], R>(op: {
 
 function fail(message: string): never {
   throw new RgbLibWebError('INVALID_PARAMS', message);
+}
+
+// ── input amounts ───────────────────────────────────────────────────────────
+// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/amounts.ts`). They return checked
+// decimal strings; the wire helpers below turn them into BigInt (or keep the
+// string for WitnessData). No u64 is ever rounded. Output numbers are decoded
+// in `runtime/codec.ts`.
+
+const U64_MAX = 0xffffffffffffffffn;
+
+function u64(
+  value: number | bigint | string,
+  field: string,
+  positive = false
+): string {
+  if (
+    (typeof value === 'number' &&
+      (!Number.isSafeInteger(value) || value < 0)) ||
+    (typeof value !== 'number' &&
+      typeof value !== 'bigint' &&
+      typeof value !== 'string') ||
+    !/^(0|[1-9]\d{0,19})$/.test(String(value))
+  ) {
+    throw new RgbLibWebError(
+      'INVALID_AMOUNT',
+      `${field} must be an exact unsigned integer`
+    );
+  }
+  const n = BigInt(value);
+  if (n > U64_MAX || (positive && n === 0n)) {
+    throw new RgbLibWebError(
+      'INVALID_AMOUNT',
+      `${field} is outside the supported u64 range`
+    );
+  }
+  return n.toString();
+}
+
+/**
+ * Converts issuance allocations and checks, before any WASM call, that the
+ * supply (and max supply including inflation) fits the numeric public asset
+ * model. Balances never exceed the max supply, so this bounds them too.
+ */
+function issuanceAmounts(
+  amounts: readonly (number | bigint | string)[],
+  inflationAmounts: readonly (number | bigint | string)[] = []
+): { amounts: string[]; inflationAmounts: string[] } {
+  const exact = amounts.map((n) => u64(n, 'amount', true));
+  const inflation = inflationAmounts.map((n) =>
+    u64(n, 'inflationAmount', true)
+  );
+  const total = [...exact, ...inflation].reduce(
+    (sum, n) => sum + BigInt(n),
+    0n
+  );
+  if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RgbLibWebError(
+      'AMOUNT_OVERFLOW',
+      'Total issued and inflatable supply cannot be represented by the numeric SDK fields'
+    );
+  }
+  return { amounts: exact, inflationAmounts: inflation };
+}
+
+/** A positive integer sat/vB, as a decimal string. */
+function feeRate(value: number = 2): string {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new RgbLibWebError(
+      'FEE_RATE_UNSUPPORTED',
+      'RGB Lib requires a positive integer feeRate in sat/vB'
+    );
+  }
+  return String(value);
 }
 
 // ── shared input rules ──────────────────────────────────────────────────────

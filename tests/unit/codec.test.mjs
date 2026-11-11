@@ -23,8 +23,8 @@ let generated;
 before(async () => {
   await build({
     entryPoints: {
-      codec: path.join(root, 'src/codec.ts'),
-      generated: path.join(root, 'src/rgb-lib-messages.generated.ts'),
+      codec: path.join(root, 'src/runtime/codec.ts'),
+      generated: path.join(root, 'src/runtime/rgb-lib-messages.generated.ts'),
     },
     bundle: true,
     format: 'esm',

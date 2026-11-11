@@ -1,3 +1,10 @@
+// Config: the options of RgbLibWeb, their defaults per network and their
+// checks (INVALID_CONFIG, UNSUPPORTED_CAPABILITY), before anything opens. Also
+// `integer()`, the bound check `operations.ts` uses for its params.
+// rgb-lib-wasm is built with Esplora only: Electrum and bitcoind indexers are
+// rejected. Ported from `@utexo/rgb-lib-rn` (`rgb-lib/config.ts`,
+// `network-endpoints.ts`).
+
 import {
   DEFAULT_INDEXER_URLS as CORE_DEFAULT_INDEXER_URLS,
   DEFAULT_TRANSPORT_ENDPOINTS as CORE_DEFAULT_TRANSPORT_ENDPOINTS,
@@ -6,10 +13,6 @@ import type { Network } from '@utexo/rgb-sdk-core';
 import { RgbLibWebError, unsupported } from './errors.js';
 import type { RgbLibWebKeys } from './keys.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
-
-// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/config.ts`, `network-endpoints.ts`).
-// rgb-lib-wasm is built with Esplora only: Electrum and bitcoind indexers are
-// rejected with UNSUPPORTED_CAPABILITY.
 
 /** Settings fixed for the wallet's lifetime. */
 export interface RgbLibWebOptions {

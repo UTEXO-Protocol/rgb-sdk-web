@@ -1,8 +1,12 @@
+// Public errors: RgbLibWebError, its codes, and the mapping to them of runtime
+// rejections (by the generated message table) and core validation errors.
+// Shared by every layer. Ported from `@utexo/rgb-lib-rn` (`wallet-errors.ts`,
+// `rgb-lib/errors.ts`).
+
 import { isEngineError, SDKError } from '@utexo/rgb-sdk-core';
 import type { EngineError, WalletProtocol } from '@utexo/rgb-sdk-core';
-import { RGB_LIB_MESSAGES } from './rgb-lib-messages.generated.js';
+import { RGB_LIB_MESSAGES } from './runtime/rgb-lib-messages.generated.js';
 
-/** Ported from `@utexo/rgb-lib-rn` (`wallet-errors.ts`, `rgb-lib/errors.ts`). */
 export type RgbLibWebErrorCode =
   | 'WALLET_NOT_INITIALIZED'
   | 'WALLET_OFFLINE'

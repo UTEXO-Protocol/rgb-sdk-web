@@ -1,3 +1,7 @@
+// Loads @utexo/rgb-lib-wasm once per page, shared by every copy of this
+// package, from the module's default URL or the `wasmUrl` option.
+// Called by: `backend.ts` on init(). Depends on: `types.ts`, `errors.ts`.
+
 import initRgbLibWasm, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
 import { RgbLibWebError, asCause } from '../errors.js';
 import type { RgbLibWasmRuntime } from './types.js';

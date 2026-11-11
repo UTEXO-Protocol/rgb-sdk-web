@@ -1,3 +1,8 @@
+// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods. Each method
+// passes through `backend.guarded()` (synchronous argument errors become
+// rejected Promises) to RgbLibWebBackend; no wallet logic here.
+// Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
+
 import type {
   EngineCapabilities,
   FailTransfersRequest,

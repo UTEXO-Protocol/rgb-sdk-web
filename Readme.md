@@ -112,14 +112,35 @@ copy that file next to the bundled JS, or the app sets `wasmUrl`.
 
 ## How it works
 
-Four layers, each in one file (ADR-0002):
+Layout (ADR-0002):
 
-| File | Owns |
-|---|---|
-| `src/backend.ts` | Admission, lazy connect, the serial queue, `destroy()`, public error codes |
-| `src/operations.ts` | One `prepare` / `execute` pair per public method: input rules and WASM arguments, invoice checks of `send` |
-| `src/session.ts` | The open WASM wallet: online handle, sync, signing, flush |
-| `src/codec.ts` | Decoding of every `WasmWallet` result, and its projection to the core types |
+```
+src/
+  index.ts            exports only
+  rgb-lib-web.ts      RgbLibWeb: the public API, 29 SharedWalletApi methods
+  backend.ts          lifecycle (init, connect, destroy), admission, serial queue
+  operations.ts       per method: prepare (checks, WASM arguments) and execute
+  config.ts           options, defaults per network, config checks
+  keys.ts             mnemonic or public keys, watch-only
+  errors.ts           public error codes, shared by every layer
+  runtime/            everything tied to the @utexo/rgb-lib-wasm version
+    load.ts           loads the WASM module once per page
+    types.ts          the runtime API this package calls
+    session.ts        the open wallet: handle, sync, sign, flush
+    codec.ts          decoding of every WasmWallet result to the core types
+    rgb-lib-messages.generated.ts   beta.4 error table (generated)
+```
+
+Rules:
+
+- Imports point one way: `rgb-lib-web` → `backend` → `operations` →
+  `runtime/`. `config`, `keys` and `errors` are shared; `runtime/` imports
+  nothing from `backend` or `operations`.
+- A runtime upgrade changes `runtime/` (and the fixtures and golden results)
+  only.
+- A new file only when an existing one passes about 800 lines or gets a second
+  job. No `utils/`: each helper belongs to the layer that uses it.
+- Each file starts with what it does, who calls it and what it depends on.
 
 `prepare` runs before the call is queued and has no side effects, so an
 invalid call fails at once. `execute` runs as one queued task: WASM calls
@@ -141,7 +162,7 @@ tag `v1.0.0-beta.4` (`f0e266f`).
   absent `Option`.
 - Integers are checked by their Rust type (`u8`, `u32`, `i32`, `u64`, `i64`);
   enum variants must be ones beta.4 has.
-- `FIELDS` in `src/codec.ts` lists every field of the 21 beta.4 structs the
+- `FIELDS` in `src/runtime/codec.ts` lists every field of the 21 beta.4 structs the
   adapter reads, each `mapped` (public), `internal` (used, not public) or
   dropped with the reason. Only `mapped` and `internal` fields are read;
   unknown fields are ignored at runtime, so an additive runtime release keeps
@@ -149,7 +170,7 @@ tag `v1.0.0-beta.4` (`f0e266f`).
 - Inputs go in the wire form beta.4 takes: `BigInt` for u64 amounts, expiry
   and fee rates; decimal strings for `WitnessData`.
 - Runtime errors map to public codes by the table in
-  `src/rgb-lib-messages.generated.ts`, generated from the Rust source; other
+  `src/runtime/rgb-lib-messages.generated.ts`, generated from the Rust source; other
   messages are `NATIVE_ERROR`.
 
 ## Examples

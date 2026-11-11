@@ -5,6 +5,11 @@
  * `RgbLibWeb.create({ network, mnemonic })` loads the WASM (once per page),
  * opens the wallet and returns it. `generateKeys` comes from
  * `@utexo/rgb-sdk-core` and needs no WASM.
+ *
+ * Exports only. Layout: `rgb-lib-web.ts` (public API) → `backend.ts`
+ * (lifecycle, queue) → `operations.ts` (rules) → `runtime/` (everything tied
+ * to the rgb-lib-wasm version). `config.ts`, `keys.ts` and `errors.ts` are
+ * shared.
  */
 export { RgbLibWeb } from './rgb-lib-web.js';
 export { generateKeys } from '@utexo/rgb-sdk-core';

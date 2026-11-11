@@ -1,19 +1,22 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import type { Network } from '@utexo/rgb-sdk-core';
-import type { ResolvedRgbLibWebConfig } from './config.js';
-import { record, str } from './codec.js';
-import { RgbLibWebError } from './errors.js';
-import type { RgbLibWebPublicKeys } from './keys.js';
-import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './runtime/types.js';
-
 /**
  * One open rgb-lib-wasm wallet: a thin wrapper that opens and closes it,
  * holds the online handle, syncs, signs and flushes (ADR-0002 step 4). It
  * takes and returns WASM values; the operations (`operations.ts`) build the
  * arguments and decode the results. Calls must be serialized by the caller:
  * the WASM wallet panics on overlapping calls. Nothing here enqueues work.
+ *
+ * Called by: `backend.ts` (open, connect, close) and `operations.ts` (the
+ * wallet calls). Depends on: `types.ts`, `codec.ts` (scalars), `config.ts`,
+ * `keys.ts`, `errors.ts`.
  */
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import type { Network } from '@utexo/rgb-sdk-core';
+import type { ResolvedRgbLibWebConfig } from '../config.js';
+import { record, str } from './codec.js';
+import { RgbLibWebError } from '../errors.js';
+import type { RgbLibWebPublicKeys } from '../keys.js';
+import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './types.js';
 
 /** rgb-lib-wasm's `BitcoinNetwork` serde names. `utexo` is a signet. */
 const WASM_NETWORKS: Readonly<Record<Network, string>> = {

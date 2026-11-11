@@ -3,6 +3,7 @@
  * described by shape. `init()` loads the real module (`load.ts`); tests and
  * custom builds can pass their own as the `runtime` constructor argument.
  *
+ * Used by: `load.ts`, `session.ts`, `config.ts` (the `runtime` option).
  * `tests/types/` checks that the real module matches.
  * Values typed `unknown` are JS objects built by serde-wasm-bindgen; u64
  * values in them arrive as `bigint`.

@@ -4,7 +4,7 @@
 // rgb-lib-wasm rejects with the error's display text only. Each row is a text
 // whose code is not NATIVE_ERROR: [variant, code, pattern]. A {field} in the
 // Rust text matches any text.
-import type { RgbLibWebErrorCode } from './errors.js';
+import type { RgbLibWebErrorCode } from '../errors.js';
 
 export const RGB_LIB_WASM_VERSION = '1.0.0-beta.4';
 

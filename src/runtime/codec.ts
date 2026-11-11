@@ -1,22 +1,3 @@
-import { AssetSchema } from '@utexo/rgb-sdk-core';
-import type {
-  AssetBfa,
-  AssetIfa,
-  AssetNIA,
-  BitcoinNetwork,
-  RefreshTransfersResult,
-  Transaction,
-  TransactionType,
-  TransferStatus,
-  WalletAssignment,
-  WalletInvoiceData,
-  WalletListAssets,
-  WalletTransfer,
-  WalletUnspent,
-} from '@utexo/rgb-sdk-core';
-import { RgbLibWebError } from './errors.js';
-import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
-
 /**
  * Decoding of rgb-lib-wasm 1.0.0-beta.4 results (ADR-0002, "Rules for
  * codec.ts"). Pure functions, in two stages:
@@ -35,7 +16,28 @@ import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
  * `operations.ts` calls both stages on every WasmWallet result, inside the
  * queued task. `encodeAssignment` is the one encoder: it turns a decoded
  * invoice assignment back into a WASM argument.
+ *
+ * Called by: `operations.ts` and `session.ts`. Depends on: the generated
+ * error table (`rgb-lib-messages.generated.ts`), `errors.ts`.
  */
+import { AssetSchema } from '@utexo/rgb-sdk-core';
+import type {
+  AssetBfa,
+  AssetIfa,
+  AssetNIA,
+  BitcoinNetwork,
+  RefreshTransfersResult,
+  Transaction,
+  TransactionType,
+  TransferStatus,
+  WalletAssignment,
+  WalletInvoiceData,
+  WalletListAssets,
+  WalletTransfer,
+  WalletUnspent,
+} from '@utexo/rgb-sdk-core';
+import { RgbLibWebError } from '../errors.js';
+import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
 
 // ── field tables ────────────────────────────────────────────────────────────
 

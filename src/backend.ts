@@ -1,3 +1,31 @@
+/**
+ * The engine's control layer (ADR-0002): one wallet profile, one queue.
+ *
+ * A wallet operation (`run`, `withOptions` or `checked`) goes through:
+ * 1. synchronous checks on an owned copy of the params: the params object,
+ *    `skipSync`, watch-only for operations that sign, then `prepare` from
+ *    `operations.ts`. An invalid call queues nothing; the public method
+ *    (`guarded()`) returns the error as a rejected Promise;
+ * 2. admission (`run`): refused once `destroy()` was called;
+ * 3. for online operations, lazy connect, before entering the queue (the
+ *    connect queues its own call); the wallet must already be open (`init()`);
+ * 4. `execute` as one task in the serial queue, so WASM calls never overlap.
+ *
+ * Not every method has every stage: reads without params have no `prepare`;
+ * `listAssets` checks its schema filter inside the queued task, as on React
+ * Native, so that error keeps its place after the admission checks; the
+ * lifecycle methods (`init`, `unlock`, `destroy`) and the network getters
+ * have their own paths.
+ *
+ * It owns the lifecycle (open, connect, `destroy()` waiting for accepted
+ * work) and maps errors to the public codes. It holds no wallet rules and
+ * reads no WASM values: those are in `operations.ts` and `runtime/codec.ts`. The
+ * admission, queue and connect rules are ported from `@utexo/rgb-lib-rn`
+ * (`rgb-lib/backend.ts`).
+ *
+ * Called by: `rgb-lib-web.ts`. Depends on: `operations.ts`, `runtime/`
+ * (session, load), `config.ts`, `keys.ts`, `errors.ts`.
+ */
 import { ValidationError } from '@utexo/rgb-sdk-core';
 import type {
   FailTransfersRequest,
@@ -38,33 +66,7 @@ import * as ops from './operations.js';
 import { skipSyncOf, syncs } from './operations.js';
 import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
-import { WasmSession } from './session.js';
-
-/**
- * The engine's control layer (ADR-0002): one wallet profile, one queue.
- *
- * A wallet operation (`run`, `withOptions` or `checked`) goes through:
- * 1. synchronous checks on an owned copy of the params: the params object,
- *    `skipSync`, watch-only for operations that sign, then `prepare` from
- *    `operations.ts`. An invalid call queues nothing; the public method
- *    (`guarded()`) returns the error as a rejected Promise;
- * 2. admission (`run`): refused once `destroy()` was called;
- * 3. for online operations, lazy connect, before entering the queue (the
- *    connect queues its own call); the wallet must already be open (`init()`);
- * 4. `execute` as one task in the serial queue, so WASM calls never overlap.
- *
- * Not every method has every stage: reads without params have no `prepare`;
- * `listAssets` checks its schema filter inside the queued task, as on React
- * Native, so that error keeps its place after the admission checks; the
- * lifecycle methods (`init`, `unlock`, `destroy`) and the network getters
- * have their own paths.
- *
- * It owns the lifecycle (open, connect, `destroy()` waiting for accepted
- * work) and maps errors to the public codes. It holds no wallet rules and
- * reads no WASM values: those are in `operations.ts` and `codec.ts`. The
- * admission, queue and connect rules are ported from `@utexo/rgb-lib-rn`
- * (`rgb-lib/backend.ts`).
- */
+import { WasmSession } from './runtime/session.js';
 
 /** A failed command must not poison the queue. */
 class SerialExecutor {

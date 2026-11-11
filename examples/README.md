@@ -9,6 +9,6 @@ L1 only. Each file exports one async function; call it from your app.
 | `create-utxos-asset.ts` | colorable UTXOs, issuing an NIA asset                      |
 | `transfer.ts`           | invoice, `onchainSend`, refresh                            |
 
-Backup and restore examples come with the backup work (ADR-0003).
+Backup and restore are described in the package README.
 
 `npm test` type-checks these files against the built package.

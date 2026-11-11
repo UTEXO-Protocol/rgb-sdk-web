@@ -1,5 +1,5 @@
 // rgb-lib-wasm rejects with the error's display text only. RgbLibWeb finds
-// the rgb-lib variant from the beta.4 texts and gives the rgb-lib-rn code
+// the rgb-lib variant from the beta.4 texts and gives the rgb-sdk-rn code
 // (Invalid* → INVALID_PARAMS, Insufficient* → INSUFFICIENT_FUNDS, …).
 // fixtures/error-texts/ is generated from the pinned Rust source with
 // `npm run errors:generate`; it lists every public Error and binding text.
@@ -77,7 +77,7 @@ describe('rgb-lib-wasm beta.4 error texts', () => {
     });
   }
 
-  it('maps the variants by the rgb-lib-rn rules', () => {
+  it('maps the variants by the rgb-sdk-rn rules', () => {
     const exceptions = new Set(Object.keys(meta.ambiguous));
     for (const t of texts.filter((x) => x.source === 'error')) {
       if (exceptions.has(t.text)) continue;

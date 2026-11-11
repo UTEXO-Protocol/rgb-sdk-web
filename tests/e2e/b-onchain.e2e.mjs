@@ -149,7 +149,7 @@ test('B: estimateFeeRate on regtest', async ({ page }) => {
     expectFields(result, { feeRate: { type: 'number', min: 1 } });
     expectNoWireKeys(result);
   }
-  // Same code as rgb-lib-rn: its integer() check reports INVALID_CONFIG.
+  // Same code as rgb-sdk-rn: its integer() check reports INVALID_CONFIG.
   expect((await wcallError(page, 'estimateFeeRate', 0)).code).toBe(
     'INVALID_CONFIG'
   );

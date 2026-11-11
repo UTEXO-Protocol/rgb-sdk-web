@@ -62,7 +62,7 @@ function fail(message: string): never {
 }
 
 // ── input amounts ───────────────────────────────────────────────────────────
-// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/amounts.ts`). They return checked
+// Ported from `@utexo/rgb-sdk-rn` (`rgb-lib/amounts.ts`). They return checked
 // decimal strings; the wire helpers below turn them into BigInt (or keep the
 // string for WitnessData). No u64 is ever rounded. Output numbers are decoded
 // in `runtime/codec.ts`.

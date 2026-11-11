@@ -40,7 +40,7 @@ test('A: lifecycle, network info, identity, capabilities, destroy', async ({
   report('getNetworkInfo', net);
   expectFields(net, {
     network: { oneOf: ['regtest'] },
-    // Optional in the contract. rgb-lib-rn reads it from the native wallet;
+    // Optional in the contract. rgb-sdk-rn reads it from the native wallet;
     // rgb-lib-wasm has no source for it, so RgbLibWeb leaves it out.
     blockHeight: { type: 'number', min: 101, optional: true },
   });

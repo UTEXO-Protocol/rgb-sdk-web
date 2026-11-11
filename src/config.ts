@@ -2,7 +2,7 @@
 // checks (INVALID_CONFIG, UNSUPPORTED_CAPABILITY), before anything opens. Also
 // `integer()`, the bound check `operations.ts` uses for its params.
 // rgb-lib-wasm is built with Esplora only: Electrum and bitcoind indexers are
-// rejected. Ported from `@utexo/rgb-lib-rn` (`rgb-lib/config.ts`,
+// rejected. Ported from `@utexo/rgb-sdk-rn` (`rgb-lib/config.ts`,
 // `network-endpoints.ts`).
 
 import {
@@ -147,7 +147,7 @@ export interface ResolvedRgbLibWebConfig {
 export const DEFAULT_EVM_MINT_LOCK_BLOCKS: Readonly<RgbLibWebMintLockBlocks> =
   Object.freeze({ min: 1200, max: 28800 });
 
-/** The `@utexo/rgb-lib-rn` defaults; only Esplora (HTTP) indexers apply here. */
+/** The `@utexo/rgb-sdk-rn` defaults; only Esplora (HTTP) indexers apply here. */
 const SDK_INDEXER_URLS: Readonly<Record<Network, string>> = Object.freeze({
   ...CORE_DEFAULT_INDEXER_URLS,
   mainnet: 'ssl://electrs-01.utexo.com:50002',

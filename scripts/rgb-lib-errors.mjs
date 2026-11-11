@@ -28,16 +28,16 @@ const AMBIGUOUS = {
     variant: 'InvalidExpiration',
     code: 'INVALID_PARAMS',
     reason:
-      'ExpirationInvalid (NATIVE_ERROR by the rgb-lib-rn rule) and InvalidExpiration print the same text; both reject the expiration the caller passed, and the earlier prefix rule gave INVALID_PARAMS',
+      'ExpirationInvalid (NATIVE_ERROR by the rgb-sdk-rn rule) and InvalidExpiration print the same text; both reject the expiration the caller passed, and the earlier prefix rule gave INVALID_PARAMS',
   },
 };
 
-/** The rgb-lib-rn rule (rgb-lib-rn/src/wallet/rgb-lib/errors.ts), plus Offline. */
+/** The rgb-sdk-rn rule (@utexo/rgb-sdk-rn src/wallet/rgb-lib/errors.ts), plus Offline. */
 function codeOf(source, variant) {
   if (source === 'binding') return 'INVALID_PARAMS';
   if (variant === 'AssetNotFound') return 'ASSET_NOT_FOUND';
   if (variant === 'WatchOnly') return 'UNSUPPORTED_CAPABILITY';
-  // Kept from the earlier prefix rule; rgb-lib-rn reports NATIVE_ERROR here.
+  // Kept from the earlier prefix rule; rgb-sdk-rn reports NATIVE_ERROR here.
   if (variant === 'Offline') return 'WALLET_OFFLINE';
   if (variant.startsWith('Invalid')) return 'INVALID_PARAMS';
   if (variant.startsWith('Insufficient')) return 'INSUFFICIENT_FUNDS';

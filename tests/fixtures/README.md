@@ -1,8 +1,7 @@
 # rgb-lib-wasm fixtures
 
 Raw values of `@utexo/rgb-lib-wasm` 1.0.0-beta.4, kept exactly as the runtime
-builds them: `bigint`, `Map` and keys set to `undefined` included (ADR-0002
-step 0). Decoders are tested against these, not only against the handwritten
+builds them: `bigint`, `Map` and keys set to `undefined` included. Decoders are tested against these, not only against the handwritten
 fake.
 
 | File | Source |
@@ -31,7 +30,7 @@ RGB_LIB_WASM_SRC=<rgb-lib-wasm checkout at v1.0.0-beta.4> npm run errors:generat
 - `tests/unit/golden.test.mjs` runs every sample through the built engine and
   compares the public result, the error and the runtime calls with the golden
   file. Its `KNOWN_DEFECTS` list names where the current code differs from the
-  strict rules in `negative.mjs`; it is empty since ADR-0002 step 1.
+  strict rules in `negative.mjs`; it is empty.
 
 The capture fails, before it removes anything, on a value `toSource` cannot
 keep exactly (a sparse array, a null-prototype object, a class instance). The

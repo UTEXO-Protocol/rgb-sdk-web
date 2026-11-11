@@ -1,6 +1,6 @@
 // Public errors: RgbLibWebError, its codes, and the mapping to them of runtime
 // rejections (by the generated message table) and core validation errors.
-// Shared by every layer. Ported from `@utexo/rgb-lib-rn` (`wallet-errors.ts`,
+// Shared by every layer. Ported from `@utexo/rgb-sdk-rn` (`wallet-errors.ts`,
 // `rgb-lib/errors.ts`).
 
 import { isEngineError, SDKError } from '@utexo/rgb-sdk-core';
@@ -71,7 +71,7 @@ export function asCause(value: unknown): Error | undefined {
 }
 
 /**
- * The code of a beta.4 error message: the rgb-lib-rn variant rules, applied
+ * The code of a beta.4 error message: the rgb-sdk-rn variant rules, applied
  * by scripts/rgb-lib-errors.mjs. A text the table does not know, such as a
  * changed text in another runtime version, is NATIVE_ERROR.
  */

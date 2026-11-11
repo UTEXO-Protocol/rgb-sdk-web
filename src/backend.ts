@@ -20,7 +20,7 @@
  * It owns the lifecycle (open, connect, `destroy()` waiting for accepted
  * work) and maps errors to the public codes. It holds no wallet rules and
  * reads no WASM values: those are in `operations.ts` and `runtime/codec.ts`. The
- * admission, queue and connect rules are ported from `@utexo/rgb-lib-rn`
+ * admission, queue and connect rules are ported from `@utexo/rgb-sdk-rn`
  * (`rgb-lib/backend.ts`).
  *
  * Called by: `rgb-lib-web.ts`. Depends on: `operations.ts`, `runtime/`

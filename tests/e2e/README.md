@@ -8,9 +8,9 @@ wallet returns, field by field. It is ported from rgb-sdk-web `tests/e2e`
 
 ## Running
 
-1. Start the stand. The steps are in [`docs/e2e-local-stand.md`](../../../docs/e2e-local-stand.md):
+1. Start the stand:
    bitcoind, esplora, **RGB proxy 0.4.0 or newer** and the regtest helper from
-   `rgb-lib-wasm/tests/docker-compose.ci.yml`, then mine 111 blocks.
+   `tests/docker-compose.ci.yml` of the rgb-lib-wasm repository, then mine 111 blocks.
 2. Run:
 
    ```bash

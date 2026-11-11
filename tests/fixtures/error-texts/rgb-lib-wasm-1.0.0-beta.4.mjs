@@ -12,7 +12,7 @@ export const meta = {
     "Invalid expiration": {
       "variant": "InvalidExpiration",
       "code": "INVALID_PARAMS",
-      "reason": "ExpirationInvalid (NATIVE_ERROR by the rgb-lib-rn rule) and InvalidExpiration print the same text; both reject the expiration the caller passed, and the earlier prefix rule gave INVALID_PARAMS"
+      "reason": "ExpirationInvalid (NATIVE_ERROR by the rgb-sdk-rn rule) and InvalidExpiration print the same text; both reject the expiration the caller passed, and the earlier prefix rule gave INVALID_PARAMS"
     }
   },
 };

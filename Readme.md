@@ -5,10 +5,10 @@
 > `@utexo/rgb-sdk-web` is the RLN (Lightning) wallet; that code stays on `dev`.
 
 `RgbLibWeb` runs RGB on-chain (L1) wallets in the browser over
-[`@utexo/rgb-lib-wasm`](https://github.com/UTEXO-Protocol/rgb-lib-wasm), behind
+[`@utexo/rgb-lib-wasm`](https://www.npmjs.com/package/@utexo/rgb-lib-wasm), behind
 the `SharedWalletApi` contract of `@utexo/rgb-sdk-core`. Use it on its own, or
 through the `UTEXOWallet` facade of `@utexo/rgb-sdk`, which gives the same API on
-React Native (`@utexo/rgb-lib-rn`).
+React Native (`@utexo/rgb-sdk-rn`).
 
 This package has no Lightning.
 
@@ -180,7 +180,7 @@ copy that file next to the bundled JS, or the app sets `wasmUrl`.
 
 ## How it works
 
-Layout (ADR-0002):
+Layout:
 
 ```
 src/
@@ -254,10 +254,10 @@ issuing, a transfer.
 | 2. Move `RgbLibWeb` and its tests here | done |
 | 3. Load the WASM runtime inside the package | done |
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
-| VSS backup: zero config, `backupToVss()`, automatic upload (ADR-0003 B1) | done |
-| VSS restore before connect, unrestored-backup hold (ADR-0003 B2) | done |
-| Byte backup: `exportBackup()`, `restoreBackup()`, with e2e (ADR-0003 B3) | done |
-| VSS backup and restore e2e against a local VSS server (ADR-0003 B4) | done |
+| VSS backup: zero config, `backupToVss()`, automatic upload | done |
+| VSS restore before connect, unrestored-backup hold | done |
+| Byte backup: `exportBackup()`, `restoreBackup()`, with e2e | done |
+| VSS backup and restore e2e against a local VSS server | done |
 
 ## Development
 
@@ -270,6 +270,5 @@ npm run golden:update     # rewrite the golden results after an intended change
 RGB_LIB_WASM_SRC=<rgb-lib-wasm checkout> npm run errors:check  # the error table matches the Rust source
 ```
 
-`@utexo/rgb-sdk-core` comes from `../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz`
-(the split core) until it is published. `@utexo/rgb-sdk` (the facade) is a dev
-dependency, only for tests that wrap `RgbLibWeb` in `UTEXOWallet`.
+`@utexo/rgb-sdk` (the facade) is a dev dependency, only for tests that wrap
+`RgbLibWeb` in `UTEXOWallet`.

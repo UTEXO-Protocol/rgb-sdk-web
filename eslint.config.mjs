@@ -6,7 +6,7 @@ import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
-    files: ['**/*.{js,ts,tsx}'],
+    files: ['**/*.{js,mjs,ts,tsx}'],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -42,6 +42,8 @@ export default [
       'lib/',
       'dist/',
       'examples/',
+      'tests/e2e/.out/',
+      'tests/e2e/.results/',
     ],
   },
 ];

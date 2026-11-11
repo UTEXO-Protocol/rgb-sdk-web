@@ -14,3 +14,7 @@ scripts/
 .rgb-wallet/
 test-results/
 playwright-report/
+
+# e2e output
+tests/e2e/.out/
+tests/e2e/.results/

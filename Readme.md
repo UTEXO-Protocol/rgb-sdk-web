@@ -17,8 +17,8 @@ This package has no Lightning.
 | Step | State |
 |---|---|
 | 1. Remove RLN, depend on the split core and `@utexo/rgb-lib-wasm` 1.0.0-beta.4 | done |
-| 2. Move `RgbLibWeb` and its tests here | next |
-| 3. Load the WASM runtime inside the package | planned |
+| 2. Move `RgbLibWeb` and its tests here | done |
+| 3. Load the WASM runtime inside the package | next |
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys` | planned |
 
 The planned start:
@@ -35,8 +35,12 @@ const balance = await wallet.getBtcBalance();
 
 ```bash
 npm install
-npm test        # typecheck, lint, build
+npm test          # typecheck, lint, build, unit tests (node:test)
+npm run test:e2e  # Playwright over the real WASM; needs the regtest stand (tests/e2e/README.md)
 ```
+
+`@utexo/rgb-sdk` (the facade) is a dev dependency, only for tests that wrap
+`RgbLibWeb` in `UTEXOWallet`.
 
 `@utexo/rgb-sdk-core` comes from `../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz`
 (the split core) until it is published.

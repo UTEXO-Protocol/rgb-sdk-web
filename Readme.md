@@ -86,7 +86,9 @@ do not upload to the production server.
   (`logger.warn`) without failing anything. `destroy()` waits for it.
 - Nothing is uploaded on `init()`: a restore may still run before the wallet
   connects.
-- `backupNow()` uploads now and returns the server version.
+- `backupToVss()` uploads now and returns the server version.
+- `getVssBackupInfo()` reads the server state: `{ backupExists,
+  serverVersion, backupRequired, lastBackupError }`.
 - A watch-only wallet has no mnemonic, so it gets VSS only with `vss`.
 
 ## Restore between open and connect
@@ -105,13 +107,14 @@ await wallet.unlock();          // online
 - A wallet with local data (assets, transfers, UTXOs or transactions) is
   refused unless `{ overwrite: true }`, so a restore never wipes newer local
   state by accident.
-- It is on the engine only; the facade does not forward it yet.
+- The `UTEXOWallet` facade forwards it, with `backupToVss()` and
+  `getVssBackupInfo()`.
 - **Unrestored backup.** On the first connection of a wallet that was empty
   before it (judged before the connect: its chain scan brings in the UTXOs of
   this mnemonic) and was not restored, the engine asks the server whether a
   backup exists. If one does, it belongs to this mnemonic from another
   device: the engine logs a warning and holds automatic uploads, so the first
-  mutation does not replace it. `backupNow()` lifts the hold and replaces the
+  mutation does not replace it. `backupToVss()` lifts the hold and replaces the
   server copy on purpose.
 - The core logger prints only errors by default. To see the VSS warnings
   (a held upload, a failed automatic backup), raise its level:
@@ -119,8 +122,10 @@ await wallet.unlock();          // online
 
 ## Byte backup
 
-`BackupBytesApi` from core: an encrypted backup as bytes, with no server. The
-app stores them where it wants (a file download, its own storage).
+`BackupExportApi` and `BackupRestoreApi` from core: an encrypted backup as
+bytes, with no server. The app stores them where it wants (a file download,
+its own storage). A backup restores only on this engine: a React Native
+backup does not open here, and the other way round.
 
 ```ts
 const bytes = await wallet.exportBackup({ password }); // Uint8Array
@@ -249,7 +254,7 @@ issuing, a transfer.
 | 2. Move `RgbLibWeb` and its tests here | done |
 | 3. Load the WASM runtime inside the package | done |
 | 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object | done |
-| VSS backup: zero config, `backupNow()`, automatic upload (ADR-0003 B1) | done |
+| VSS backup: zero config, `backupToVss()`, automatic upload (ADR-0003 B1) | done |
 | VSS restore before connect, unrestored-backup hold (ADR-0003 B2) | done |
 | Byte backup: `exportBackup()`, `restoreBackup()`, with e2e (ADR-0003 B3) | done |
 | VSS backup and restore e2e against a local VSS server (ADR-0003 B4) | done |

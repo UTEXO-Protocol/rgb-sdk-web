@@ -40,6 +40,7 @@ import type {
   ReceiveParams,
   RefreshTransfersResult,
   SendBtcBeginRequestModel,
+  VssBackupInfo,
   WalletIdentity,
 } from '@utexo/rgb-sdk-core';
 import {
@@ -150,7 +151,7 @@ export class RgbLibWebBackend {
   /**
    * Automatic uploads are held: the first connection found a server backup
    * that this empty wallet did not restore, and an upload would replace it.
-   * Cleared by `restoreFromVss()` or an explicit `backupNow()`.
+   * Cleared by `restoreFromVss()` or an explicit `backupToVss()`.
    */
   private backupHeld = false;
   /** The unrestored-backup check ran or is queued (once per session). */
@@ -779,25 +780,52 @@ export class RgbLibWebBackend {
   // ── VSS backup (ADR-0003) ────────────────────────────────────────────────
 
   /** Uploads now and returns the server version. No indexer connection needed. */
-  backupNow(): Promise<number> {
-    if (this.vss.kind === 'off')
-      throw new RgbLibWebError(
-        'INVALID_CONFIG',
-        `VSS backup is off (${this.vss.reason}); pass vssUrl or vss to turn it on`,
-        'backupNow'
-      );
-    return this.run('backupNow', false, async (s) => {
-      if (!this.vssOn)
-        throw new RgbLibWebError(
-          'INVALID_CONFIG',
-          'VSS backup needs the mnemonic or an explicit vss config; this wallet was opened watch-only',
-          'backupNow'
-        );
-      const version = await ops.backupNow.execute(s);
+  backupToVss(): Promise<number> {
+    return this.runVss('backupToVss', 'VSS backup', async (s) => {
+      const version = await ops.backupToVss.execute(s);
       // An explicit upload replaces the cloud copy on purpose.
       this.backupHeld = false;
       return version;
     });
+  }
+
+  /** What the VSS server holds for this wallet. No indexer connection needed. */
+  getVssBackupInfo(): Promise<VssBackupInfo> {
+    return this.runVss('getVssBackupInfo', 'VSS backup info', (s) =>
+      ops.vssBackupInfo.execute(s)
+    );
+  }
+
+  /** VSS off, or watch-only without `vss`: INVALID_CONFIG, else queued. */
+  private runVss<T>(
+    operation: string,
+    what: string,
+    task: (s: WasmSession) => Promise<T>
+  ): Promise<T> {
+    this.assertVssConfigured(operation);
+    return this.run(operation, false, async (s) => {
+      this.assertVssOn(operation, what);
+      return task(s);
+    });
+  }
+
+  private assertVssConfigured(operation: string): void {
+    if (this.vss.kind === 'off')
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        `VSS backup is off (${this.vss.reason}); pass vssUrl or vss to turn it on`,
+        operation
+      );
+  }
+
+  /** Inside the task: the identity is set by the open task. */
+  private assertVssOn(operation: string, what: string): void {
+    if (!this.vssOn)
+      throw new RgbLibWebError(
+        'INVALID_CONFIG',
+        `${what} needs the mnemonic or an explicit vss config; this wallet was opened watch-only`,
+        operation
+      );
   }
 
   /**
@@ -807,19 +835,7 @@ export class RgbLibWebBackend {
    */
   restoreFromVss(options?: { overwrite?: boolean }): Promise<void> {
     const prepared = ops.restoreFromVss.prepare(snapshot(options));
-    if (this.vss.kind === 'off')
-      throw new RgbLibWebError(
-        'INVALID_CONFIG',
-        `VSS backup is off (${this.vss.reason}); pass vssUrl or vss to turn it on`,
-        'restoreFromVss'
-      );
-    return this.run('restoreFromVss', false, async (s) => {
-      if (!this.vssOn)
-        throw new RgbLibWebError(
-          'INVALID_CONFIG',
-          'VSS restore needs the mnemonic or an explicit vss config; this wallet was opened watch-only',
-          'restoreFromVss'
-        );
+    return this.runVss('restoreFromVss', 'VSS restore', async (s) => {
       // In the task: a connect queued ahead of this one (unlock() called
       // first, without awaiting) has finished by now and counts too.
       if (this.online) throw this.restoreTooLate('restoreFromVss');
@@ -838,7 +854,7 @@ export class RgbLibWebBackend {
     );
   }
 
-  // ── byte backup (BackupBytesApi, ADR-0003 B3) ───────────────────────────
+  // ── byte backup (BackupExportApi, BackupRestoreApi, ADR-0003 B3) ───────────────────────────
 
   /** The encrypted backup as bytes. Works offline, on any wallet. */
   exportBackup(params: { password: string }): Promise<Uint8Array> {
@@ -885,10 +901,10 @@ export class RgbLibWebBackend {
       .run(async () => {
         const s = this.session;
         if (!s) return;
-        if (!(await ops.vssBackupExists.execute(s))) return;
+        if (!(await ops.vssBackupInfo.execute(s)).backupExists) return;
         this.backupHeld = true;
         logger.warn(
-          'RgbLibWeb: a VSS backup exists for this wallet but was not restored; automatic backups are held. Restore it (destroy, create again, restoreFromVss() before unlock()) or call backupNow() to replace it with this wallet'
+          'RgbLibWeb: a VSS backup exists for this wallet but was not restored; automatic backups are held. Restore it (destroy, create again, restoreFromVss() before unlock()) or call backupToVss() to replace it with this wallet'
         );
       })
       .catch((error: unknown) => {

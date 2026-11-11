@@ -1,5 +1,5 @@
 // VSS backup (ADR-0003 B1, B2): the identity derived on init(), the options,
-// backupNow(), the automatic upload after mutations, restoreFromVss() and the
+// backupToVss(), the automatic upload after mutations, restoreFromVss() and the
 // check for an unrestored server backup. The signing key is a secret: no
 // error or log here may contain it.
 import { describe, it } from 'node:test';
@@ -11,6 +11,7 @@ import {
   isEngineError,
   logger,
 } from '@utexo/rgb-sdk-core';
+import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
 
@@ -91,7 +92,7 @@ describe('VSS identity on init()', () => {
   it('regtest without vssUrl or vss: off, and VSS calls say why', async () => {
     const { engine, names } = await ready({ params: { vssUrl: undefined } });
     assert.ok(!names().includes('configureVssBackup'));
-    await assert.rejects(engine.backupNow(), (error) => {
+    await assert.rejects(engine.backupToVss(), (error) => {
       assert.ok(isEngineError(error, 'INVALID_CONFIG'), error?.message);
       assert.match(error.message, /regtest without vssUrl/);
       return true;
@@ -188,24 +189,24 @@ describe('VSS options', () => {
   });
 });
 
-describe('backupNow()', () => {
+describe('backupToVss()', () => {
   it('uploads and returns the server version, without connecting', async () => {
     const { engine, names } = await ready();
-    assert.equal(await engine.backupNow(), 3);
+    assert.equal(await engine.backupToVss(), 3);
     assert.ok(names().includes('vssBackup'));
     assert.ok(!names().includes('goOnline'));
   });
 
   it('with VSS off, rejects with INVALID_CONFIG before any call', async () => {
     const { engine, names } = create({ params: { vssUrl: null } });
-    await rejects(engine.backupNow(), 'INVALID_CONFIG');
+    await rejects(engine.backupToVss(), 'INVALID_CONFIG');
     assert.deepEqual(names(), []);
   });
 
   it('on a watch-only wallet without vss, rejects with no wallet call', async () => {
     const { engine, names } = await ready({ keys: WATCH_ONLY });
     const before = names().length;
-    await rejects(engine.backupNow(), 'INVALID_CONFIG');
+    await rejects(engine.backupToVss(), 'INVALID_CONFIG');
     assert.deepEqual(names().slice(before), []);
   });
 
@@ -214,7 +215,7 @@ describe('backupNow()', () => {
       const { engine } = await ready({
         overrides: { vssBackup: async () => version },
       });
-      await rejects(engine.backupNow(), 'INVALID_NATIVE_RESPONSE');
+      await rejects(engine.backupToVss(), 'INVALID_NATIVE_RESPONSE');
     });
 
   it('a runtime failure is public and holds no key', async () => {
@@ -225,12 +226,89 @@ describe('backupNow()', () => {
         },
       },
     });
-    await assert.rejects(engine.backupNow(), (error) => {
+    await assert.rejects(engine.backupToVss(), (error) => {
       assert.ok(isEngineError(error), String(error));
-      assert.equal(error.operation, 'backupNow');
+      assert.equal(error.operation, 'backupToVss');
       noSecret(error);
       return true;
     });
+  });
+});
+
+describe('getVssBackupInfo()', () => {
+  it('reads the server state, without connecting', async () => {
+    const { engine, names } = await ready({
+      overrides: {
+        vssBackupInfo: async () => ({
+          backup_exists: true,
+          server_version: 7n,
+          backup_required: false,
+          last_backup_error: 'VSS error: HTTP error: 500',
+        }),
+      },
+    });
+    assert.deepEqual(await engine.getVssBackupInfo(), {
+      backupExists: true,
+      serverVersion: 7,
+      backupRequired: false,
+      lastBackupError: 'VSS error: HTTP error: 500',
+    });
+    assert.ok(!names().includes('goOnline'));
+  });
+
+  it('no server copy: version and error are null', async () => {
+    const { engine } = await ready({
+      overrides: {
+        vssBackupInfo: async () => ({
+          backup_exists: false,
+          backup_required: true,
+        }),
+      },
+    });
+    assert.deepEqual(await engine.getVssBackupInfo(), {
+      backupExists: false,
+      serverVersion: null,
+      backupRequired: true,
+      lastBackupError: null,
+    });
+  });
+
+  it('with VSS off, rejects with INVALID_CONFIG before any call', async () => {
+    const { engine, names } = create({ params: { vssUrl: null } });
+    await rejects(engine.getVssBackupInfo(), 'INVALID_CONFIG');
+    assert.deepEqual(names(), []);
+  });
+
+  it('on a watch-only wallet without vss, rejects with no wallet call', async () => {
+    const { engine, names } = await ready({ keys: WATCH_ONLY });
+    const before = names().length;
+    await rejects(engine.getVssBackupInfo(), 'INVALID_CONFIG');
+    assert.deepEqual(names().slice(before), []);
+  });
+
+  const invalid = [
+    null,
+    'info',
+    { backup_exists: 'yes', backup_required: true },
+    { backup_exists: true, backup_required: 1 },
+    { backup_exists: true, backup_required: true, server_version: -1n },
+    { backup_exists: true, backup_required: true, server_version: 2n ** 53n },
+    { backup_exists: true, backup_required: true, server_version: '3' },
+    { backup_exists: true, backup_required: true, last_backup_error: 5 },
+  ];
+  for (const info of invalid)
+    it(`rejects ${JSON.stringify(info, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))}`, async () => {
+      const { engine } = await ready({
+        overrides: { vssBackupInfo: async () => info },
+      });
+      await rejects(engine.getVssBackupInfo(), 'INVALID_NATIVE_RESPONSE');
+    });
+
+  it('is not a mutation: no automatic upload', async () => {
+    const { engine, args } = await ready();
+    await engine.getVssBackupInfo();
+    await engine.getAddress();
+    assert.equal(args('ensureInitialBackup').length, 0);
   });
 });
 
@@ -471,8 +549,8 @@ describe('unrestored server backup', () => {
     assert.equal(warn.mock.callCount(), 1);
     assert.match(warn.mock.calls[0].arguments[0], /was not restored/);
     noSecret(warn.mock.calls[0].arguments);
-    // An explicit backupNow() replaces the server copy and lifts the hold.
-    assert.equal(await engine.backupNow(), 3);
+    // An explicit backupToVss() replaces the server copy and lifts the hold.
+    assert.equal(await engine.backupToVss(), 3);
     await engine.issueAssetNia(NIA);
     await drained(engine);
     assert.equal(args('ensureInitialBackup').length, 1);
@@ -589,5 +667,17 @@ describe('unrestored server backup', () => {
     await engine.unlock();
     await drained(engine);
     assert.ok(!names().includes('vssBackupInfo'));
+  });
+});
+
+describe('VSS through the facade', () => {
+  it('UTEXOWallet forwards restoreFromVss, backupToVss and getVssBackupInfo', async () => {
+    const { engine, args } = create({ overrides: EMPTY });
+    const wallet = new UTEXOWallet({ engine });
+    await wallet.init();
+    await wallet.restoreFromVss();
+    assert.equal(args('vssRestoreBackup').length, 1);
+    assert.equal(await wallet.backupToVss(), 3);
+    assert.equal((await wallet.getVssBackupInfo()).backupExists, false);
   });
 });

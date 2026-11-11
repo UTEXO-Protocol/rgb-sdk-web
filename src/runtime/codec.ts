@@ -35,6 +35,7 @@ import type {
   WalletListAssets,
   WalletTransfer,
   WalletUnspent,
+  VssBackupInfo,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebError } from '../errors.js';
 import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
@@ -1152,16 +1153,37 @@ export function decodeBackupBytes(value: unknown): Uint8Array {
   return value.slice();
 }
 
-/** `vssBackupInfo`: only `backup_exists` is read. */
-export function decodeVssBackupExists(value: unknown): boolean {
-  const exists = (value as { backup_exists?: unknown } | null)?.backup_exists;
+/**
+ * `vssBackupInfo`: `{ backup_exists, server_version, backup_required,
+ * last_backup_error }`. The version is an i64 the binding sends as a bigint
+ * (a number is accepted too), absent or null when the server has none.
+ */
+export function decodeVssBackupInfo(value: unknown): VssBackupInfo {
+  if (typeof value !== 'object' || value === null)
+    rejected('Invalid VSS backup info');
+  const v = value as Record<string, unknown>;
+  const version = v.server_version;
+  const error = v.last_backup_error;
   if (
-    typeof value !== 'object' ||
-    value === null ||
-    typeof exists !== 'boolean'
+    typeof v.backup_exists !== 'boolean' ||
+    typeof v.backup_required !== 'boolean' ||
+    (error != null && typeof error !== 'string')
   )
     rejected('Invalid VSS backup info');
-  return exists;
+  let serverVersion: number | null = null;
+  if (version != null) {
+    // Number() of a bigint above 2^53 is not a safe integer, so it is refused.
+    const n = typeof version === 'bigint' ? Number(version) : version;
+    if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0)
+      rejected('Invalid VSS backup info');
+    serverVersion = n;
+  }
+  return {
+    backupExists: v.backup_exists,
+    serverVersion,
+    backupRequired: v.backup_required,
+    lastBackupError: (error as string | null | undefined) ?? null,
+  };
 }
 
 /** `getFeeEstimation`: an f64 in sat/vB. */

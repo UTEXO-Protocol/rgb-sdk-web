@@ -659,7 +659,7 @@ export function configureVss(
   return true;
 }
 
-export const backupNow = {
+export const backupToVss = {
   /** Uploads now; the new server version. */
   execute: async (s: WasmSession) =>
     codec.decodeVssVersion(await s.wallet.vssBackup()),
@@ -713,10 +713,10 @@ export function hasLocalData(s: WasmSession): boolean {
   );
 }
 
-/** Whether the server holds a backup for this wallet. */
-export const vssBackupExists = {
+/** What the server holds for this wallet. */
+export const vssBackupInfo = {
   execute: async (s: WasmSession) =>
-    codec.decodeVssBackupExists(await s.wallet.vssBackupInfo()),
+    codec.decodeVssBackupInfo(await s.wallet.vssBackupInfo()),
 };
 
 /** RN parity: a backup without a nonempty password is INVALID_CONFIG. */
@@ -741,7 +741,7 @@ function backupParams(params: unknown, operation: string): object {
   return params;
 }
 
-/** `BackupBytesApi.exportBackup`: the encrypted backup, as an owned copy. */
+/** `BackupExportApi.exportBackup`: the encrypted backup, as an owned copy. */
 export const exportBackup = {
   prepare(params: unknown): { password: string } {
     return {
@@ -758,7 +758,7 @@ export const exportBackup = {
   },
 };
 
-/** `BackupBytesApi.restoreBackup`, between init() and the first connection. */
+/** `BackupRestoreApi.restoreBackup`, between init() and the first connection. */
 export const restoreBackup = {
   prepare(params: unknown): {
     bytes: Uint8Array;

@@ -1,4 +1,4 @@
-// Byte backup (BackupBytesApi, ADR-0003 B3): exportBackup() and
+// Byte backup (BackupExportApi, BackupRestoreApi, ADR-0003 B3): exportBackup() and
 // restoreBackup(), the restore window between init() and the first
 // connection, and forwarding through the UTEXOWallet facade.
 import { describe, it } from 'node:test';
@@ -257,7 +257,7 @@ describe('restoreBackup()', () => {
   });
 });
 
-describe('BackupBytesApi through the facade', () => {
+describe('byte backup through the facade', () => {
   it('UTEXOWallet forwards exportBackup and restoreBackup', async () => {
     const { engine, args } = create({ overrides: EMPTY });
     const wallet = new UTEXOWallet({ engine });

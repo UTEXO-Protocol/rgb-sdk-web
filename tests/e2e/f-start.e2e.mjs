@@ -72,7 +72,7 @@ test('F: create() rejects an Electrum indexer before opening', async ({
   expect(env.error.code).toBe('UNSUPPORTED_CAPABILITY');
 });
 
-test('F: the real runtime takes the derived VSS identity; an unreachable server fails backupNow only', async ({
+test('F: the real runtime takes the derived VSS identity; an unreachable server fails backupToVss only', async ({
   page,
 }) => {
   wirePageLogging(page);
@@ -80,8 +80,8 @@ test('F: the real runtime takes the derived VSS identity; an unreachable server 
   const { mnemonic } = await startWallet(page, {
     vssUrl: 'http://127.0.0.1:59999/vss',
   });
-  const error = await wcallError(page, 'backupNow');
-  expect(error.operation).toBe('backupNow');
+  const error = await wcallError(page, 'backupToVss');
+  expect(error.operation).toBe('backupToVss');
   // The runtime reached the network: it took the derived identity.
   expect(error.code).toBe('NATIVE_ERROR');
   expect(error.detail.message).toMatch(/^VSS error/);

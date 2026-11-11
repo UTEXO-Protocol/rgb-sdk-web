@@ -57,7 +57,7 @@ async function backedUpWallet(page, ticker) {
     amounts: [55],
   });
   // The automatic uploads already ran; this is an explicit checkpoint.
-  const version = await wcall(page, 'backupNow');
+  const version = await wcall(page, 'backupToVss');
   expect(Number.isSafeInteger(version) && version > 0).toBe(true);
   return { ...boot, assetId, version };
 }
@@ -88,7 +88,7 @@ test('G: a wallet backed up to VSS restores into an empty profile', async ({
       unlock: false,
     });
     expect((await wcall(other, 'listAssets')).nia.length).toBe(0);
-    await wcall(other, 'engine.restoreFromVss');
+    await wcall(other, 'restoreFromVss');
     const after = await walletState(other, source.assetId);
     report('restored from VSS', after);
     expect(after).toEqual(before);
@@ -104,7 +104,7 @@ test('G: a wallet backed up to VSS restores into an empty profile', async ({
     expect(
       (await wcall(other, 'getAssetBalance', source.assetId)).settled
     ).toBe(55);
-    const late = await wcallError(other, 'engine.restoreFromVss');
+    const late = await wcallError(other, 'restoreFromVss');
     expect(late.code).toBe('WALLET_INVALID_STATE');
     await wcall(other, 'destroy');
   } finally {
@@ -148,7 +148,7 @@ test('G: a new device that skips the restore does not overwrite the server copy'
       vssUrl: VSS_URL,
       unlock: false,
     });
-    await wcall(c, 'engine.restoreFromVss');
+    await wcall(c, 'restoreFromVss');
     const restored = await wcall(c, 'listAssets');
     expect(restored.nia.map((x) => x.assetId)).toEqual([source.assetId]);
     await wcall(c, 'destroy');

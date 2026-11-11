@@ -1,6 +1,6 @@
-// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods, the
-// VssBackupApi and BackupBytesApi extensions, and the engine-only
-// restoreFromVss(). Each method passes through `backend.guarded()`
+// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods and the
+// backup extensions (BackupExportApi, BackupRestoreApi, VssBackupApi,
+// VssRestoreApi, VssBackupInfoApi). Each method passes through `backend.guarded()`
 // (synchronous argument errors become rejected Promises) to RgbLibWebBackend;
 // no wallet logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
@@ -17,9 +17,13 @@ import type {
   ReadOptions,
   ReceiveParams,
   SendBtcBeginRequestModel,
-  BackupBytesApi,
+  BackupExportApi,
+  BackupRestoreApi,
   SharedWalletApi,
   VssBackupApi,
+  VssBackupInfo,
+  VssBackupInfoApi,
+  VssRestoreApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebBackend } from './backend.js';
 import { splitConfig } from './config.js';
@@ -27,9 +31,9 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
- * the 29 `SharedWalletApi` methods and the `VssBackupApi` (`backupNow()`)
- * and `BackupBytesApi` (`exportBackup()`, `restoreBackup()`) extensions
- * (ADR-0003), plus `restoreFromVss()` on the engine only.
+ * the 29 `SharedWalletApi` methods and the backup extensions (ADR-0003):
+ * `exportBackup()`, `restoreBackup()` (bytes) and `backupToVss()`,
+ * `restoreFromVss()`, `getVssBackupInfo()` (VSS).
  *
  * ```ts
  * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
@@ -62,8 +66,11 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 export class RgbLibWeb
   implements
     SharedWalletApi<RgbLibWebUnlockParams | undefined>,
+    BackupExportApi,
+    BackupRestoreApi,
     VssBackupApi,
-    BackupBytesApi
+    VssRestoreApi,
+    VssBackupInfoApi
 {
   /** Embedded, never read from core: a newer core must not make this engine claim more. */
   readonly contractVersion = '1' as const;
@@ -245,13 +252,12 @@ export class RgbLibWeb
     return this.backend.syncWallet();
   }
 
-  // ── VssBackupApi (ADR-0003) ───────────────────────────────────────────────
+  // ── VSS backup (ADR-0003) ─────────────────────────────────────────────────
 
   /**
    * Restores the wallet from its VSS backup (ADR-0003). Call it after
    * `init()` and before `unlock()` or any online operation. A wallet that
-   * already has local data is refused unless `overwrite: true`. Engine-only:
-   * the facade does not forward it yet.
+   * already has local data is refused unless `overwrite: true`.
    */
   restoreFromVss(options?: { overwrite?: boolean }): Promise<void> {
     return this.backend.guarded('restoreFromVss', () =>
@@ -265,8 +271,21 @@ export class RgbLibWeb
    * mutation also queues an upload, so this is for an explicit checkpoint.
    * Rejects with `INVALID_CONFIG` when VSS is off.
    */
-  backupNow(): Promise<number> {
-    return this.backend.guarded('backupNow', () => this.backend.backupNow());
+  backupToVss(): Promise<number> {
+    return this.backend.guarded('backupToVss', () =>
+      this.backend.backupToVss()
+    );
+  }
+
+  /**
+   * What the VSS server holds for this wallet: whether a backup exists, its
+   * version, whether local changes wait for upload, and the last upload
+   * error. Rejects with `INVALID_CONFIG` when VSS is off.
+   */
+  getVssBackupInfo(): Promise<VssBackupInfo> {
+    return this.backend.guarded('getVssBackupInfo', () =>
+      this.backend.getVssBackupInfo()
+    );
   }
 
   /**

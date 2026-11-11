@@ -48,7 +48,7 @@ Without the server the spec is skipped.
   exposes `window.harness` with `boot` / `call` / `get`. Results cross the page
   boundary as JSON `{ ok, value | error }`, and errors keep `code` and `operation`.
   Bytes cross as `{ $bytes: [...] }`; `call('engine.<name>')` reaches an
-  engine-only method (`restoreFromVss`) past the facade. The page sets the
+  engine-only method past the facade. The page sets the
   core logger to `WARN`.
 - `client.mjs` drives the page from the specs: `bootWallet`, `wcall`, `wcallError`,
   `fundAndCreateUtxos`, and `settle` (mine and refresh until a condition holds).

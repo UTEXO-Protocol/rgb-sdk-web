@@ -37,31 +37,11 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.ts'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-        describe: 'readonly',
-        it: 'readonly',
-        expect: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        beforeAll: 'readonly',
-        afterAll: 'readonly',
-        jest: 'readonly',
-      },
-    },
-  },
-  {
     ignores: [
       'node_modules/',
       'lib/',
       'dist/',
-      'bdk-wasm/',
-      'cli/',
       'examples/',
-      'tests/jest-transform.js',
-      'tests/preprocessor.js',
     ],
   },
 ];

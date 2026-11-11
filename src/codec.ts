@@ -32,8 +32,9 @@ import { RGB_LIB_ERROR_VARIANTS } from './rgb-lib-messages.generated.js';
  * so an additive runtime release keeps working. Tests use `unknownFields()`
  * to fail on a field the table does not know.
  *
- * The session decodes every WasmWallet result here and the backend projects
- * it (ADR-0002 step 3); the rules move out of the session in step 4.
+ * `operations.ts` calls both stages on every WasmWallet result, inside the
+ * queued task. `encodeAssignment` is the one encoder: it turns a decoded
+ * invoice assignment back into a WASM argument.
  */
 
 // ── field tables ────────────────────────────────────────────────────────────

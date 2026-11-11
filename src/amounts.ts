@@ -1,7 +1,9 @@
 import { RgbLibWebError } from './errors.js';
 
-// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/amounts.ts`). Exact amounts stay
-// decimal strings until a checked conversion; no u64 is ever rounded.
+// Input validators, ported from `@utexo/rgb-lib-rn` (`rgb-lib/amounts.ts`).
+// They return checked decimal strings; `operations.ts` turns them into the
+// wire form (BigInt, or a string for WitnessData). No u64 is ever rounded.
+// Output numbers are decoded in `codec.ts`.
 
 const U64_MAX = 0xffffffffffffffffn;
 

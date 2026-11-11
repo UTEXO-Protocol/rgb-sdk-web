@@ -40,9 +40,24 @@ import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './session.js';
 
-// Ported from `@utexo/rgb-lib-rn` (`rgb-lib/backend.ts`): the same admission,
-// queue, lazy connect and validation rules, over a WasmSession instead of the
-// native bridge. Only the 29 SharedWalletApi methods are here.
+/**
+ * The engine's control layer (ADR-0002): one wallet profile, one queue.
+ *
+ * For each of the 29 SharedWalletApi methods it does, in order:
+ * 1. synchronous checks on an owned copy of the params: the params object,
+ *    `skipSync`, watch-only for operations that sign, then `prepare` from
+ *    `operations.ts` (an invalid call throws at once and queues nothing);
+ * 2. admission (`run`): refused once `destroy()` was called;
+ * 3. for online operations, lazy connect, before entering the queue (the
+ *    connect queues its own call); the wallet must already be open (`init()`);
+ * 4. `execute` as one task in the serial queue, so WASM calls never overlap.
+ *
+ * It owns the lifecycle (open, connect, `destroy()` waiting for accepted
+ * work) and maps errors to the public codes. It holds no wallet rules and
+ * reads no WASM values: those are in `operations.ts` and `codec.ts`. The
+ * admission, queue and connect rules are ported from `@utexo/rgb-lib-rn`
+ * (`rgb-lib/backend.ts`).
+ */
 
 /** A failed command must not poison the queue. */
 class SerialExecutor {

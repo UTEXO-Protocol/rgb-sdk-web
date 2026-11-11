@@ -110,6 +110,48 @@ copy that file next to the bundled JS, or the app sets `wasmUrl`.
   });
   ```
 
+## How it works
+
+Four layers, each in one file (ADR-0002):
+
+| File | Owns |
+|---|---|
+| `src/backend.ts` | Admission, lazy connect, the serial queue, `destroy()`, public error codes |
+| `src/operations.ts` | One `prepare` / `execute` pair per public method: input rules and WASM arguments, invoice checks of `send` |
+| `src/session.ts` | The open WASM wallet: online handle, sync, signing, flush |
+| `src/codec.ts` | Decoding of every `WasmWallet` result, and its projection to the core types |
+
+`prepare` runs before the call is queued and has no side effects, so an
+invalid call fails at once. `execute` runs as one queued task: WASM calls
+never overlap. A synchronous WASM mutation is reported only after it is
+flushed to IndexedDB.
+
+### Decoding rules
+
+The runtime is `@utexo/rgb-lib-wasm` 1.0.0-beta.4; the normative source is its
+tag `v1.0.0-beta.4` (`f0e266f`).
+
+- Each result is decoded in two stages. `decode*` checks the raw value and
+  keeps numbers exact (u64 and i64 stay `BigInt`); a value that breaks the
+  Rust type fails with `INVALID_NATIVE_RESPONSE`. `public*` converts to the
+  core types; a number above `Number.MAX_SAFE_INTEGER` fails with
+  `AMOUNT_OVERFLOW`, never rounds.
+- Containers are strict: a `Map` where Rust has a map keyed by integers
+  (`refresh`), a plain object for `unknownQueryParams`, `undefined` for an
+  absent `Option`.
+- Integers are checked by their Rust type (`u8`, `u32`, `i32`, `u64`, `i64`);
+  enum variants must be ones beta.4 has.
+- `FIELDS` in `src/codec.ts` lists every field of the 21 beta.4 structs the
+  adapter reads, each `mapped` (public), `internal` (used, not public) or
+  dropped with the reason. Only `mapped` and `internal` fields are read;
+  unknown fields are ignored at runtime, so an additive runtime release keeps
+  working, and fail the fixture schema test (`tests/unit/codec.test.mjs`).
+- Inputs go in the wire form beta.4 takes: `BigInt` for u64 amounts, expiry
+  and fee rates; decimal strings for `WitnessData`.
+- Runtime errors map to public codes by the table in
+  `src/rgb-lib-messages.generated.ts`, generated from the Rust source; other
+  messages are `NATIVE_ERROR`.
+
 ## Examples
 
 See [`examples/`](examples/README.md): a new wallet, reading a wallet, UTXOs and
@@ -133,6 +175,7 @@ npm test          # typecheck, lint, build, unit tests (node:test), examples
 npm run test:e2e  # Playwright over the real WASM; needs the regtest stand (tests/e2e/README.md)
 npm run capture:fixtures  # re-capture raw runtime values (tests/fixtures/README.md)
 npm run golden:update     # rewrite the golden results after an intended change
+RGB_LIB_WASM_SRC=<rgb-lib-wasm checkout> npm run errors:check  # the error table matches the Rust source
 ```
 
 `@utexo/rgb-sdk-core` comes from `../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz`

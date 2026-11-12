@@ -186,6 +186,8 @@ describe('codec field tables', () => {
    */
   const NOT_SEEN = {
     SendBeginResult: 'read by the session (psbt only), no codec decoder',
+    BurnBeginResult:
+      'read by the burn operation (psbt only), no codec decoder; the stand has no burn fixture',
     AssignmentsCollection:
       'inside a refresh failure; its text is checked by the golden nested-failure test',
   };

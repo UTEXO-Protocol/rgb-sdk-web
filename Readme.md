@@ -159,6 +159,23 @@ const asset = await wallet.issueAssetNia({
 - `issueAssetIfa()` issues an inflatable asset, and `inflate()` issues more of
   it.
 
+## Burn an asset
+
+```ts
+const { txid } = await wallet.burn({
+  assetId: asset.assetId,
+  amount: '500', // exact decimal string, smallest units
+  feeRate: 2,
+  minConfirmations: 1,
+  // burnRecipient: optional 32-byte commitment as 64 hex characters
+});
+```
+
+- `getBfaCapabilities()` says what works now: `burn` is `false` on a
+  watch-only or destroyed wallet.
+- `consignment` is always `false`: `@utexo/rgb-lib-wasm` 1.0.0-beta.4 has no
+  way to export a consignment, so there is no `getConsignment()` here.
+
 ## Read balances and history
 
 ```ts
@@ -260,6 +277,7 @@ Network defaults:
 | Network   | `getNetwork()`, `getNetworkInfo()`, `getWalletIdentity()`, `estimateFeeRate()`                             |
 | Bitcoin   | `getAddress()`, `getBtcBalance()`, `listUnspents()`, `createUtxos()`, `sendBtc()`                          |
 | Assets    | `listAssets()`, `getAssetBalance()`, `issueAssetNia()`, `issueAssetIfa()`, `inflate()`                     |
+| Burn      | `burn()`, `getBfaCapabilities()`                                                                           |
 | Invoices  | `onchainReceive()`, `witnessReceive()`, `blindReceive()`, `decodeRGBInvoice()`, `onchainSend()`            |
 | Transfers | `listTransfers()`, `listTransactions()`, `refresh()`, `refreshWallet()`, `syncWallet()`, `failTransfers()` |
 | Backup    | `exportBackup()`, `restoreBackup()`, `backupToVss()`, `restoreFromVss()`, `getVssBackupInfo()`             |
@@ -306,6 +324,8 @@ await wallet.init();
 
 [`examples/`](examples/README.md) has one file per flow: a new wallet, reading a
 wallet, UTXOs and issuing, a transfer.
+[`examples/webrgb-extension/`](examples/webrgb-extension/README.md) is a
+browser extension wallet that serves dApps through WebRGB.
 
 ## Development
 

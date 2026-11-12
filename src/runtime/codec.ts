@@ -251,6 +251,14 @@ export const FIELDS = {
       details: 'sendEnd returns what the adapter needs',
     },
   },
+  BurnBeginResult: {
+    rust: 'src/wallet/online.rs BurnBeginResult',
+    fields: {
+      psbt: 'internal',
+      batchTransferIdx: 'burnEnd returns it',
+      details: 'burnEnd returns what the adapter needs',
+    },
+  },
   RefreshedTransfer: {
     rust: 'src/wallet/online.rs RefreshedTransfer',
     // `failure` is an `Error`: its variants and their fields come from
@@ -295,6 +303,8 @@ export const RESULTS: Readonly<Record<string, StructName | null>> = {
   sendEnd: 'OperationResult',
   inflateBegin: null,
   inflateEnd: 'OperationResult',
+  burnBegin: 'BurnBeginResult',
+  burnEnd: 'OperationResult',
   failTransfers: null,
   refresh: 'RefreshedTransfer',
 };
@@ -1119,7 +1129,7 @@ export function publicInvoice(
   };
 }
 
-/** `OperationResult` of sendEnd and inflateEnd. The entropy is not read. */
+/** `OperationResult` of sendEnd, inflateEnd and burnEnd. The entropy is not read. */
 export interface Operation {
   txid: string;
   batchTransferIdx: number;

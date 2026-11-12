@@ -1,11 +1,13 @@
-// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods and the
-// backup extensions (BackupExportApi, BackupRestoreApi, VssBackupApi,
+// Public API: the RgbLibWeb class, the 29 SharedWalletApi methods, burn
+// (BurnApi) and the backup extensions (BackupExportApi, BackupRestoreApi, VssBackupApi,
 // VssRestoreApi, VssBackupInfoApi). Each method passes through `backend.guarded()`
 // (synchronous argument errors become rejected Promises) to RgbLibWebBackend;
 // no wallet logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
 
 import type {
+  BurnApi,
+  BurnParams,
   EngineCapabilities,
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
@@ -31,7 +33,8 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
- * the 29 `SharedWalletApi` methods and the backup extensions (ADR-0003):
+ * the 29 `SharedWalletApi` methods, `burn()` (`BurnApi`) and the backup
+ * extensions (ADR-0003):
  * `exportBackup()`, `restoreBackup()` (bytes) and `backupToVss()`,
  * `restoreFromVss()`, `getVssBackupInfo()` (VSS).
  *
@@ -66,6 +69,7 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 export class RgbLibWeb
   implements
     SharedWalletApi<RgbLibWebUnlockParams | undefined>,
+    BurnApi,
     BackupExportApi,
     BackupRestoreApi,
     VssBackupApi,
@@ -197,6 +201,20 @@ export class RgbLibWeb
   }
   inflate(params: InflateAssetIfaRequestModel) {
     return this.backend.guarded('inflate', () => this.backend.inflate(params));
+  }
+  /**
+   * Burns `amount` (exact decimal base units) of an asset. Signs, so a
+   * watch-only wallet rejects with `UNSUPPORTED_CAPABILITY`.
+   */
+  burn(params: BurnParams) {
+    return this.backend.guarded('burn', () => this.backend.burn(params));
+  }
+  /**
+   * `burn` is false on a watch-only or disposed wallet. `consignment` is
+   * always false: beta.4 has no consignment export.
+   */
+  async getBfaCapabilities() {
+    return this.backend.getBfaCapabilities();
   }
   blindReceive(params: ReceiveParams) {
     return this.backend.guarded('blindReceive', () =>

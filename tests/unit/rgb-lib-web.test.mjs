@@ -55,6 +55,7 @@ runEngineConformanceChecks({
   engineClass: RgbLibWeb,
   createEngineSync: () => create().engine,
   extensions: [
+    'burn',
     'backupExport',
     'backupRestore',
     'vssBackup',
@@ -599,6 +600,96 @@ describe('RgbLibWeb IFA', () => {
       'inflateEnd',
     ]);
     assert.equal(runtime.calls.at(-1).args[1], 'signed:psbt-inflate');
+  });
+});
+
+describe('RgbLibWeb burn', () => {
+  const REASON = 'ab'.repeat(32);
+  const params = (over = {}) => ({
+    assetId: ASSET_ID,
+    amount: '18446744073709551615',
+    burnRecipient: REASON,
+    feeRate: 3,
+    minConfirmations: 2,
+    ...over,
+  });
+
+  it('runs begin, sign and end with an exact BigInt amount', async () => {
+    const { engine, runtime, names } = await ready();
+    const result = await engine.burn(params());
+    assert.deepEqual(result, { txid: TXID, batchTransferIdx: 4 });
+    const begin = runtime.calls.find((c) => c.name === 'burnBegin').args;
+    assert.deepEqual(begin.slice(1), [
+      ASSET_ID,
+      18446744073709551615n,
+      REASON,
+      3n,
+      2,
+      false,
+    ]);
+    assert.deepEqual(names().slice(-3), ['burnBegin', 'signPsbt', 'burnEnd']);
+    assert.equal(runtime.calls.at(-1).args[1], 'signed:psbt-burn');
+  });
+
+  it('passes no burn reason when burnRecipient is absent', async () => {
+    const { engine, runtime } = await ready();
+    await engine.burn(params({ burnRecipient: undefined }));
+    const begin = runtime.calls.find((c) => c.name === 'burnBegin').args;
+    assert.equal(begin[3], null);
+  });
+
+  for (const [label, over] of [
+    ['a zero amount', { amount: '0' }],
+    ['a number amount', { amount: 5 }],
+    ['an amount above u64', { amount: '18446744073709551616' }],
+    ['a short burnRecipient', { burnRecipient: 'ab' }],
+    ['a zero feeRate', { feeRate: 0 }],
+    ['minConfirmations 0', { minConfirmations: 0 }],
+  ]) {
+    it(`rejects ${label} before any runtime call`, async () => {
+      const { engine, names } = await ready();
+      const before = names().length;
+      await rejects(engine.burn(params(over)), 'INVALID_PARAMS');
+      assert.equal(names().length, before);
+    });
+  }
+
+  it('reports burn but no consignment', async () => {
+    const { engine } = await ready();
+    assert.deepEqual(await engine.getBfaCapabilities(), {
+      burn: true,
+      consignment: false,
+      bfa: true,
+    });
+    await engine.destroy();
+    assert.deepEqual(await engine.getBfaCapabilities(), {
+      burn: false,
+      consignment: false,
+      bfa: false,
+    });
+  });
+
+  it('a watch-only wallet cannot burn', async () => {
+    const { engine, names } = create({
+      keys: {
+        accountXpubVanilla: KEYS.accountXpubVanilla,
+        accountXpubColored: KEYS.accountXpubColored,
+        masterFingerprint: KEYS.masterFingerprint,
+      },
+      params: ONLINE,
+    });
+    await engine.init();
+    assert.equal((await engine.getBfaCapabilities()).burn, false);
+    const before = names().length;
+    await rejects(engine.burn(params()), 'UNSUPPORTED_CAPABILITY', 'burn');
+    assert.equal(names().length, before);
+  });
+
+  it('the facade forwards burn', async () => {
+    const { engine } = await ready();
+    const wallet = new UTEXOWallet({ engine });
+    await wallet.init();
+    assert.equal((await wallet.burn(params())).txid, TXID);
   });
 });
 

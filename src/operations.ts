@@ -22,9 +22,11 @@
 import {
   ValidationError,
   deriveVssSigningKeyFromMnemonic,
+  validateBurnParams,
   getBackupStoreId,
 } from '@utexo/rgb-sdk-core';
 import type {
+  BurnParams,
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
   IssueAssetIfaRequestModel,
@@ -402,6 +404,43 @@ export const inflate = operation({
     const signed = s.sign(psbt);
     return codec.publicOperation(
       codec.decodeOperation(await s.wallet.inflateEnd(online, signed))
+    );
+  },
+});
+
+/**
+ * Burns `amount` of an asset (beta.4 `burnBegin`, sign, `burnEnd`). The params
+ * are checked by core's `validateBurnParams`, as on React Native;
+ * `burnRecipient` is the runtime's `burnReason`, 32 bytes as hex.
+ */
+export const burn = operation({
+  prepare: (p: BurnParams) => {
+    validateBurnParams(p);
+    return {
+      assetId: p.assetId,
+      amount: wireU64(p.amount, 'amount', true),
+      burnReason: p.burnRecipient ?? null,
+      feeRate: wireFeeRate(p.feeRate),
+      minConfirmations: minConfirmations(p.minConfirmations, 1, 1),
+    };
+  },
+  async execute(s: WasmSession, v) {
+    const online = s.connected();
+    const begun = codec.record(
+      await s.wallet.burnBegin(
+        online,
+        v.assetId,
+        v.amount,
+        v.burnReason,
+        v.feeRate,
+        v.minConfirmations,
+        false
+      ),
+      'burn begin result'
+    );
+    const signed = s.sign(codec.str(begun.psbt, 'PSBT'));
+    return codec.publicOperation(
+      codec.decodeOperation(await s.wallet.burnEnd(online, signed))
     );
   },
 });

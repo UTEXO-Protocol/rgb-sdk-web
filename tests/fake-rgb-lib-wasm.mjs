@@ -161,6 +161,12 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
     sendEnd: async () => ({ txid: TXID, batchTransferIdx: 9, entropy: 7n }),
     inflateBegin: async () => 'psbt-inflate',
     inflateEnd: async () => ({ txid: TXID, batchTransferIdx: 2, entropy: 1n }),
+    burnBegin: async () => ({
+      psbt: 'psbt-burn',
+      batchTransferIdx: 4,
+      details: { fascia: {}, minConfirmations: 1, entropy: 5n },
+    }),
+    burnEnd: async () => ({ txid: TXID, batchTransferIdx: 4, entropy: 5n }),
     signPsbt: (psbt) => `signed:${psbt}`,
     refresh: async () =>
       new Map([

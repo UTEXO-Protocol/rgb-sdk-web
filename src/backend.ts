@@ -28,6 +28,8 @@
  */
 import { ValidationError, logger } from '@utexo/rgb-sdk-core';
 import type {
+  BfaCapabilities,
+  BurnParams,
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
   IssueAssetIfaRequestModel,
@@ -111,6 +113,7 @@ const AUTO_BACKUP: ReadonlySet<string> = new Set([
   'issueAssetNia',
   'issueAssetIfa',
   'inflate',
+  'burn',
   'blindReceive',
   'witnessReceive',
   'onchainReceive',
@@ -695,6 +698,25 @@ export class RgbLibWebBackend {
       { signs: true, prepare: ops.inflate.prepare },
       (s, _p, v) => ops.inflate.execute(s, v)
     );
+  }
+
+  burn(params: BurnParams) {
+    return this.checked(
+      'burn',
+      true,
+      params,
+      { signs: true, prepare: ops.burn.prepare },
+      (s, _p, v) => ops.burn.execute(s, v)
+    );
+  }
+
+  /**
+   * What this wallet can do now. Burning signs, so a watch-only wallet cannot;
+   * beta.4 has no consignment export, so `consignment` is always false.
+   */
+  getBfaCapabilities(): BfaCapabilities {
+    const open = !this.disposed && !this.disposeRequested;
+    return { burn: open && !this.watchOnly, consignment: false, bfa: open };
   }
 
   receive(

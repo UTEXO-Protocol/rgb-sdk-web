@@ -7,7 +7,7 @@ For contributors to this package. Users need only the [README](../Readme.md).
 ```
 src/
   index.ts            exports only
-  rgb-lib-web.ts      RgbLibWeb: the public API, 29 SharedWalletApi methods
+  rgb-lib-web.ts      RgbLibWeb: the public API, 29 SharedWalletApi methods, burn
   backend.ts          lifecycle (init, connect, destroy), admission, serial queue
   operations.ts       per method: prepare (checks, WASM arguments) and execute
   config.ts           options, defaults per network, config checks
@@ -52,7 +52,7 @@ tag `v1.0.0-beta.4` (`f0e266f`).
   absent `Option`.
 - Integers are checked by their Rust type (`u8`, `u32`, `i32`, `u64`, `i64`);
   enum variants must be ones beta.4 has.
-- `FIELDS` in `src/runtime/codec.ts` lists every field of the 21 beta.4 structs
+- `FIELDS` in `src/runtime/codec.ts` lists every field of the 22 beta.4 structs
   the adapter reads, each `mapped` (public), `internal` (used, not public) or
   dropped with the reason. Only `mapped` and `internal` fields are read;
   unknown fields are ignored at runtime, so an additive runtime release keeps
@@ -75,3 +75,4 @@ tag `v1.0.0-beta.4` (`f0e266f`).
 | VSS restore before connect, unrestored-backup hold                             | done  |
 | Byte backup: `exportBackup()`, `restoreBackup()`, with e2e                     | done  |
 | VSS backup and restore e2e against a local VSS server                          | done  |
+| Burn: `burn()`, `getBfaCapabilities()` (no consignment export in beta.4)       | done  |

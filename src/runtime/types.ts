@@ -137,6 +137,16 @@ export interface RgbLibWasmWallet {
     minConfirmations: number
   ): Promise<string>;
   inflateEnd(online: unknown, signedPsbt: string): Promise<unknown>;
+  burnBegin(
+    online: unknown,
+    assetId: string,
+    amount: bigint,
+    burnReason: string | null,
+    feeRate: bigint,
+    minConfirmations: number,
+    dryRun: boolean
+  ): Promise<unknown>;
+  burnEnd(online: unknown, signedPsbt: string): Promise<unknown>;
   signPsbt(unsignedPsbt: string): string;
   refresh(
     online: unknown,

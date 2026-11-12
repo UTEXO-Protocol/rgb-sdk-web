@@ -12,7 +12,7 @@ production server. `vssUrl: null` turns it off on any network.
 - `init()` derives the identity from the mnemonic with the core helpers:
   store `wallet_<masterFingerprint>`, signing key from the mnemonic. The key
   goes to the runtime only; it is not kept, logged or put in errors.
-- Each successful mutation (create UTXOs, send, issue, inflate, receive, fail
+- Each successful mutation (create UTXOs, send, issue, inflate, burn, receive, fail
   transfers, refresh) queues one upload. It runs as its own task after the
   mutation, uploads only when the wallet changed, and a failure is logged
   (`logger.warn`) without failing anything. `destroy()` waits for it.

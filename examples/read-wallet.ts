@@ -6,7 +6,7 @@ import { RgbLibWeb } from '@utexo/rgb-sdk-web';
 
 export async function readWallet(mnemonic: string) {
   const wallet = await RgbLibWeb.create({
-    network: 'testnet',
+    network: 'utexo',
     mnemonic,
     dataDir: 'my-app',
   });

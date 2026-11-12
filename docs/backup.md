@@ -27,7 +27,7 @@ serverVersion, backupRequired, lastBackupError }`.
 
 ```ts
 const wallet = new RgbLibWeb({
-  network: 'testnet',
+  network: 'utexo',
   mnemonic,
   dataDir: 'my-app',
 });

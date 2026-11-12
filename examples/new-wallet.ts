@@ -6,10 +6,10 @@
 import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
 
 export async function newWallet() {
-  const keys = await generateKeys('testnet');
+  const keys = await generateKeys('utexo');
 
   const wallet = await RgbLibWeb.create({
-    network: 'testnet',
+    network: 'utexo',
     mnemonic: keys.mnemonic,
     // Optional: one address instead of a new one per call.
     reuseAddresses: true,

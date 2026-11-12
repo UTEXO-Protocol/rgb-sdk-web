@@ -41,8 +41,8 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
  * ```ts
  * import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
  *
- * const { mnemonic } = await generateKeys('testnet');
- * const wallet = await RgbLibWeb.create({ network: 'testnet', mnemonic });
+ * const { mnemonic } = await generateKeys('utexo');
+ * const wallet = await RgbLibWeb.create({ network: 'utexo', mnemonic });
  * const balance = await wallet.getBtcBalance();
  * ```
  *
@@ -52,7 +52,7 @@ import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
  * import { UTEXOWallet } from '@utexo/rgb-sdk';
  *
  * const wallet = new UTEXOWallet({
- *   engine: new RgbLibWeb({ network: 'testnet', mnemonic }),
+ *   engine: new RgbLibWeb({ network: 'utexo', mnemonic }),
  * });
  * await wallet.init();
  * ```

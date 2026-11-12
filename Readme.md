@@ -52,11 +52,11 @@ copy that file next to the bundled JS, or the app sets `wasmUrl`.
 import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
 
 // 1. Create keys once and store the mnemonic safely.
-const { mnemonic } = await generateKeys('testnet');
+const { mnemonic } = await generateKeys('utexo');
 
 // 2. Open the wallet. Its state is saved in IndexedDB under `dataDir`.
 const wallet = await RgbLibWeb.create({
-  network: 'testnet',
+  network: 'utexo',
   mnemonic,
   dataDir: 'my-app',
 });
@@ -207,7 +207,7 @@ transfer history live only in its state. Keep a backup of that state.
 
 ```ts
 const wallet = new RgbLibWeb({
-  network: 'testnet',
+  network: 'utexo',
   mnemonic,
   dataDir: 'my-app',
 });
@@ -223,7 +223,7 @@ await wallet.unlock(); // online
 const bytes = await wallet.exportBackup({ password }); // Uint8Array
 
 const restored = new RgbLibWeb({
-  network: 'testnet',
+  network: 'utexo',
   mnemonic,
   dataDir: 'restored',
 });
@@ -315,7 +315,7 @@ import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb } from '@utexo/rgb-sdk-web';
 
 const wallet = new UTEXOWallet({
-  engine: new RgbLibWeb({ network: 'testnet', mnemonic }),
+  engine: new RgbLibWeb({ network: 'utexo', mnemonic }),
 });
 await wallet.init();
 ```

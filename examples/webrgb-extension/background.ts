@@ -35,7 +35,7 @@ declare function readMnemonic(): Promise<string | null>;
 function createWallet() {
   return new UTEXOWallet({
     engine: new RgbLibWeb({
-      network: 'testnet',
+      network: 'utexo',
       dataDir: 'extension',
       keys: { getMnemonic: readMnemonic },
     }),

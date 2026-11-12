@@ -1,6 +1,7 @@
 /**
  * A new wallet: keys, one create() call, an address and the balance.
- * Store the mnemonic safely; it is the only way to restore the wallet.
+ * Store the mnemonic safely: it restores the keys and bitcoin. RGB assets
+ * also need a backup of the wallet state (VSS or exportBackup()).
  */
 import { RgbLibWeb, generateKeys } from '@utexo/rgb-sdk-web';
 

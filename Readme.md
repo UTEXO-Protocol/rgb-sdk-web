@@ -1,4 +1,4 @@
-# RGB SDK for Web
+# @utexo/rgb-sdk-web
 
 > **Work in progress.** This branch turns `@utexo/rgb-sdk-web` into the RGB_L1
 > wallet engine for browsers. It is not released. The published
@@ -11,6 +11,14 @@ through the `UTEXOWallet` facade of `@utexo/rgb-sdk`, which gives the same API o
 React Native (`@utexo/rgb-sdk-rn`).
 
 This package has no Lightning.
+
+## Installation
+
+Not released yet. Once it is:
+
+```bash
+npm install @utexo/rgb-sdk-web @utexo/rgb-sdk-core
+```
 
 ## Requirements
 
@@ -124,8 +132,8 @@ await wallet.unlock();          // online
 
 `BackupExportApi` and `BackupRestoreApi` from core: an encrypted backup as
 bytes, with no server. The app stores them where it wants (a file download,
-its own storage). A backup restores only on this engine: a React Native
-backup does not open here, and the other way round.
+its own storage). A backup restores only with this engine; backups made by
+other engines do not open here.
 
 ```ts
 const bytes = await wallet.exportBackup({ password }); // Uint8Array
@@ -272,3 +280,16 @@ RGB_LIB_WASM_SRC=<rgb-lib-wasm checkout> npm run errors:check  # the error table
 
 `@utexo/rgb-sdk` (the facade) is a dev dependency, only for tests that wrap
 `RgbLibWeb` in `UTEXOWallet`.
+
+## Related packages
+
+- [`@utexo/rgb-sdk-rn`](https://www.npmjs.com/package/@utexo/rgb-sdk-rn): the
+  React Native engine.
+- [`@utexo/rgb-sdk-core`](https://www.npmjs.com/package/@utexo/rgb-sdk-core):
+  shared types, errors, key helpers and the engine contract.
+- [`@utexo/rgb-lib-wasm`](https://www.npmjs.com/package/@utexo/rgb-lib-wasm):
+  the WASM runtime this engine runs on.
+
+## License
+
+See [LICENCE](LICENCE).

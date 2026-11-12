@@ -2,11 +2,11 @@
 
 ## ci.yml
 
-Runs on push/PR to `dev`, `stage`, `main`. Checks: lint, typecheck, build. Replaces local `file:` dependencies with npm registry versions before running.
+Runs on push/PR to `dev`, `stage`, `main`. Checks: lint, typecheck, build. Uses the core version pinned in `package.json`; the unpublished facade still requires its local tarball. The existing WASM install step resolves the latest registry version.
 
 ## release.yml
 
-Manual trigger. Replaces local deps with npm versions, builds the package, publishes to npm as `@utexo/rgb-sdk-web`, and creates a GitHub Release. Input: version (e.g. `1.0.0`). Use from `main` branch for production releases.
+Manual trigger. Uses the pinned core version and a locally prepared facade tarball, builds the package, publishes to npm as `@utexo/rgb-sdk-web`, and creates a GitHub Release. Input: version (e.g. `1.0.0`). Use from `main` branch for production releases.
 
 ## release-dev.yml
 

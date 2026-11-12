@@ -23,7 +23,7 @@ This package has no Lightning.
 ## Installation
 
 ```bash
-npm install @utexo/rgb-sdk-web @utexo/rgb-sdk-core
+npm install @utexo/rgb-sdk-web @utexo/rgb-sdk-core@1.0.0-beta.10
 ```
 
 ## Bundler setup

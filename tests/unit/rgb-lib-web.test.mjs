@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { runEngineConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
 import { isEngineError } from '@utexo/rgb-sdk-core';
-import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb, generateKeys } from '../../dist/index.mjs';
 import {
   ASSET_ID,
@@ -545,16 +544,6 @@ describe('RgbLibWeb unsupported input (ADR-0001)', () => {
   });
 });
 
-describe('RgbLibWeb behind UTEXOWallet', () => {
-  it('the facade accepts the engine and forwards calls', async () => {
-    const { engine } = create({ params: ONLINE });
-    const wallet = new UTEXOWallet({ engine });
-    await wallet.init();
-    assert.equal(await wallet.getAddress(), 'bcrt1qfake');
-    assert.equal(wallet.getNetwork(), 'regtest');
-  });
-});
-
 describe('RgbLibWeb IFA', () => {
   it('issues IFA with BigInt amounts, no link right, and maps the supply', async () => {
     const { engine, runtime } = await ready();
@@ -683,13 +672,6 @@ describe('RgbLibWeb burn', () => {
     const before = names().length;
     await rejects(engine.burn(params()), 'UNSUPPORTED_CAPABILITY', 'burn');
     assert.equal(names().length, before);
-  });
-
-  it('the facade forwards burn', async () => {
-    const { engine } = await ready();
-    const wallet = new UTEXOWallet({ engine });
-    await wallet.init();
-    assert.equal((await wallet.burn(params())).txid, TXID);
   });
 });
 

@@ -1,8 +1,11 @@
 // Type tests: checked by `npm run typecheck`, never run.
 import type * as RgbLibWasm from '@utexo/rgb-lib-wasm';
-import { UTEXOWallet } from '@utexo/rgb-sdk';
+import type { SharedWalletApi } from '@utexo/rgb-sdk-core';
 import { RgbLibWeb, generateKeys } from '../../src/index.js';
-import type { RgbLibWasmRuntime } from '../../src/index.js';
+import type {
+  RgbLibWasmRuntime,
+  RgbLibWebUnlockParams,
+} from '../../src/index.js';
 
 // The real module matches the shape the adapter calls.
 declare const runtime: typeof RgbLibWasm;
@@ -13,8 +16,9 @@ const engine = new RgbLibWeb({
   mnemonic: 'mnemonic',
   runtime: asRuntime,
 });
-const wallet = new UTEXOWallet({ engine });
-void wallet.unlock({ indexerUrl: 'https://esplora.example' });
+// The engine implements the core contract.
+const shared: SharedWalletApi<RgbLibWebUnlockParams | undefined> = engine;
+void shared.unlock({ indexerUrl: 'https://esplora.example' });
 
 // create() returns the opened engine.
 const created: Promise<RgbLibWeb> = RgbLibWeb.create({

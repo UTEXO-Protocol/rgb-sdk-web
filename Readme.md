@@ -324,8 +324,9 @@ await wallet.init();
 
 [`examples/`](examples/README.md) has one file per flow: a new wallet, reading a
 wallet, UTXOs and issuing, a transfer.
-[`examples/webrgb-extension/`](examples/webrgb-extension/README.md) is a
-browser extension wallet that serves dApps through WebRGB.
+A browser extension wallet that serves dApps through WebRGB, with this
+engine behind `UTEXOWallet`, is in
+[`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk/tree/main/examples/webrgb-extension).
 
 ## Development
 

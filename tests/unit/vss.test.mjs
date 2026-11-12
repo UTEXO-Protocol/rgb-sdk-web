@@ -11,7 +11,6 @@ import {
   isEngineError,
   logger,
 } from '@utexo/rgb-sdk-core';
-import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
 
@@ -667,17 +666,5 @@ describe('unrestored server backup', () => {
     await engine.unlock();
     await drained(engine);
     assert.ok(!names().includes('vssBackupInfo'));
-  });
-});
-
-describe('VSS through the facade', () => {
-  it('UTEXOWallet forwards restoreFromVss, backupToVss and getVssBackupInfo', async () => {
-    const { engine, args } = create({ overrides: EMPTY });
-    const wallet = new UTEXOWallet({ engine });
-    await wallet.init();
-    await wallet.restoreFromVss();
-    assert.equal(args('vssRestoreBackup').length, 1);
-    assert.equal(await wallet.backupToVss(), 3);
-    assert.equal((await wallet.getVssBackupInfo()).backupExists, false);
   });
 });

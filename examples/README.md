@@ -1,8 +1,8 @@
 # Examples
 
 L1 only. Each file exports one async function; call it from your app.
-`webrgb-extension/` is a folder of its own, with its own
-[README](webrgb-extension/README.md).
+A browser extension wallet that serves dApps through WebRGB is in the
+[`@utexo/rgb-sdk` examples](https://github.com/UTEXO-Protocol/rgb-sdk/tree/main/examples/webrgb-extension).
 
 | File                    | What it shows                                              |
 | ----------------------- | ---------------------------------------------------------- |
@@ -10,7 +10,6 @@ L1 only. Each file exports one async function; call it from your app.
 | `read-wallet.ts`        | reopening a stored wallet, assets, transfers, transactions |
 | `create-utxos-asset.ts` | colorable UTXOs, issuing an NIA asset                      |
 | `transfer.ts`           | witness invoice, `onchainSend`, refresh until `Settled`    |
-| `webrgb-extension/`     | an MV3 extension wallet serving dApps through WebRGB       |
 
 Backup and restore are described in the package README.
 

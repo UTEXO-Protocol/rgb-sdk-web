@@ -1,6 +1,6 @@
 /**
  * Scenario F — the one-call start from the README: generateKeys from the
- * package, RgbLibWeb.create(), no facade, no runtime, no unlock(). The first
+ * package, RgbLibWeb.create(), no runtime, no unlock(). The first
  * network operation connects with the config's connection settings.
  */
 import { test, expect } from '@playwright/test';

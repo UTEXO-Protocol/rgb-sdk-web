@@ -1,10 +1,9 @@
 // Byte backup (BackupExportApi, BackupRestoreApi, ADR-0003 B3): exportBackup() and
-// restoreBackup(), the restore window between init() and the first
-// connection, and forwarding through the UTEXOWallet facade.
+// restoreBackup() and the restore window between init() and the first
+// connection.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { isEngineError } from '@utexo/rgb-sdk-core';
-import { UTEXOWallet } from '@utexo/rgb-sdk';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
 
@@ -254,17 +253,5 @@ describe('restoreBackup()', () => {
       engine.restoreBackup({ bytes: BYTES(), password: 'pw' }),
       'NATIVE_ERROR'
     );
-  });
-});
-
-describe('byte backup through the facade', () => {
-  it('UTEXOWallet forwards exportBackup and restoreBackup', async () => {
-    const { engine, args } = create({ overrides: EMPTY });
-    const wallet = new UTEXOWallet({ engine });
-    await wallet.init();
-    await wallet.restoreBackup({ bytes: BYTES(), password: 'pw' });
-    assert.equal(args('restoreBackup').length, 1);
-    const bytes = await wallet.exportBackup({ password: 'pw' });
-    assert.equal(new TextDecoder().decode(bytes), 'backup:pw');
   });
 });

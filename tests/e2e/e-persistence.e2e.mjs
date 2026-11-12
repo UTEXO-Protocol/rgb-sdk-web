@@ -94,7 +94,6 @@ test('E: a byte backup restores the wallet into an empty profile', async ({
       unspents: (await wcall(page, 'listUnspents', { skipSync: true })).length,
       transfers: (await wcall(page, 'listTransfers', assetId)).length,
     };
-    // Through the UTEXOWallet facade, which forwards the byte backup.
     const backup = await wcall(page, 'exportBackup', { password: 'e2e-pw' });
     expect(backup.$bytes.length).toBeGreaterThan(0);
     await wcall(page, 'destroy');

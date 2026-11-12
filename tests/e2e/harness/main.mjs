@@ -1,15 +1,14 @@
 /**
- * E2E harness page: the BUILT engine (`dist/`) behind the `@utexo/rgb-sdk`
- * facade, over the real `@utexo/rgb-lib-wasm`, exposed on `window.harness`.
+ * E2E harness page: the BUILT engine (`dist/`) over the real
+ * `@utexo/rgb-lib-wasm`, exposed on `window.harness`.
  * The page passes no runtime: `init()` loads the WASM from its default URL,
  * next to the bundle, as in an app.
  *
- *   boot(cfgJson)        — new RgbLibWeb → UTEXOWallet → init → unlock
- *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no facade, no unlock
+ *   boot(cfgJson)        — new RgbLibWeb → init → unlock
+ *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no unlock
  *   boot({ capture: true }) records raw runtime values (capture.mjs);
  *   label(name) tags the next records; takeCapture() returns and clears them
- *   call(method, args)   — call a wallet method; 'engine.<name>' calls an
- *                          engine-only method (restoreFromVss) past the facade
+ *   call(method, args)   — call a wallet method
  *   get(property)        — read a wallet property ('capabilities')
  *
  * Results cross the page boundary as JSON `{ ok, value | error }`; an error
@@ -18,7 +17,6 @@
 import initRgbLibWasm, * as rgbLibWasm from '@utexo/rgb-lib-wasm';
 import { LogLevel, generateKeys, logger } from '@utexo/rgb-sdk-core';
 import { recordingRuntime } from './capture.mjs';
-import { UTEXOWallet } from '@utexo/rgb-sdk';
 import {
   RgbLibWeb,
   generateKeys as generateKeysFromPackage,
@@ -88,7 +86,7 @@ window.harness = {
           captured.push({ label: captureLabel, ...r })
         );
       }
-      const engine = new RgbLibWeb({
+      wallet = new RgbLibWeb({
         network: 'regtest',
         dataDir,
         mnemonic,
@@ -96,7 +94,6 @@ window.harness = {
         vssUrl: cfg.vssUrl ?? null,
         ...(runtime ? { runtime } : {}),
       });
-      wallet = new UTEXOWallet({ engine });
       await wallet.init();
       if (cfg.unlock !== false) {
         await wallet.unlock({
@@ -139,10 +136,8 @@ window.harness = {
 
   call: (method, argsJson) =>
     run(async () => {
-      // 'engine.<name>' calls an engine-only method past the facade.
-      const engineOnly = method.startsWith('engine.');
-      const w = engineOnly ? live().engine : live();
-      const fn = w[engineOnly ? method.slice('engine.'.length) : method];
+      const w = live();
+      const fn = w[method];
       if (typeof fn !== 'function') {
         throw new Error(`harness.call: ${method} is not a wallet method`);
       }

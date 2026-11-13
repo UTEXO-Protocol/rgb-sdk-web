@@ -3,6 +3,15 @@
 
 ## Unreleased
 
+### Added
+
+- **Burn** — `RgbLibWeb` implements `BurnApi`: `burn({ assetId, amount,
+  burnRecipient?, feeRate, minConfirmations })` (begin, sign, end over
+  `@utexo/rgb-lib-wasm`) and `getBfaCapabilities()`. Params are checked by
+  core's `validateBurnParams`; a watch-only wallet rejects with
+  `UNSUPPORTED_CAPABILITY`. `consignment` is `false`: beta.4 has no
+  consignment export, so `getConsignment()` is absent.
+
 ### Fixed
 
 - **IFA assets (e.g. USDT) can be received** — `@utexo/rln-wasm` bumped from

@@ -6,7 +6,7 @@ import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
-    files: ['**/*.{js,ts,tsx}'],
+    files: ['**/*.{js,mjs,ts,tsx}'],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -37,31 +37,22 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.ts'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-        describe: 'readonly',
-        it: 'readonly',
-        expect: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        beforeAll: 'readonly',
-        afterAll: 'readonly',
-        jest: 'readonly',
-      },
-    },
-  },
-  {
     ignores: [
       'node_modules/',
       'lib/',
       'dist/',
-      'bdk-wasm/',
-      'cli/',
       'examples/',
-      'tests/jest-transform.js',
-      'tests/preprocessor.js',
+      'tests/e2e/.out/',
+      'tests/e2e/.results/',
+      'tests/.codec-*/',
+      // Generated: npm run capture:fixtures, npm run golden:update.
+      'tests/fixtures/rgb-lib-wasm-*/*.mjs',
+      '!tests/fixtures/rgb-lib-wasm-*/handmade.mjs',
+      '!tests/fixtures/rgb-lib-wasm-*/negative.mjs',
+      'tests/golden/*.golden.mjs',
+      // Generated: npm run errors:generate.
+      'src/**/*.generated.ts',
+      'tests/fixtures/error-texts/*.mjs',
     ],
   },
 ];

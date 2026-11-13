@@ -1,61 +1,78 @@
-# rgb-sdk-web e2e suite
+# RgbLibWeb e2e suite
 
-Behaviour-against-a-real-node tests (MIGRATION-PLAN-v3 §7a). The unit suite and
-the conformance suite check *shape*; this suite checks *values* coming back
-from a live regtest stack, field by field.
+Browser tests for `@utexo/rgb-sdk-web` (`RgbLibWeb`) over the real
+`@utexo/rgb-lib-wasm`, against a local regtest stand. The unit suite (`npm test`)
+checks the adapter against a fake runtime; this suite checks the values a real
+wallet returns, field by field. It is ported from rgb-sdk-web `tests/e2e`
+(specs a, b, c) without Lightning.
 
 ## Running
 
-```bash
-# 1. Bring up the stack (docker + gateway + 2 RLN nodes + utexo-lsp).
-#    Writes rgb-sdk-web-demo/e2e-fixtures.json — the suite's input.
-cd ../rgb-sdk-web-demo && ./scripts/start-lsp-web.sh        # add VSS=1 for the vss spec
+1. Start the stand:
+   bitcoind, esplora, **RGB proxy 0.4.0 or newer** and the regtest helper from
+   `tests/docker-compose.ci.yml` of the rgb-lib-wasm repository, then mine 111 blocks.
+2. Run:
 
-# 2. Run the suite (builds dist first — the harness imports the BUILT sdk).
-cd ../rgb-sdk-web && npm run test:e2e
+   ```bash
+   npm run test:e2e
+   ```
+
+   This builds `dist/`, bundles the harness page with esbuild and serves it on port
+   5180, then runs Playwright in headless Chromium. `RGB_E2E_QUIET=1` hides the
+   `report()` output.
+
+The global setup checks the stand first. It fails at once when the helper or
+esplora is down, or when the proxy speaks a protocol other than 1.0.
+
+Environment overrides: `RGB_E2E_INDEXER` (default `http://127.0.0.1:8094/regtest/api`),
+`RGB_E2E_PROXY` (`rpc://127.0.0.1:3002/json-rpc`), `RGB_E2E_HELPER`
+(`http://127.0.0.1:8080`), `RGB_E2E_PORT` (`5180`), `RGB_E2E_VSS_PORT`
+(`8181`).
+
+**VSS (optional, spec `g-vss`).** A local lightningdevkit/vss-server with
+sigs auth: the `vss` profile of the rgb-lightning-node compose file (image
+`vss-server:sigs-auth`, with its Postgres). On this machine the containers
+already exist:
+
+```bash
+docker start rgb-lightning-node-8777d71-vss-postgres-1 rgb-lightning-node-8777d71-vss-server-1
 ```
 
-`npm test` stays fast and docker-free; jest ignores this directory.
+The server sends no CORS headers, so `serve.mjs` proxies `/vss/*` to
+`127.0.0.1:$RGB_E2E_VSS_PORT` and the page uses `http://127.0.0.1:5180/vss`.
+Without the server the spec is skipped.
 
 ## How it works
 
-- `harness/` — a minimal Vite page. `@utexo/rgb-sdk-web` is aliased to
-  `dist/index.mjs`, so the suite tests the artifact that ships. The page
-  exposes `window.harness` (`boot` / `call` / `get` / `conformance` /
-  `lspCreate` / `lspCall`); everything crosses the page boundary as JSON in an
-  `{ ok, value | error }` envelope.
-- **`lspCreate`/`lspCall`** exist because `createLsp()` returns a live object
-  with methods, and only JSON crosses the boundary — the harness holds the
-  `UtexoLsp` and the spec addresses it by method name. Its progress callbacks
-  (`onProgress`, `onEachPoll`) cannot cross either, so specs poll and mine
-  themselves; that keeps the drive beat in the test rather than in a callback.
-- `fixtures.ts` — loads `e2e-fixtures.json` (override path with
-  `RGB_E2E_FIXTURES`). Funding/mining goes through the gateway's
-  `POST /dev/regtest/fund` from Node — no docker exec, no CORS.
-- Specs assert with the shared field helpers from
-  `@utexo/rgb-sdk-core/conformance` (`expectFields`, `expectNoWireKeys`, …) —
-  every response field named, wire-shaped keys rejected (§7a.2).
+- `harness/main.mjs` is the page. It imports the built engine from `dist/` and
+  exposes `window.harness` with `boot` / `call` / `get`. Results cross the page
+  boundary as JSON `{ ok, value | error }`, and errors keep `code` and `operation`.
+  Bytes cross as `{ $bytes: [...] }`. The page sets the
+  core logger to `WARN`.
+- `client.mjs` drives the page from the specs: `bootWallet`, `wcall`, `wcallError`,
+  `fundAndCreateUtxos`, and `settle` (mine and refresh until a condition holds).
+- `stand.mjs` funds and mines through the regtest helper from Node, and waits until
+  esplora has indexed each block.
+- Two wallets run in two browser contexts, so each has its own IndexedDB.
 
 ## Scenarios
 
-| Spec | Covers |
-|---|---|
-| `a-lifecycle.spec.ts` | init → unlock → node/network info → dispose; capabilities on the live object; `runConformanceChecks` fed the live wallet (closes the §6.0f gap) |
-| `b-onchain.spec.ts` | address → gateway funding → balance increase → createUtxos → listUnspents with parsed outpoints |
-| `c-assets.spec.ts` | issueAssetNia → listAssets → getAssetBalance → **`onchainReceive`** in both variants (witness and blinded, asserted to differ) → decodeRGBInvoice → listOnchainTransfers. Second test: **`onchainSend`** in three shapes — blinded, witness (`witnessData` required) and `donation: true` — paid between two wallets in two contexts |
-| `f-carriers.spec.ts` | begin/sign/end round-trips through `psbt` + `beginEnd`; real `vss.vssBackup` when the stack has `VSS=1` |
-| `g-vss.spec.ts` | VSS round-trip (`VSS=1`): backup → mutate → backup → fresh wallet → `restoreFromVss` → asset list, balance and channel-stream fence asserted |
-| `h-restore.spec.ts` | scenario H — device loss: a wallet killed with a channel open restores and reconnects, then closes **two** channels (BTC and coloured) and asserts both balances settle on-chain — the post-close sweep from rgb-lightning-node #119 (§6.0q) |
-| `i-funding.spec.ts` | scenario I — wallet-funded open against `regular_web`: `openChannel` funds itself (build + submit + broadcast) and the channel reaches ready (§6.0s) |
-| `j-apay.spec.ts` | scenario J — APay cart checkout across **two** browser contexts: merchant publishes a Lightning Address, buyer tops up and pays it, merchant’s channel RGB rises by the cart amount. No close phase: LSP channels are virtual, so there is nothing to settle on-chain — see scenario H |
+| Spec            | Covers                                                                                                                                                                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a-lifecycle`   | init → unlock → network info → identity (stable per mnemonic) → capabilities → destroy → `WALLET_DISPOSED`                                                                                                                                                                                  |
+| `b-onchain`     | address → funding → balance (incl. `skipSync`) → createUtxos → listUnspents with parsed outpoints → listTransactions; sendBtc between two wallets; estimateFeeRate on regtest                                                                                                               |
+| `c-assets`      | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs                             |
+| `d-transfers`   | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData`                                               |
+| `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty; a byte backup (`exportBackup`) restores into an empty profile with the same state, wrong password and damaged bytes change nothing, refused after `unlock()` |
+| `f-start`       | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; the default config (no `dataDir`) persists across a reload; an Electrum indexer rejected before opening                          |
+| `g-vss`         | needs the VSS server: backup → empty profile → `restoreFromVss` → the same assets, balances, UTXOs and transfers, kept across a reload, refused after connect; a new device that skips the restore warns and holds its uploads, so a third device still restores the first one's state      |
 
-## Constraints worth knowing
+`npm run capture:fixtures` runs `capture/fixtures.capture.mjs` with its own
+config: the harness boots with a recording runtime (`harness/capture.mjs`) and
+the raw values go to `tests/fixtures/` (see its README). It is not part of
+`npm run test:e2e`.
 
-- **Port 5173 is pinned** — the gateway's CORS allowlist only has
-  `localhost:5173` / `127.0.0.1:5173`. Stop the demo dev server before running
-  (`reuseExistingServer: false` makes the collision an explicit error).
-- **Core must be rebuilt** for changes to reach the suite: both the sdk build
-  and the field helpers resolve through `dist/`, not `src/`
-  (`cd ../rgb-sdk-core && npm run build`).
-- The stack scripts hard-code local repo paths (`RGBLN_REPO`), so this is a
-  local pre-commit gate, not CI — §7a.6.
+Not covered: the old rgb-sdk-web spec f (psbt / beginEnd carriers; RgbLibWeb has neither;
+the letter f is reused for `f-start`),
+h (device loss with open channels), and i and j (Lightning). The old spec g
+(VSS round trip) is ported as `g-vss`, without the channel-stream fence.

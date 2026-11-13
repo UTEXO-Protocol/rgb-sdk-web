@@ -44,8 +44,7 @@ jobs:
       - name: Install npm dependencies
         run: |
           npm pkg delete dependencies["@utexo/rgb-lib-wasm"]
-          npm pkg delete dependencies["@utexo/rgb-sdk-core"]
-          npm install @utexo/rgb-lib-wasm@latest @utexo/rgb-sdk-core@latest
+          npm install @utexo/rgb-lib-wasm@latest
           npm install
 
       - name: Set package version

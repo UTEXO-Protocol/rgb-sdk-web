@@ -10,7 +10,16 @@ package-lock.docs.json
 CLAUDE.md
 .env
 dist/
-scripts/
+# local scripts; the error table generator is tracked
+scripts/*
+!scripts/rgb-lib-errors.mjs
 .rgb-wallet/
 test-results/
 playwright-report/
+
+# e2e output
+tests/e2e/.out/
+tests/e2e/.results/
+
+# codec test bundle
+tests/.codec-*/

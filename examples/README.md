@@ -1,23 +1,16 @@
 # Examples
 
-Code snippets demonstrating the `@utexo/rgb-sdk-web` API. Each file is a
-self-contained ES module using `import` from `@utexo/rgb-sdk-web`.
+L1 only. Each file exports one async function; call it from your app.
+A browser extension wallet that serves dApps through WebRGB is in the
+[`@utexo/rgb-sdk` examples](https://github.com/UTEXO-Protocol/rgb-sdk/tree/main/examples/webrgb-extension).
 
-> These examples show browser-compatible usage patterns. They are not
-> runnable in Node.js (the package uses WebAssembly and browser APIs).
-> Use them as copy-paste references when building browser apps.
+| File                    | What it shows                                              |
+| ----------------------- | ---------------------------------------------------------- |
+| `new-wallet.ts`         | `generateKeys`, `RgbLibWeb.create()`, address, balance     |
+| `read-wallet.ts`        | reopening a stored wallet, assets, transfers, transactions |
+| `create-utxos-asset.ts` | colorable UTXOs, issuing an NIA asset                      |
+| `transfer.ts`           | witness invoice, `onchainSend`, refresh until `Settled`    |
 
-## Files
+Backup and restore are described in the package README.
 
-| File | What it shows |
-|------|---------------|
-| `new-wallet.mjs` | Generate keys, `new UTEXOWallet()` + `init()` + `unlock()`, get address + BTC balance |
-| `read-wallet.mjs` | Offline (xpub, network) and online (address, balance, assets) reads, `isOnline()`/`goOnline()` |
-| `create-utxos-asset.mjs` | Create UTXOs and issue a NIA asset |
-| `transfer.mjs` | Send RGB assets: `onchainReceive()` (witness + blind), `onchainSend()`, `refreshWallet()`, `listTransfers()` |
-| `lightning-channels-keysend.mjs` | `connectPeer()`, `openChannel()` (RGB channel), wait until usable, `keysend()` (BTC + RGB), `listPayments()` |
-| `lightning-payment.mjs` | Plain Lightning with a hosted node: `createLightningInvoice()` (BTC + RGB), `payLightningInvoice()`, receive/send status polling |
-| `lsp-bridge.mjs` | LSP bridges via `createLsp()`: `receiveAsset()` + `awaitReceiveSettlement()` (on-chain RGB → LN), `sendAsset()` (LN → on-chain RGB) |
-| `apay-lightning-address.mjs` | APay offline receive: `enableLightningAddress()` + keepalive/refill, sender `payAddress()`, automatic settlement check |
-| `utexo-file-backup-restore.mjs` | File backup (`createBackup()` → `getLastBackupBytes()`) and restore (`restoreFromBackupBytes()`) |
-| `utexo-vss-backup-restore.mjs` | VSS cloud backup (automatic) + explicit restore (`restoreFromVss()`) |
+`npm test` type-checks these files against the built package.

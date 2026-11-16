@@ -660,6 +660,34 @@ export const listTransactions = {
   },
 };
 
+/** Pending incoming transfers only: no send or burn is progressed. */
+const INCOMING_REFRESH = [
+  'WaitingCounterparty',
+  'WaitingSafeHeight',
+  'WaitingBroadcast',
+  'WaitingConfirmations',
+].map((status) => ({ status, incoming: true }));
+
+export const getReceivedMint = {
+  prepare(recipientId: unknown): string {
+    if (
+      typeof recipientId !== 'string' ||
+      recipientId.length === 0 ||
+      recipientId.length > 1024
+    )
+      throw new ValidationError(
+        'recipientId must be a non-empty string',
+        'recipientId'
+      );
+    return recipientId;
+  },
+  async execute(s: WasmSession, recipientId: string, refreshIncoming: boolean) {
+    if (refreshIncoming)
+      await s.wallet.refresh(s.connected(), null, INCOMING_REFRESH, false);
+    return codec.decodeReceivedMint(s.wallet.getReceivedMint(recipientId));
+  },
+};
+
 export const refresh = {
   async execute(s: WasmSession, skipSync: boolean) {
     return codec.publicRefresh(

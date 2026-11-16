@@ -39,6 +39,8 @@ import type {
   OnchainReceiveParams,
   OnchainSendRequestModel,
   ReadOptions,
+  ReceivedMint,
+  ReceivedMintOptions,
   ReceiveParams,
   RefreshTransfersResult,
   SendBtcBeginRequestModel,
@@ -879,6 +881,18 @@ export class RgbLibWebBackend {
   // ── byte backup (BackupExportApi, BackupRestoreApi, ADR-0003 B3) ───────────────────────────
 
   /** The encrypted backup as bytes. Works offline, on any wallet. */
+  getReceivedMint(
+    recipientId: string,
+    options?: ReceivedMintOptions
+  ): Promise<ReceivedMint | undefined> {
+    const id = ops.getReceivedMint.prepare(recipientId);
+    // Offline unless it refreshes incoming transfers first.
+    const refreshIncoming = options?.refreshIncoming === true;
+    return this.run('getReceivedMint', refreshIncoming, (s) =>
+      ops.getReceivedMint.execute(s, id, refreshIncoming)
+    );
+  }
+
   exportBackup(params: { password: string }): Promise<Uint8Array> {
     const prepared = ops.exportBackup.prepare(params);
     return this.run('exportBackup', false, (s) =>

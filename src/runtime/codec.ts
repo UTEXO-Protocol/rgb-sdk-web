@@ -26,6 +26,7 @@ import type {
   AssetIfa,
   AssetNIA,
   BitcoinNetwork,
+  ReceivedMint,
   RefreshTransfersResult,
   Transaction,
   TransactionType,
@@ -265,6 +266,17 @@ export const FIELDS = {
     // RGB_LIB_ERROR_VARIANTS (generated from src/error.rs).
     fields: { updatedStatus: 'mapped', failure: 'mapped' },
   },
+  ReceivedMint: {
+    rust: 'src/wallet/objects.rs ReceivedMint',
+    fields: {
+      opid: 'mapped',
+      lockId: 'mapped',
+      amount: 'mapped',
+      beforeBlock: 'mapped',
+      evmChainId: 'mapped',
+      bridgeContract: 'mapped',
+    },
+  },
   AssignmentsCollection: {
     // No rename_all: snake_case. Only inside the InsufficientAssignments error.
     rust: 'src/wallet/online.rs AssignmentsCollection',
@@ -307,6 +319,7 @@ export const RESULTS: Readonly<Record<string, StructName | null>> = {
   burnEnd: 'OperationResult',
   failTransfers: null,
   refresh: 'RefreshedTransfer',
+  getReceivedMint: 'ReceivedMint',
 };
 
 /**
@@ -1134,6 +1147,20 @@ export interface Operation {
   txid: string;
   batchTransferIdx: number;
 }
+/** `getReceivedMint`: `null` (no checked mint) or the lock terms, u64 as decimal strings. */
+export function decodeReceivedMint(value: unknown): ReceivedMint | undefined {
+  if (absent(value)) return undefined;
+  const v = record(value, 'received mint');
+  return {
+    opid: str(v.opid, 'opid'),
+    lockId: str(v.lockId, 'lock id'),
+    amount: big(v.amount, 'amount').toString(),
+    beforeBlock: big(v.beforeBlock, 'before block').toString(),
+    evmChainId: big(v.evmChainId, 'EVM chain id').toString(),
+    bridgeContract: str(v.bridgeContract, 'bridge contract'),
+  };
+}
+
 export function decodeOperation(value: unknown): Operation {
   const v = record(value, 'operation result');
   const txid = str(v.txid, 'txid');

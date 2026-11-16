@@ -54,6 +54,7 @@ export interface RgbLibWasmWallet {
   listUnspents(settledOnly: boolean): unknown;
   listTransactions(): unknown;
   listTransfers(filter: unknown, txid?: string | null): unknown;
+  getReceivedMint(recipientId: string): unknown;
   issueAssetNia(
     ticker: string,
     name: string,

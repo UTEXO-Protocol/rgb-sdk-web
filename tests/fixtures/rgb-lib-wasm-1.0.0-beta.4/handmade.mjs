@@ -96,4 +96,17 @@ export const cases = [
       ],
     ]),
   },
+  {
+    method: 'getReceivedMint',
+    label: 'checked mint, u64 above the safe range',
+    basedOn: 'src/wallet/objects.rs ReceivedMint (camelCase; u64 as BigInt)',
+    value: {
+      opid: 'a'.repeat(64),
+      lockId: 'b'.repeat(64),
+      amount: 2n ** 64n - 1n,
+      beforeBlock: 2n ** 53n + 1n,
+      evmChainId: 42161n,
+      bridgeContract: `0x${'c'.repeat(40)}`,
+    },
+  },
 ];

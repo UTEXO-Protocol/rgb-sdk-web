@@ -180,6 +180,7 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
         ],
       ]),
     failTransfers: async () => true,
+    getReceivedMint: () => null,
     getFeeEstimation: async () => 1.2,
     configureVssBackup: () => undefined,
     disableVssBackup: () => undefined,

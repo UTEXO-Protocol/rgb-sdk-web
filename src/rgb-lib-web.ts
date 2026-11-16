@@ -18,6 +18,8 @@ import type {
   OnchainSendRequestModel,
   ReadOptions,
   ReceiveParams,
+  ReceivedMintApi,
+  ReceivedMintOptions,
   SendBtcBeginRequestModel,
   BackupExportApi,
   BackupRestoreApi,
@@ -70,6 +72,7 @@ export class RgbLibWeb
   implements
     SharedWalletApi<RgbLibWebUnlockParams | undefined>,
     BurnApi,
+    ReceivedMintApi,
     BackupExportApi,
     BackupRestoreApi,
     VssBackupApi,
@@ -208,6 +211,16 @@ export class RgbLibWeb
    */
   burn(params: BurnParams) {
     return this.backend.guarded('burn', () => this.backend.burn(params));
+  }
+  /**
+   * The checked BFA mint paying `recipientId`, or `undefined`. Offline unless
+   * `refreshIncoming` is set, which first refreshes pending incoming transfers
+   * only. Receiving a mint needs the chain's `evmRpcUrls` entry.
+   */
+  getReceivedMint(recipientId: string, options?: ReceivedMintOptions) {
+    return this.backend.guarded('getReceivedMint', () =>
+      this.backend.getReceivedMint(recipientId, options)
+    );
   }
   /**
    * `burn` is false on a watch-only or disposed wallet. `consignment` is

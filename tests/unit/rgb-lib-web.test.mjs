@@ -641,6 +641,50 @@ describe('RgbLibWeb getReceivedMint', () => {
     );
   });
 
+  const receiveOn = (batchTransferIdx) => ({
+    listTransfers: () => [
+      {
+        idx: 7,
+        batchTransferIdx,
+        createdAt: 1700000000n,
+        updatedAt: 1700000001n,
+        status: 'WaitingCounterparty',
+        requestedAssignment: { Fungible: 10n },
+        assignments: [],
+        kind: 'ReceiveWitness',
+        txid: null,
+        recipientId: 'bcrt:utxob:rid',
+        receiveUtxo: null,
+        changeUtxo: null,
+        expirationTimestamp: 1700003600n,
+        transportEndpoints: [],
+        senderTransportEndpoint: null,
+        invoiceString: 'rgb:invoice',
+        consignmentPath: null,
+        burnReason: null,
+      },
+    ],
+  });
+
+  it("rejects when the refresh reports a failure for this receive's batch", async () => {
+    // The fake refresh reports a failure for batch 2 only.
+    const { engine, names } = await ready({ overrides: receiveOn(2) });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+      'NATIVE_ERROR',
+      'getReceivedMint'
+    );
+    assert.equal(names().includes('getReceivedMint'), false);
+  });
+
+  it('ignores refresh failures of other transfers', async () => {
+    const { engine } = await ready({ overrides: receiveOn(1) });
+    assert.equal(
+      await engine.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+      undefined
+    );
+  });
+
   it('rejects an empty recipient ID before any runtime call', async () => {
     const { engine, names } = await ready();
     const before = names().length;

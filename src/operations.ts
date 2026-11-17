@@ -682,8 +682,28 @@ export const getReceivedMint = {
     return recipientId;
   },
   async execute(s: WasmSession, recipientId: string, refreshIncoming: boolean) {
-    if (refreshIncoming)
-      await s.wallet.refresh(s.connected(), null, INCOMING_REFRESH, false);
+    if (refreshIncoming) {
+      const refreshed = codec.decodeRefresh(
+        await s.wallet.refresh(s.connected(), null, INCOMING_REFRESH, false)
+      );
+      // Refresh reports a per-transfer failure in its result, not as an error:
+      // a failed check of this receive must reject, not read as a pending mint.
+      const batches = new Set(
+        codec
+          .decodeTransfers(s.wallet.listTransfers('any', null))
+          .filter((t) => t.recipientId === recipientId)
+          .map((t) => t.batchTransferIdx)
+      );
+      const failure = refreshed.find(
+        (item) => item.failure && batches.has(item.batchTransferIdx)
+      )?.failure;
+      if (failure)
+        throw new RgbLibWebError(
+          'NATIVE_ERROR',
+          `${failure.name}: ${failure.message}`,
+          'getReceivedMint'
+        );
+    }
     return codec.decodeReceivedMint(s.wallet.getReceivedMint(recipientId));
   },
 };

@@ -1,11 +1,18 @@
 # Changelog
 
 
-## Unreleased
+## 1.0.0-beta.14 (unreleased)
+
+Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 
 ### Added
 
 - `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as exact decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only, so no send or burn is progressed. Receiving a mint needs the chain's `evmRpcUrls` entry.
+
+## 1.0.0-beta.13
+
+### Added
+
 - **Burn** — `RgbLibWeb` implements `BurnApi`: `burn({ assetId, amount,
   burnRecipient?, feeRate, minConfirmations })` (begin, sign, end over
   `@utexo/rgb-lib-wasm`) and `getBfaCapabilities()`. Params are checked by

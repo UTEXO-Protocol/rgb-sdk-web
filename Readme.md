@@ -176,6 +176,24 @@ const { txid } = await wallet.burn({
 - `consignment` is always `false`: `@utexo/rgb-lib-wasm` 1.0.0-beta.4 has no
   way to export a consignment, so there is no `getConsignment()` here.
 
+## Check a received BFA mint
+
+Before a bridge user pays the EVM lock of a mint, the receiving wallet can
+check what the lock has to match:
+
+```ts
+const mint = await wallet.getReceivedMint(recipientId, {
+  refreshIncoming: true, // refresh incoming transfers first
+});
+// undefined while no checked mint is ready; otherwise
+// { opid, lockId, amount, beforeBlock, evmChainId, bridgeContract }
+```
+
+- `recipientId` is the one from the wallet's own `witnessReceive()` or
+  `blindReceive()`.
+- Integer fields are decimal strings; parse them with `BigInt`.
+- `refreshIncoming` refreshes pending incoming transfers only, not sends.
+
 ## Read balances and history
 
 ```ts
@@ -277,7 +295,7 @@ Network defaults:
 | Network   | `getNetwork()`, `getNetworkInfo()`, `getWalletIdentity()`, `estimateFeeRate()`                             |
 | Bitcoin   | `getAddress()`, `getBtcBalance()`, `listUnspents()`, `createUtxos()`, `sendBtc()`                          |
 | Assets    | `listAssets()`, `getAssetBalance()`, `issueAssetNia()`, `issueAssetIfa()`, `inflate()`                     |
-| Burn      | `burn()`, `getBfaCapabilities()`                                                                           |
+| BFA       | `burn()`, `getBfaCapabilities()`, `getReceivedMint()`                                                      |
 | Invoices  | `onchainReceive()`, `witnessReceive()`, `blindReceive()`, `decodeRGBInvoice()`, `onchainSend()`            |
 | Transfers | `listTransfers()`, `listTransactions()`, `refresh()`, `refreshWallet()`, `syncWallet()`, `failTransfers()` |
 | Backup    | `exportBackup()`, `restoreBackup()`, `backupToVss()`, `restoreFromVss()`, `getVssBackupInfo()`             |

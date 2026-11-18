@@ -8,7 +8,7 @@
  *   start(cfgJson)       — generateKeys → RgbLibWeb.create, no unlock
  *   boot({ capture: true }) records raw runtime values (capture.mjs);
  *   label(name) tags the next records; takeCapture() returns and clears them
- *   call(method, args)   — call a wallet method
+ *   call(method, args)   — call a wallet method, or `carrier.method`
  *   get(property)        — read a wallet property ('capabilities')
  *
  * Results cross the page boundary as JSON `{ ok, value | error }`; an error
@@ -136,12 +136,15 @@ window.harness = {
 
   call: (method, argsJson) =>
     run(async () => {
-      const w = live();
-      const fn = w[method];
+      // `beginEnd.burnBegin` calls a method of a carrier.
+      const path = method.split('.');
+      const name = path.pop();
+      const target = path.reduce((owner, key) => owner?.[key], live());
+      const fn = target?.[name];
       if (typeof fn !== 'function') {
         throw new Error(`harness.call: ${method} is not a wallet method`);
       }
-      return await fn.apply(w, dec(argsJson));
+      return await fn.apply(target, dec(argsJson));
     }),
 
   get: (property) => run(() => live()[property]),

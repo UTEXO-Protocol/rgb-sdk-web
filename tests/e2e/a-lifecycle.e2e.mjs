@@ -29,10 +29,10 @@ test('A: lifecycle, network info, identity, capabilities, destroy', async ({
 
   const caps = await wget(page, 'capabilities');
   report('capabilities', caps);
-  // The WASM adapter has neither the psbt nor the beginEnd carrier.
+  // A wallet with the mnemonic has both carriers.
   expect(caps).toEqual({
-    psbtSigning: false,
-    beginEndFlows: false,
+    psbtSigning: true,
+    beginEndFlows: true,
     canSignTransactions: true,
   });
 

@@ -8,6 +8,12 @@ Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 ### Added
 
 - `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as exact decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only, so no send or burn is progressed; a refresh failure reported for that receive rejects (`NATIVE_ERROR`) instead of reading as no mint. Receiving a mint needs the chain's `evmRpcUrls` entry.
+- **Prepare, approve, submit** — `wallet.beginEnd` is now present: core's begin/end flows plus `burnBegin(params)` and `burnEnd({ signedPsbt })`. `burnBegin` returns the unsigned `psbt`, `txid`, `batchTransferIdx`, exact `fee` (sat), `vbytes` and `feeRate`, and signs nothing. Calling `onchainSendEnd`, `inflateEnd` or `burnEnd` again with the same signed PSBT resolves with the result if the operation was already submitted.
+- `wallet.psbt` (`signPsbt`, `estimateFee`) is present on a wallet with the mnemonic and absent on a watch-only wallet. `signPsbt` signs with the wallet's own keys and refuses a `mnemonic` argument.
+
+### Changed
+
+- `capabilities.beginEndFlows` is now `true`, and `capabilities.psbtSigning` is `true` unless the wallet is watch-only.
 
 ## 1.0.0-beta.13
 

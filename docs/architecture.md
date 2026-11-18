@@ -76,3 +76,4 @@ tag `v1.0.0-beta.4` (`f0e266f`).
 | Byte backup: `exportBackup()`, `restoreBackup()`, with e2e                     | done  |
 | VSS backup and restore e2e against a local VSS server                          | done  |
 | Burn: `burn()`, `getBfaCapabilities()` (no consignment export in beta.4)       | done  |
+| Prepare, approve, submit: `beginEnd` and `psbt` carriers (unit tests only)     | done  |

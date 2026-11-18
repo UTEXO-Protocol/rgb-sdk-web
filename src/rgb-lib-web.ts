@@ -8,8 +8,11 @@
 import type {
   BurnApi,
   BurnParams,
+  BurnResult,
   EngineCapabilities,
   FailTransfersRequest,
+  IBeginEndFlows,
+  IPsbtSigning,
   InflateAssetIfaRequestModel,
   IssueAssetIfaRequestModel,
   IssueAssetNiaRequestModel,
@@ -32,6 +35,25 @@ import type {
 import { RgbLibWebBackend } from './backend.js';
 import { splitConfig } from './config.js';
 import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
+import type { BurnBeginResult } from './operations.js';
+
+export type { BurnBeginResult } from './operations.js';
+
+/**
+ * Core's begin/end flows plus burn. Show what a begin returns, get approval,
+ * sign, store the signed PSBT durably, then call the end.
+ *
+ * If the end is interrupted, call it again with the same signed PSBT:
+ * `onchainSendEnd`, `inflateEnd` and `burnEnd` resolve with the result when
+ * the operation was already submitted. To abandon a begun operation, call
+ * `failTransfers({ batchTransferIdx })`.
+ */
+export interface RgbLibWebBeginEndFlows extends IBeginEndFlows {
+  /** Prepares a burn and reserves its inputs; nothing is signed or sent. */
+  burnBegin(params: BurnParams): Promise<BurnBeginResult>;
+  /** Broadcasts a burn signed after `burnBegin`. */
+  burnEnd(params: { signedPsbt: string }): Promise<BurnResult>;
+}
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
@@ -82,8 +104,10 @@ export class RgbLibWeb
   /** Embedded, never read from core: a newer core must not make this engine claim more. */
   readonly contractVersion = '1' as const;
   readonly protocol = 'RGB_L1' as const;
-  readonly psbt = undefined;
-  readonly beginEnd = undefined;
+  /** Signing with this wallet's keys; absent on a watch-only wallet. */
+  readonly psbt: IPsbtSigning | undefined;
+  /** Prepare, approve and submit as separate steps. */
+  readonly beginEnd: RgbLibWebBeginEndFlows;
   private readonly backend: RgbLibWebBackend;
 
   /**
@@ -105,7 +129,37 @@ export class RgbLibWeb
 
   constructor(config: RgbLibWebConfig) {
     const { params, keys, runtime } = splitConfig(config);
-    this.backend = new RgbLibWebBackend(params, keys, runtime);
+    const backend = new RgbLibWebBackend(params, keys, runtime);
+    this.backend = backend;
+    this.psbt = backend.canSignTransactions
+      ? {
+          signPsbt: (psbt, mnemonic) =>
+            backend.guarded('signPsbt', () => backend.signPsbt(psbt, mnemonic)),
+          estimateFee: (psbt) =>
+            backend.guarded('estimateFee', () => backend.estimateFee(psbt)),
+        }
+      : undefined;
+    this.beginEnd = {
+      createUtxosBegin: (p) =>
+        backend.guarded('createUtxosBegin', () => backend.createUtxosBegin(p)),
+      createUtxosEnd: (p) =>
+        backend.guarded('createUtxosEnd', () => backend.createUtxosEnd(p)),
+      onchainSendBegin: (p) =>
+        backend.guarded('onchainSendBegin', () => backend.onchainSendBegin(p)),
+      onchainSendEnd: (p) =>
+        backend.guarded('onchainSendEnd', () => backend.onchainSendEnd(p)),
+      sendBtcBegin: (p) =>
+        backend.guarded('sendBtcBegin', () => backend.sendBtcBegin(p)),
+      sendBtcEnd: (p) =>
+        backend.guarded('sendBtcEnd', () => backend.sendBtcEnd(p)),
+      inflateBegin: (p) =>
+        backend.guarded('inflateBegin', () => backend.inflateBegin(p)),
+      inflateEnd: (p) =>
+        backend.guarded('inflateEnd', () => backend.inflateEnd(p)),
+      burnBegin: (p) =>
+        backend.guarded('burnBegin', () => backend.burnBegin(p)),
+      burnEnd: (p) => backend.guarded('burnEnd', () => backend.burnEnd(p)),
+    };
   }
 
   get capabilities(): EngineCapabilities {

@@ -72,7 +72,7 @@ config: the harness boots with a recording runtime (`harness/capture.mjs`) and
 the raw values go to `tests/fixtures/` (see its README). It is not part of
 `npm run test:e2e`.
 
-Not covered: the old rgb-sdk-web spec f (psbt / beginEnd carriers; RgbLibWeb has neither;
-the letter f is reused for `f-start`),
+Not covered: the psbt / beginEnd carriers against the stand (unit tests only; the letter f
+of the old spec is reused for `f-start`),
 h (device loss with open channels), and i and j (Lightning). The old spec g
 (VSS round trip) is ported as `g-vss`, without the channel-stream fence.

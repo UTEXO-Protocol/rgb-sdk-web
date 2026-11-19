@@ -1819,6 +1819,22 @@ export const golden = {
       "refresh",
     ],
   },
+  "handmade: getReceivedMint — checked mint, u64 above the safe range": {
+    result: {
+      ok: true,
+      value: {
+        opid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        lockId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        amount: "18446744073709551615",
+        beforeBlock: "9007199254740993",
+        evmChainId: "42161",
+        bridgeContract: "0xcccccccccccccccccccccccccccccccccccccccc",
+      },
+    },
+    calls: [
+      "getReceivedMint",
+    ],
+  },
   "negative: listAssets — NIA without assetId": {
     result: {
       ok: false,

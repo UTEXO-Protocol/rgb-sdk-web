@@ -30,8 +30,11 @@ import { ValidationError, logger } from '@utexo/rgb-sdk-core';
 import type {
   BfaCapabilities,
   BurnParams,
+  CreateUtxosBeginRequestModel,
+  CreateUtxosEndRequestModel,
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
+  InflateEndRequestModel,
   IssueAssetIfaRequestModel,
   IssueAssetNiaRequestModel,
   ListAssetsOptions,
@@ -39,9 +42,13 @@ import type {
   OnchainReceiveParams,
   OnchainSendRequestModel,
   ReadOptions,
+  ReceivedMint,
+  ReceivedMintOptions,
   ReceiveParams,
   RefreshTransfersResult,
+  SendAssetEndRequestModel,
   SendBtcBeginRequestModel,
+  SendBtcEndRequestModel,
   VssBackupInfo,
   WalletIdentity,
 } from '@utexo/rgb-sdk-core';
@@ -109,15 +116,25 @@ function definedOnly<T extends object>(value: T): T {
  */
 const AUTO_BACKUP: ReadonlySet<string> = new Set([
   'createUtxos',
+  'createUtxosBegin',
+  'createUtxosEnd',
   'sendBtc',
+  'sendBtcBegin',
+  'sendBtcEnd',
   'issueAssetNia',
   'issueAssetIfa',
   'inflate',
+  'inflateBegin',
+  'inflateEnd',
   'burn',
+  'burnBegin',
+  'burnEnd',
   'blindReceive',
   'witnessReceive',
   'onchainReceive',
   'onchainSend',
+  'onchainSendBegin',
+  'onchainSendEnd',
   'failTransfers',
   'refresh',
   'refreshWallet',
@@ -710,6 +727,122 @@ export class RgbLibWebBackend {
     );
   }
 
+  // ── externally approved flows ─────────────────────────────────────────────
+  // No `signs` rule: the keys may be elsewhere, so a watch-only wallet can run
+  // these. Each begin reserves its inputs until the end or `failTransfers`.
+
+  createUtxosBegin(params: CreateUtxosBeginRequestModel) {
+    return this.checked(
+      'createUtxosBegin',
+      true,
+      params,
+      { prepare: ops.createUtxosBegin.prepare },
+      (s, _p, v) => ops.createUtxosBegin.execute(s, v)
+    );
+  }
+
+  createUtxosEnd(params: CreateUtxosEndRequestModel) {
+    return this.checked(
+      'createUtxosEnd',
+      true,
+      params,
+      { prepare: ops.createUtxosEnd.prepare },
+      (s, _p, v) => ops.createUtxosEnd.execute(s, v)
+    );
+  }
+
+  sendBtcBegin(params: SendBtcBeginRequestModel) {
+    return this.checked(
+      'sendBtcBegin',
+      true,
+      params,
+      { prepare: ops.sendBtcBegin.prepare },
+      (s, _p, v) => ops.sendBtcBegin.execute(s, v)
+    );
+  }
+
+  sendBtcEnd(params: SendBtcEndRequestModel) {
+    return this.checked(
+      'sendBtcEnd',
+      true,
+      params,
+      { prepare: ops.sendBtcEnd.prepare },
+      (s, _p, v) => ops.sendBtcEnd.execute(s, v)
+    );
+  }
+
+  onchainSendBegin(params: OnchainSendRequestModel) {
+    return this.checked(
+      'onchainSendBegin',
+      true,
+      params,
+      { prepare: ops.onchainSendBegin.prepare },
+      (s, _p, v) => ops.onchainSendBegin.execute(s, v, this.onlineContext())
+    );
+  }
+
+  onchainSendEnd(params: SendAssetEndRequestModel) {
+    return this.checked(
+      'onchainSendEnd',
+      true,
+      params,
+      { prepare: ops.onchainSendEnd.prepare },
+      (s, _p, v) => ops.onchainSendEnd.execute(s, v)
+    );
+  }
+
+  inflateBegin(params: InflateAssetIfaRequestModel) {
+    return this.checked(
+      'inflateBegin',
+      true,
+      params,
+      { prepare: ops.inflateBegin.prepare },
+      (s, _p, v) => ops.inflateBegin.execute(s, v)
+    );
+  }
+
+  inflateEnd(params: InflateEndRequestModel) {
+    return this.checked(
+      'inflateEnd',
+      true,
+      params,
+      { prepare: ops.inflateEnd.prepare },
+      (s, _p, v) => ops.inflateEnd.execute(s, v)
+    );
+  }
+
+  burnBegin(params: BurnParams) {
+    return this.checked(
+      'burnBegin',
+      true,
+      params,
+      { prepare: ops.burnBegin.prepare },
+      (s, _p, v) => ops.burnBegin.execute(s, v)
+    );
+  }
+
+  burnEnd(params: { signedPsbt: string }) {
+    return this.checked(
+      'burnEnd',
+      true,
+      params,
+      { prepare: ops.burnEnd.prepare },
+      (s, _p, v) => ops.burnEnd.execute(s, v)
+    );
+  }
+
+  /** Signs with the wallet keys; the carrier is absent on a watch-only wallet. */
+  signPsbt(psbt: string, mnemonic?: string): Promise<string> {
+    const prepared = ops.signPsbt.prepare(psbt, mnemonic);
+    return this.run('signPsbt', false, async (s) =>
+      ops.signPsbt.execute(s, prepared)
+    );
+  }
+
+  estimateFee(psbt: string) {
+    return this.run('estimateFee', false, async () => ops.estimateFee(psbt));
+  }
+
   /**
    * What this wallet can do now. Burning signs, so a watch-only wallet cannot;
    * beta.4 has no consignment export, so `consignment` is always false.
@@ -879,6 +1012,18 @@ export class RgbLibWebBackend {
   // ── byte backup (BackupExportApi, BackupRestoreApi, ADR-0003 B3) ───────────────────────────
 
   /** The encrypted backup as bytes. Works offline, on any wallet. */
+  getReceivedMint(
+    recipientId: string,
+    options?: ReceivedMintOptions
+  ): Promise<ReceivedMint | undefined> {
+    const id = ops.getReceivedMint.prepare(recipientId);
+    // Offline unless it refreshes incoming transfers first.
+    const refreshIncoming = options?.refreshIncoming === true;
+    return this.run('getReceivedMint', refreshIncoming, (s) =>
+      ops.getReceivedMint.execute(s, id, refreshIncoming)
+    );
+  }
+
   exportBackup(params: { password: string }): Promise<Uint8Array> {
     const prepared = ops.exportBackup.prepare(params);
     return this.run('exportBackup', false, (s) =>

@@ -176,6 +176,49 @@ const { txid } = await wallet.burn({
 - `consignment` is always `false`: `@utexo/rgb-lib-wasm` 1.0.0-beta.4 has no
   way to export a consignment, so there is no `getConsignment()` here.
 
+### Approve a burn before it is sent
+
+```ts
+const begun = await wallet.beginEnd.burnBegin({
+  assetId: asset.assetId,
+  amount: '500',
+  feeRate: 2,
+  minConfirmations: 1,
+});
+// Show begun.psbt, begun.txid and begun.fee (sat), then ask for approval.
+
+const signedPsbt = await wallet.psbt.signPsbt(begun.psbt);
+await saveDurably(begun.txid, signedPsbt); // your storage, before submitting
+const { txid } = await wallet.beginEnd.burnEnd({ signedPsbt });
+```
+
+- `burnBegin` reserves the inputs. If the user declines, release them with
+  `failTransfers({ batchTransferIdx: begun.batchTransferIdx })`.
+- After an interruption, call `burnEnd` again with the saved `signedPsbt`. It
+  resolves with the result if the burn was already submitted.
+- The wallet cannot return a PSBT later, so keeping the signed one is up to
+  your app. A watch-only wallet has no `wallet.psbt`: sign elsewhere.
+- RGB sends work the same way with `onchainSendBegin` and `onchainSendEnd`;
+  fee details for any PSBT come from `wallet.psbt.estimateFee(psbt)`.
+
+## Check a received BFA mint
+
+Before a bridge user pays the EVM lock of a mint, the receiving wallet can
+check what the lock has to match:
+
+```ts
+const mint = await wallet.getReceivedMint(recipientId, {
+  refreshIncoming: true, // refresh incoming transfers first
+});
+// undefined while no checked mint is ready; otherwise
+// { opid, lockId, amount, beforeBlock, evmChainId, bridgeContract }
+```
+
+- `recipientId` is the one from the wallet's own `witnessReceive()` or
+  `blindReceive()`.
+- Integer fields are decimal strings; parse them with `BigInt`.
+- `refreshIncoming` refreshes pending incoming transfers only, not sends.
+
 ## Read balances and history
 
 ```ts
@@ -277,7 +320,8 @@ Network defaults:
 | Network   | `getNetwork()`, `getNetworkInfo()`, `getWalletIdentity()`, `estimateFeeRate()`                             |
 | Bitcoin   | `getAddress()`, `getBtcBalance()`, `listUnspents()`, `createUtxos()`, `sendBtc()`                          |
 | Assets    | `listAssets()`, `getAssetBalance()`, `issueAssetNia()`, `issueAssetIfa()`, `inflate()`                     |
-| Burn      | `burn()`, `getBfaCapabilities()`                                                                           |
+| BFA       | `burn()`, `getBfaCapabilities()`, `getReceivedMint()`                                                      |
+| Approval  | `beginEnd` (begin/end flows, `burnBegin()`, `burnEnd()`), `psbt` (`signPsbt()`, `estimateFee()`)           |
 | Invoices  | `onchainReceive()`, `witnessReceive()`, `blindReceive()`, `decodeRGBInvoice()`, `onchainSend()`            |
 | Transfers | `listTransfers()`, `listTransactions()`, `refresh()`, `refreshWallet()`, `syncWallet()`, `failTransfers()` |
 | Backup    | `exportBackup()`, `restoreBackup()`, `backupToVss()`, `restoreFromVss()`, `getVssBackupInfo()`             |

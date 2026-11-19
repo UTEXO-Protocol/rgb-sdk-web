@@ -26,8 +26,8 @@ test('F: generateKeys + RgbLibWeb.create(), then address and balance', async ({
   const id = await wcall(page, 'getWalletIdentity');
   expect(id.network).toBe('regtest');
   expect(await wget(page, 'capabilities')).toEqual({
-    psbtSigning: false,
-    beginEndFlows: false,
+    psbtSigning: true,
+    beginEndFlows: true,
     canSignTransactions: true,
   });
 

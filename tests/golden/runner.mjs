@@ -54,6 +54,7 @@ function plan(mods) {
     listUnspents: { call: (e) => e.listUnspents() },
     listTransactions: { call: (e) => e.listTransactions() },
     listTransfers: { call: (e) => e.listTransfers(ASSET) },
+    getReceivedMint: { call: (e) => e.getReceivedMint('bcrt:utxob:golden') },
     listAssets: { call: (e) => e.listAssets() },
     getAssetBalance: { call: (e) => e.getAssetBalance(ASSET) },
     issueAssetNia: {

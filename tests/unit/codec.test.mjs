@@ -52,6 +52,7 @@ const PROJECT = {
   listUnspents: (c, v) => c.decodeUnspents(v).map(c.publicUnspent),
   listTransactions: (c, v) => c.decodeTransactions(v).map(c.publicTransaction),
   listTransfers: (c, v) => c.decodeTransfers(v).map(c.publicTransfer),
+  getReceivedMint: (c, v) => c.decodeReceivedMint(v),
   issueAssetNia: (c, v) => c.publicNia(c.decodeNia(v)),
   issueAssetIfa: (c, v) => c.publicIfa(c.decodeIfa(v)),
   blindReceive: (c, v) => c.publicReceive(c.decodeReceive(v)),

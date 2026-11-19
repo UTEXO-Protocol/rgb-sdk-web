@@ -27,20 +27,28 @@ import {
 } from '@utexo/rgb-sdk-core';
 import type {
   BurnParams,
+  BurnResult,
+  CreateUtxosBeginRequestModel,
+  CreateUtxosEndRequestModel,
+  EstimateFeeResult,
   FailTransfersRequest,
   InflateAssetIfaRequestModel,
+  InflateEndRequestModel,
   IssueAssetIfaRequestModel,
   IssueAssetNiaRequestModel,
   ListAssetsOptions,
   OnchainSendRequestModel,
   ReceiveAssignmentKind,
   ReceiveParams,
+  SendAssetEndRequestModel,
   SendBtcBeginRequestModel,
+  SendBtcEndRequestModel,
 } from '@utexo/rgb-sdk-core';
 import * as codec from './runtime/codec.js';
 import { integer } from './config.js';
 import type { VssSetting } from './config.js';
-import { RgbLibWebError } from './errors.js';
+import { RgbLibWebError, isCannotEndTransfer } from './errors.js';
+import { summarizePsbt } from './runtime/psbt.js';
 import type { WasmSession } from './runtime/session.js';
 
 /** What `execute` needs from the backend's connection. */
@@ -519,100 +527,309 @@ const DEFAULT_SEND_EXPIRY_SECONDS = 3600n;
 /** Time left to detect the ACK and broadcast before the invoice expires. */
 const SEND_EXPIRY_MARGIN_SECONDS = 600n;
 
-export const onchainSend = operation({
-  prepare: (p: OnchainSendRequestModel) => {
-    // The send always syncs; skipSync: true is refused, not ignored.
-    if (p.skipSync === true)
-      throw new RgbLibWebError(
-        'UNSUPPORTED_CAPABILITY',
-        'onchainSend always syncs on RGB_L1; skipSync: true is not supported',
-        'onchainSend'
-      );
-    const amount =
-      p.amount === undefined ? null : wireU64(p.amount, 'amount', true);
-    // WitnessData: amountSat and blinding are decimal strings; the runtime's
-    // from_str_or_number deserializers take no BigInt.
-    const witnessData = p.witnessData
-      ? {
-          amountSat: u64(p.witnessData.amountSat, 'witness amount', true),
-          blinding:
-            p.witnessData.blinding === undefined
-              ? null
-              : u64(p.witnessData.blinding, 'blinding'),
-        }
-      : null;
-    return {
-      invoice: p.invoice,
-      assetId: p.assetId ?? null,
-      amount,
-      witnessData,
-      donation: p.donation ?? false,
-      feeRate: wireFeeRate(p.feeRate),
-      minConfirmations: minConfirmations(p.minConfirmations, 1, 1),
-    };
-  },
-  /** The Kotlin bridge's `send()`: invoice checks, then begin, sign, end. */
-  async execute(s: WasmSession, v, online: OnlineContext) {
-    const handle = s.connected();
-    const invoice = codec.decodeInvoice(s.invoiceData(v.invoice));
-    if (invoice.wasmNetwork !== s.wasmNetwork)
-      fail('Invoice network does not match wallet');
-    if (
-      v.assetId !== null &&
-      invoice.assetId !== null &&
-      v.assetId !== invoice.assetId
-    )
-      fail('Asset override does not match invoice');
-    const asset = invoice.assetId ?? v.assetId ?? fail('Asset ID is required');
-    const n = v.amount;
-    let assignment: unknown;
-    if (invoice.assignment.type === 'Any') {
-      if (n === null || n === 0n) fail('Amount is required');
-      assignment = { Fungible: n };
-    } else if (invoice.assignment.type === 'Fungible') {
-      if (n !== null && n !== invoice.assignment.amount)
-        fail('Amount override does not match invoice');
-      assignment = codec.encodeAssignment(invoice.assignment);
-    } else {
-      if (n !== null) fail('Amount override is incompatible with invoice');
-      assignment = codec.encodeAssignment(invoice.assignment);
-    }
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    const invoiceExpiry = invoice.expirationTimestamp;
-    let expiry: bigint;
-    if (invoiceExpiry === null) expiry = now + DEFAULT_SEND_EXPIRY_SECONDS;
-    else if (invoiceExpiry <= now + SEND_EXPIRY_MARGIN_SECONDS)
-      fail('Invoice expires too soon');
-    else expiry = invoiceExpiry - SEND_EXPIRY_MARGIN_SECONDS;
-    const recipient = {
-      recipientId: invoice.recipientId,
-      witnessData: v.witnessData,
-      assignment,
-      transportEndpoints: invoice.transportEndpoints,
-      publicKey: invoice.publicKey,
-      encryption: invoice.encryption,
-      expirationTimestamp: invoiceExpiry,
-    };
-    const begun = codec.record(
-      await s.wallet.sendBegin(
-        handle,
-        { [asset]: [recipient] },
-        v.donation,
-        v.feeRate,
-        v.minConfirmations,
-        expiry,
-        online.proxyEndpoint,
-        null,
-        false
-      ),
-      'send begin result'
+function prepareSend(p: OnchainSendRequestModel) {
+  // The send always syncs; skipSync: true is refused, not ignored.
+  if (p.skipSync === true)
+    throw new RgbLibWebError(
+      'UNSUPPORTED_CAPABILITY',
+      'onchainSend always syncs on RGB_L1; skipSync: true is not supported',
+      'onchainSend'
     );
-    const signed = s.sign(codec.str(begun.psbt, 'PSBT'));
+  const amount =
+    p.amount === undefined ? null : wireU64(p.amount, 'amount', true);
+  // WitnessData: amountSat and blinding are decimal strings; the runtime's
+  // from_str_or_number deserializers take no BigInt.
+  const witnessData = p.witnessData
+    ? {
+        amountSat: u64(p.witnessData.amountSat, 'witness amount', true),
+        blinding:
+          p.witnessData.blinding === undefined
+            ? null
+            : u64(p.witnessData.blinding, 'blinding'),
+      }
+    : null;
+  return {
+    invoice: p.invoice,
+    assetId: p.assetId ?? null,
+    amount,
+    witnessData,
+    donation: p.donation ?? false,
+    feeRate: wireFeeRate(p.feeRate),
+    minConfirmations: minConfirmations(p.minConfirmations, 1, 1),
+  };
+}
+
+/** The Kotlin bridge's `send()` up to signing: invoice checks, then begin. */
+async function beginSend(
+  s: WasmSession,
+  v: ReturnType<typeof prepareSend>,
+  online: OnlineContext
+): Promise<string> {
+  const handle = s.connected();
+  const invoice = codec.decodeInvoice(s.invoiceData(v.invoice));
+  if (invoice.wasmNetwork !== s.wasmNetwork)
+    fail('Invoice network does not match wallet');
+  if (
+    v.assetId !== null &&
+    invoice.assetId !== null &&
+    v.assetId !== invoice.assetId
+  )
+    fail('Asset override does not match invoice');
+  const asset = invoice.assetId ?? v.assetId ?? fail('Asset ID is required');
+  const n = v.amount;
+  let assignment: unknown;
+  if (invoice.assignment.type === 'Any') {
+    if (n === null || n === 0n) fail('Amount is required');
+    assignment = { Fungible: n };
+  } else if (invoice.assignment.type === 'Fungible') {
+    if (n !== null && n !== invoice.assignment.amount)
+      fail('Amount override does not match invoice');
+    assignment = codec.encodeAssignment(invoice.assignment);
+  } else {
+    if (n !== null) fail('Amount override is incompatible with invoice');
+    assignment = codec.encodeAssignment(invoice.assignment);
+  }
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const invoiceExpiry = invoice.expirationTimestamp;
+  let expiry: bigint;
+  if (invoiceExpiry === null) expiry = now + DEFAULT_SEND_EXPIRY_SECONDS;
+  else if (invoiceExpiry <= now + SEND_EXPIRY_MARGIN_SECONDS)
+    fail('Invoice expires too soon');
+  else expiry = invoiceExpiry - SEND_EXPIRY_MARGIN_SECONDS;
+  const recipient = {
+    recipientId: invoice.recipientId,
+    witnessData: v.witnessData,
+    assignment,
+    transportEndpoints: invoice.transportEndpoints,
+    publicKey: invoice.publicKey,
+    encryption: invoice.encryption,
+    expirationTimestamp: invoiceExpiry,
+  };
+  const begun = codec.record(
+    await s.wallet.sendBegin(
+      handle,
+      { [asset]: [recipient] },
+      v.donation,
+      v.feeRate,
+      v.minConfirmations,
+      expiry,
+      online.proxyEndpoint,
+      null,
+      false
+    ),
+    'send begin result'
+  );
+  return codec.str(begun.psbt, 'PSBT');
+}
+
+export const onchainSend = operation({
+  prepare: prepareSend,
+  async execute(s: WasmSession, v, online: OnlineContext) {
+    const signed = s.sign(await beginSend(s, v, online));
     return codec.publicOperation(
-      codec.decodeOperation(await s.wallet.sendEnd(handle, signed, false))
+      codec.decodeOperation(
+        await s.wallet.sendEnd(s.connected(), signed, false)
+      )
     );
   },
 });
+
+// ── externally approved flows (begin, sign elsewhere, end) ──────────────────
+
+/** What `burnBegin` shows before approval, and what recovery needs. */
+export interface BurnBeginResult extends EstimateFeeResult {
+  /** The unsigned PSBT (base64) to show and sign. */
+  psbt: string;
+  txid: string;
+  /** For `failTransfers` if the burn is not approved. */
+  batchTransferIdx: number;
+}
+
+function signedPsbtOf(p: { signedPsbt: string }): string {
+  if (typeof p.signedPsbt !== 'string' || p.signedPsbt.length === 0)
+    throw new ValidationError(
+      'signedPsbt must be a non-empty string',
+      'signedPsbt'
+    );
+  return p.signedPsbt;
+}
+
+/** A transfer that left `Initiated` for good: its TX is out. */
+const SUBMITTED = new Set([
+  'WaitingBroadcast',
+  'WaitingConfirmations',
+  'Settled',
+]);
+
+/**
+ * Ends an operation so the same signed PSBT can be submitted again after an
+ * interruption. The runtime refuses to end a transfer that already moved on;
+ * if the history shows this very operation as submitted, that is its result.
+ */
+async function endOnce(
+  s: WasmSession,
+  signedPsbt: string,
+  kind: 'Send' | 'Burn' | 'Inflation',
+  end: () => Promise<unknown>
+) {
+  try {
+    return codec.publicOperation(codec.decodeOperation(await end()));
+  } catch (error) {
+    if (!isCannotEndTransfer(error)) throw error;
+    const { txid } = summarizePsbt(signedPsbt);
+    const submitted = codec
+      .decodeTransfers(s.wallet.listTransfers('any', txid))
+      .find(
+        (t) => t.txid === txid && t.kind === kind && SUBMITTED.has(t.status)
+      );
+    if (!submitted) throw error;
+    return { txid, batchTransferIdx: submitted.batchTransferIdx };
+  }
+}
+
+export const createUtxosBegin = operation({
+  prepare: createUtxos.prepare as (
+    p: CreateUtxosBeginRequestModel
+  ) => ReturnType<typeof createUtxos.prepare>,
+  execute: (s: WasmSession, v) =>
+    s.wallet.createUtxosBegin(
+      s.connected(),
+      v.upTo,
+      v.num,
+      v.size,
+      v.feeRate,
+      v.skipSync
+    ),
+});
+
+export const createUtxosEnd = operation({
+  prepare: (p: CreateUtxosEndRequestModel) => ({
+    signedPsbt: signedPsbtOf(p),
+    skipSync: skipSyncOf(p.skipSync),
+  }),
+  async execute(s: WasmSession, v) {
+    return codec.int(
+      await s.wallet.createUtxosEnd(s.connected(), v.signedPsbt, v.skipSync),
+      'created UTXOs',
+      'u8'
+    );
+  },
+});
+
+export const sendBtcBegin = operation({
+  prepare: sendBtc.prepare,
+  execute: (s: WasmSession, v) =>
+    s.wallet.sendBtcBegin(
+      s.connected(),
+      v.address,
+      v.amount,
+      v.feeRate,
+      v.skipSync
+    ),
+});
+
+export const sendBtcEnd = operation({
+  prepare: (p: SendBtcEndRequestModel) => ({
+    signedPsbt: signedPsbtOf(p),
+    skipSync: skipSyncOf(p.skipSync),
+  }),
+  async execute(s: WasmSession, v) {
+    return codec.str(
+      await s.wallet.sendBtcEnd(s.connected(), v.signedPsbt, v.skipSync),
+      'txid'
+    );
+  },
+});
+
+export const onchainSendBegin = operation({
+  prepare: prepareSend,
+  execute: beginSend,
+});
+
+export const onchainSendEnd = operation({
+  prepare: (p: SendAssetEndRequestModel) => ({
+    signedPsbt: signedPsbtOf(p),
+    skipSync: skipSyncOf(p.skipSync),
+  }),
+  execute: (s: WasmSession, v) =>
+    endOnce(s, v.signedPsbt, 'Send', () =>
+      s.wallet.sendEnd(s.connected(), v.signedPsbt, v.skipSync)
+    ),
+});
+
+export const inflateBegin = operation({
+  prepare: inflate.prepare,
+  execute: (s: WasmSession, v) =>
+    s.wallet.inflateBegin(
+      s.connected(),
+      v.assetId,
+      v.amounts,
+      v.feeRate,
+      v.minConfirmations
+    ),
+});
+
+export const inflateEnd = operation({
+  prepare: (p: InflateEndRequestModel) => signedPsbtOf(p),
+  execute: (s: WasmSession, signedPsbt) =>
+    endOnce(s, signedPsbt, 'Inflation', () =>
+      s.wallet.inflateEnd(s.connected(), signedPsbt)
+    ),
+});
+
+export const burnBegin = operation({
+  prepare: burn.prepare,
+  async execute(s: WasmSession, v): Promise<BurnBeginResult> {
+    const begun = codec.record(
+      await s.wallet.burnBegin(
+        s.connected(),
+        v.assetId,
+        v.amount,
+        v.burnReason,
+        v.feeRate,
+        v.minConfirmations,
+        false
+      ),
+      'burn begin result'
+    );
+    const psbt = codec.str(begun.psbt, 'PSBT');
+    return {
+      psbt,
+      batchTransferIdx: codec.int(
+        begun.batchTransferIdx,
+        'batch transfer idx',
+        'i32'
+      ),
+      ...summarizePsbt(psbt),
+    };
+  },
+});
+
+export const burnEnd = operation({
+  prepare: (p: { signedPsbt: string }) => signedPsbtOf(p),
+  execute: (s: WasmSession, signedPsbt): Promise<BurnResult> =>
+    endOnce(s, signedPsbt, 'Burn', () =>
+      s.wallet.burnEnd(s.connected(), signedPsbt)
+    ),
+});
+
+export const signPsbt = {
+  prepare(psbt: unknown, mnemonic?: unknown): string {
+    if (mnemonic !== undefined)
+      throw new ValidationError(
+        'signPsbt signs with the keys of this wallet and takes no mnemonic',
+        'mnemonic'
+      );
+    summarizePsbt(psbt);
+    return psbt as string;
+  },
+  execute: (s: WasmSession, psbt: string) => s.sign(psbt),
+};
+
+export const estimateFee = (psbt: unknown): EstimateFeeResult => {
+  const { fee, vbytes, feeRate } = summarizePsbt(psbt);
+  return { fee, vbytes, feeRate };
+};
 
 export const failTransfers = operation({
   prepare: (p: FailTransfersRequest) => ({
@@ -657,6 +874,54 @@ export const listTransactions = {
     return codec
       .decodeTransactions(s.wallet.listTransactions())
       .map(codec.publicTransaction);
+  },
+};
+
+/** Pending incoming transfers only: no send or burn is progressed. */
+const INCOMING_REFRESH = [
+  'WaitingCounterparty',
+  'WaitingSafeHeight',
+  'WaitingBroadcast',
+  'WaitingConfirmations',
+].map((status) => ({ status, incoming: true }));
+
+export const getReceivedMint = {
+  prepare(recipientId: unknown): string {
+    if (
+      typeof recipientId !== 'string' ||
+      recipientId.length === 0 ||
+      recipientId.length > 1024
+    )
+      throw new ValidationError(
+        'recipientId must be a non-empty string',
+        'recipientId'
+      );
+    return recipientId;
+  },
+  async execute(s: WasmSession, recipientId: string, refreshIncoming: boolean) {
+    if (refreshIncoming) {
+      const refreshed = codec.decodeRefresh(
+        await s.wallet.refresh(s.connected(), null, INCOMING_REFRESH, false)
+      );
+      // Refresh reports a per-transfer failure in its result, not as an error:
+      // a failed check of this receive must reject, not read as a pending mint.
+      const batches = new Set(
+        codec
+          .decodeTransfers(s.wallet.listTransfers('any', null))
+          .filter((t) => t.recipientId === recipientId)
+          .map((t) => t.batchTransferIdx)
+      );
+      const failure = refreshed.find(
+        (item) => item.failure && batches.has(item.batchTransferIdx)
+      )?.failure;
+      if (failure)
+        throw new RgbLibWebError(
+          'NATIVE_ERROR',
+          `${failure.name}: ${failure.message}`,
+          'getReceivedMint'
+        );
+    }
+    return codec.decodeReceivedMint(s.wallet.getReceivedMint(recipientId));
   },
 };
 

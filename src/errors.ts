@@ -80,6 +80,15 @@ export function rgbLibWasmErrorCode(message: string): RgbLibWebErrorCode {
   return row?.[1] ?? 'NATIVE_ERROR';
 }
 
+/**
+ * The runtime refused to end a transfer that is no longer waiting for it. The
+ * generated table lists only variants with their own public code, so this is
+ * the beta.4 text of `CannotEndTransfer` (pinned by `tests/fixtures/error-texts`).
+ */
+export function isCannotEndTransfer(error: unknown): boolean {
+  return /^Transfer cannot be ended: /.test(messageOf(error));
+}
+
 /** A WASM rejection as an engine error; engine errors pass through. */
 export function toBackendError(error: unknown, operation: string): EngineError {
   if (isEngineError(error)) return error;

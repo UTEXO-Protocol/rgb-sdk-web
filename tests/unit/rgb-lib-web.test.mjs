@@ -55,6 +55,7 @@ runEngineConformanceChecks({
   createEngineSync: () => create().engine,
   extensions: [
     'burn',
+    'receivedMint',
     'backupExport',
     'backupRestore',
     'vssBackup',
@@ -589,6 +590,110 @@ describe('RgbLibWeb IFA', () => {
       'inflateEnd',
     ]);
     assert.equal(runtime.calls.at(-1).args[1], 'signed:psbt-inflate');
+  });
+});
+
+describe('RgbLibWeb getReceivedMint', () => {
+  const mint = {
+    opid: 'a'.repeat(64),
+    lockId: 'b'.repeat(64),
+    amount: 2n ** 64n - 1n,
+    beforeBlock: 2n ** 53n + 1n,
+    evmChainId: 42161n,
+    bridgeContract: `0x${'c'.repeat(40)}`,
+  };
+
+  it('is offline by default and maps u64 values to exact decimal strings', async () => {
+    const { engine, names } = await ready({
+      overrides: { getReceivedMint: () => mint },
+    });
+    assert.deepEqual(await engine.getReceivedMint('bcrt:utxob:rid'), {
+      ...mint,
+      amount: '18446744073709551615',
+      beforeBlock: '9007199254740993',
+      evmChainId: '42161',
+    });
+    assert.equal(names().includes('goOnline'), false);
+    assert.equal(names().includes('refresh'), false);
+  });
+
+  it('refreshes pending incoming transfers only, then returns undefined for no mint', async () => {
+    const { engine, runtime } = await ready();
+    assert.equal(
+      await engine.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+      undefined
+    );
+    const refresh = runtime.calls.find((c) => c.name === 'refresh').args;
+    assert.equal(refresh[1], null);
+    assert.deepEqual(
+      refresh[2],
+      [
+        'WaitingCounterparty',
+        'WaitingSafeHeight',
+        'WaitingBroadcast',
+        'WaitingConfirmations',
+      ].map((status) => ({ status, incoming: true }))
+    );
+    assert.equal(refresh[3], false);
+    const order = runtime.calls.map((c) => c.name);
+    assert.ok(
+      order.lastIndexOf('refresh') < order.lastIndexOf('getReceivedMint')
+    );
+  });
+
+  const receiveOn = (batchTransferIdx) => ({
+    listTransfers: () => [
+      {
+        idx: 7,
+        batchTransferIdx,
+        createdAt: 1700000000n,
+        updatedAt: 1700000001n,
+        status: 'WaitingCounterparty',
+        requestedAssignment: { Fungible: 10n },
+        assignments: [],
+        kind: 'ReceiveWitness',
+        txid: null,
+        recipientId: 'bcrt:utxob:rid',
+        receiveUtxo: null,
+        changeUtxo: null,
+        expirationTimestamp: 1700003600n,
+        transportEndpoints: [],
+        senderTransportEndpoint: null,
+        invoiceString: 'rgb:invoice',
+        consignmentPath: null,
+        burnReason: null,
+      },
+    ],
+  });
+
+  it("rejects when the refresh reports a failure for this receive's batch", async () => {
+    // The fake refresh reports a failure for batch 2 only.
+    const { engine, names } = await ready({ overrides: receiveOn(2) });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+      'NATIVE_ERROR',
+      'getReceivedMint'
+    );
+    assert.equal(names().includes('getReceivedMint'), false);
+  });
+
+  it('ignores refresh failures of other transfers', async () => {
+    const { engine } = await ready({ overrides: receiveOn(1) });
+    assert.equal(
+      await engine.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+      undefined
+    );
+  });
+
+  it('rejects an empty recipient ID before any runtime call', async () => {
+    const { engine, names } = await ready();
+    const before = names().length;
+    await rejects(
+      engine.getReceivedMint(''),
+      'INVALID_PARAMS',
+      'getReceivedMint'
+    );
+    assert.equal(names().length, before);
   });
 });
 

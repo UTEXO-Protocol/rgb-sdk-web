@@ -57,22 +57,22 @@ Without the server the spec is skipped.
 
 ## Scenarios
 
-| Spec            | Covers                                                                                                                                                                                                                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `a-lifecycle`   | init → unlock → network info → identity (stable per mnemonic) → capabilities → destroy → `WALLET_DISPOSED`                                                                                                                                                                                  |
-| `b-onchain`     | address → funding → balance (incl. `skipSync`) → createUtxos → listUnspents with parsed outpoints → listTransactions; sendBtc between two wallets; estimateFeeRate on regtest                                                                                                               |
-| `c-assets`      | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs                             |
-| `d-transfers`   | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData`                                               |
-| `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty; a byte backup (`exportBackup`) restores into an empty profile with the same state, wrong password and damaged bytes change nothing, refused after `unlock()` |
-| `f-start`       | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; the default config (no `dataDir`) persists across a reload; an Electrum indexer rejected before opening                          |
-| `g-vss`         | needs the VSS server: backup → empty profile → `restoreFromVss` → the same assets, balances, UTXOs and transfers, kept across a reload, refused after connect; a new device that skips the restore warns and holds its uploads, so a third device still restores the first one's state      |
+| Spec            | Covers                                                                                                                                                                                                                                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a-lifecycle`   | init → unlock → network info → identity (stable per mnemonic) → capabilities → destroy → `WALLET_DISPOSED`                                                                                                                                                                                                     |
+| `b-onchain`     | address → funding → balance (incl. `skipSync`) → createUtxos → listUnspents with parsed outpoints → listTransactions; sendBtc between two wallets; estimateFeeRate on regtest                                                                                                                                  |
+| `c-assets`      | NIA: issue, listAssets (with filter), balance, `ASSET_NOT_FOUND`, onchainReceive witness and blinded, decode, listTransfers, failTransfers. IFA: issue, listAssets (a `test.fixme` in rgb-sdk-web), inflate, inflation beyond the rights. Issuing with no UTXOs                                                |
+| `d-transfers`   | onchainSend to blinded, witness and donation invoices between two wallets, each settled on both sides; a named invoice after the first transfer; rejections for a blank invoice with no `assetId` and a witness invoice with no `witnessData`                                                                  |
+| `e-persistence` | state survives `destroy` and a page reload (IndexedDB); the same mnemonic in an empty profile starts empty; a byte backup (`exportBackup`) restores into an empty profile with the same state, wrong password and damaged bytes change nothing, refused after `unlock()`                                       |
+| `f-start`       | the README quick start: `generateKeys` from the package, `RgbLibWeb.create()` with no runtime and no `unlock()`, identity, address, balance after funding; the default config (no `dataDir`) persists across a reload; an Electrum indexer rejected before opening                                             |
+| `g-vss`         | needs the VSS server: backup → empty profile → `restoreFromVss` → the same assets, balances, UTXOs and transfers, kept across a reload, refused after connect; a new device that skips the restore warns and holds its uploads, so a third device still restores the first one's state                         |
+| `h-begin-end`   | the `beginEnd` and `psbt` carriers: a declined burn gives its inputs back and cannot be submitted; `burnBegin` shows the fee and size found on chain; repeated `burnEnd`, `inflateEnd` and `onchainSendEnd` return the same result, before and after settlement; `createUtxos` and `sendBtc` as separate steps |
 
 `npm run capture:fixtures` runs `capture/fixtures.capture.mjs` with its own
 config: the harness boots with a recording runtime (`harness/capture.mjs`) and
 the raw values go to `tests/fixtures/` (see its README). It is not part of
 `npm run test:e2e`.
 
-Not covered: the old rgb-sdk-web spec f (psbt / beginEnd carriers; RgbLibWeb has neither;
-the letter f is reused for `f-start`),
-h (device loss with open channels), and i and j (Lightning). The old spec g
+Not covered: device loss with open channels (the letter h of the old spec is reused for
+`h-begin-end`, and f for `f-start`), and i and j (Lightning). The old spec g
 (VSS round trip) is ported as `g-vss`, without the channel-stream fence.

@@ -12,6 +12,7 @@
  * shared.
  */
 export { RgbLibWeb } from './rgb-lib-web.js';
+export type { BurnBeginResult, RgbLibWebBeginEndFlows } from './rgb-lib-web.js';
 export { generateKeys } from '@utexo/rgb-sdk-core';
 export type { GeneratedKeys } from '@utexo/rgb-sdk-core';
 export { RgbLibWebError } from './errors.js';

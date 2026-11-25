@@ -159,7 +159,7 @@ describe('receive assignment rules', () => {
 
 describe('onchainSend invoice rules', () => {
   /** sendBegin's arguments after the online handle. */
-  const begin = (runtime) => argsOf(runtime, 'sendBegin').slice(1);
+  const begin = (runtime) => argsOf(runtime, 'sendBegin').slice(1, 9);
 
   it('passes the full wire arguments for an Any invoice', async (t) => {
     clock(t);

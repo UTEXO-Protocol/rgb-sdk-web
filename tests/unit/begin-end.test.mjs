@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { ASSET_ID, KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
-import * as sendBeginFixtures from '../fixtures/rgb-lib-wasm-1.0.0-beta.4/sendBegin.mjs';
+import * as sendBeginFixtures from '../fixtures/rgb-lib-wasm-1.0.0-beta.5/sendBegin.mjs';
 
 /** The PSBTs rgb-lib-wasm built on the stand: 309 and 511 sat of fee. */
 function fixturePsbts() {
@@ -103,12 +103,13 @@ const transfer = (over) => ({
   txid: TXID,
   recipientId: null,
   receiveUtxo: null,
-  changeUtxo: null,
+  changeUtxos: [],
   expirationTimestamp: null,
   transportEndpoints: [],
   senderTransportEndpoint: null,
   invoiceString: null,
   consignmentPath: null,
+  psbt: null,
   burnReason: null,
   ...over,
 });
@@ -164,7 +165,7 @@ describe('burnBegin', () => {
     assert.ok(!names().includes('signPsbt'));
     assert.ok(!names().includes('burnEnd'));
     const args = runtime.calls.find((c) => c.name === 'burnBegin').args;
-    assert.deepEqual(args.slice(1), [
+    assert.deepEqual(args.slice(1, 7), [
       ASSET_ID,
       3n,
       'ab'.repeat(32),

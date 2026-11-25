@@ -69,7 +69,8 @@ export function recordingRuntime(mod, sink) {
 
   return {
     WasmWallet: {
-      create: async (json) => wrapWallet(await mod.WasmWallet.create(json)),
+      create: async (walletDataJson, keysJson) =>
+        wrapWallet(await mod.WasmWallet.create(walletDataJson, keysJson)),
     },
     // Called with `new`; returning an object replaces the instance.
     WasmInvoice: function WasmInvoice(invoice) {
@@ -88,6 +89,17 @@ export function recordingRuntime(mod, sink) {
         free: () => real.free(),
       };
     },
-    restoreKeys: (network, mnemonic) => mod.restoreKeys(network, mnemonic),
+    restoreKeys: (network, mnemonic, witnessVersion) =>
+      mod.restoreKeys(network, mnemonic, witnessVersion),
+    checkIndexerUrl: async (indexerUrl, network) => {
+      try {
+        const value = await mod.checkIndexerUrl(indexerUrl, network);
+        record('checkIndexerUrl', value);
+        return value;
+      } catch (error) {
+        fail('checkIndexerUrl', error);
+        throw error;
+      }
+    },
   };
 }

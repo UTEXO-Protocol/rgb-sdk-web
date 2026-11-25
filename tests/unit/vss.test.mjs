@@ -139,7 +139,7 @@ describe('VSS identity on init()', () => {
     const { engine, names } = create({
       overrides: {
         configureVssBackup: () => {
-          throw new Error('Invalid signing key: malformed');
+          throw new Error('Invalid key: malformed');
         },
       },
     });

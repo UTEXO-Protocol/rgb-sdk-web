@@ -17,8 +17,9 @@ src/
     load.ts           loads the WASM module once per page
     types.ts          the runtime API this package calls
     session.ts        the open wallet: handle, sync, sign, flush
+    lock.ts           the Web Lock on an open wallet (WALLET_STORAGE_IN_USE)
     codec.ts          decoding of every WasmWallet result to the core types
-    rgb-lib-messages.generated.ts   beta.4 error table (generated)
+    rgb-lib-messages.generated.ts   beta.5 error table (generated)
 ```
 
 ## Rules
@@ -37,10 +38,17 @@ invalid call fails at once. `execute` runs as one queued task: WASM calls
 never overlap. A synchronous WASM mutation is reported only after it is
 flushed to IndexedDB.
 
+A call's optional `signal` is split off its params before they are copied
+(a copy would lose the `AbortSignal`). A call that has not started when the
+signal fires rejects with `ABORTED` and never runs; once it runs, the signal
+goes only to the runtime calls that take one (the begin steps, sync, refresh,
+goOnline), so an end step that broadcast is never reported as aborted.
+
 ## Decoding rules
 
-The runtime is `@utexo/rgb-lib-wasm` 1.0.0-beta.4; the normative source is its
-tag `v1.0.0-beta.4` (`f0e266f`).
+The runtime is `@utexo/rgb-lib-wasm` 1.0.0-beta.5; the normative source is its
+tag `v1.0.0-beta.5` (`e53d095`). Wallet state saved by beta.4 does not open
+with beta.5.
 
 - Each result is decoded in two stages. `decode*` checks the raw value and
   keeps numbers exact (u64 and i64 stay `BigInt`); a value that breaks the
@@ -51,13 +59,13 @@ tag `v1.0.0-beta.4` (`f0e266f`).
   (`refresh`), a plain object for `unknownQueryParams`, `undefined` for an
   absent `Option`.
 - Integers are checked by their Rust type (`u8`, `u32`, `i32`, `u64`, `i64`);
-  enum variants must be ones beta.4 has.
-- `FIELDS` in `src/runtime/codec.ts` lists every field of the 22 beta.4 structs
+  enum variants must be ones beta.5 has.
+- `FIELDS` in `src/runtime/codec.ts` lists every field of the 24 beta.5 structs
   the adapter reads, each `mapped` (public), `internal` (used, not public) or
   dropped with the reason. Only `mapped` and `internal` fields are read;
   unknown fields are ignored at runtime, so an additive runtime release keeps
   working, and fail the fixture schema test (`tests/unit/codec.test.mjs`).
-- Inputs go in the wire form beta.4 takes: `BigInt` for u64 amounts, expiry
+- Inputs go in the wire form beta.5 takes: `BigInt` for u64 amounts, expiry
   and fee rates; decimal strings for `WitnessData`.
 - Runtime errors map to public codes by the table in
   `src/runtime/rgb-lib-messages.generated.ts`, generated from the Rust source;
@@ -65,15 +73,17 @@ tag `v1.0.0-beta.4` (`f0e266f`).
 
 ## Status
 
-| Step                                                                           | State |
-| ------------------------------------------------------------------------------ | ----- |
-| 1. Remove RLN, depend on the split core and `@utexo/rgb-lib-wasm` 1.0.0-beta.4 | done  |
-| 2. Move `RgbLibWeb` and its tests here                                         | done  |
-| 3. Load the WASM runtime inside the package                                    | done  |
-| 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object     | done  |
-| VSS backup: zero config, `backupToVss()`, automatic upload                     | done  |
-| VSS restore before connect, unrestored-backup hold                             | done  |
-| Byte backup: `exportBackup()`, `restoreBackup()`, with e2e                     | done  |
-| VSS backup and restore e2e against a local VSS server                          | done  |
-| Burn: `burn()`, `getBfaCapabilities()` (no consignment export in beta.4)       | done  |
-| Prepare, approve, submit: `beginEnd` and `psbt` carriers (unit tests only)     | done  |
+| Step                                                                               | State |
+| ---------------------------------------------------------------------------------- | ----- |
+| 1. Remove RLN, depend on the split core and `@utexo/rgb-lib-wasm`                  | done  |
+| 2. Move `RgbLibWeb` and its tests here                                             | done  |
+| 3. Load the WASM runtime inside the package                                        | done  |
+| 4. One-call start: `RgbLibWeb.create()`, `generateKeys`, one config object         | done  |
+| VSS backup: zero config, `backupToVss()`, automatic upload                         | done  |
+| VSS restore before connect, unrestored-backup hold                                 | done  |
+| Byte backup: `exportBackup()`, `restoreBackup()`, with e2e                         | done  |
+| VSS backup and restore e2e against a local VSS server                              | done  |
+| Burn: `burn()`, `getBfaCapabilities()`, `getConsignment()` (burns only)            | done  |
+| Prepare, approve, submit: `beginEnd` and `psbt` carriers (unit tests only)         | done  |
+| rgb-lib-wasm 1.0.0-beta.5: Web Lock, `signal`, `witnessVersion`, `checkIndexerUrl` | done  |
+| `allowRecklessSchemas` (mainnet schemas) and `getAssetMetadata()`, unit tests      | done  |

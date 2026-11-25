@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSource } from '../fixtures/source.mjs';
-import { golden } from '../golden/rgb-lib-wasm-1.0.0-beta.4.golden.mjs';
+import { golden } from '../golden/rgb-lib-wasm-1.0.0-beta.5.golden.mjs';
 import { collectCases, loadFixtures, runCase } from '../golden/runner.mjs';
 
 const mods = await loadFixtures();

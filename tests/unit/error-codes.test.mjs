@@ -1,6 +1,7 @@
 // rgb-lib-wasm rejects with the error's display text only. RgbLibWeb finds
-// the rgb-lib variant from the beta.4 texts and gives the rgb-sdk-rn code
-// (Invalid* → INVALID_PARAMS, Insufficient* → INSUFFICIENT_FUNDS, …).
+// the rgb-lib variant from the beta.5 texts and gives the rgb-sdk-rn code
+// (Invalid* → INVALID_PARAMS, Insufficient* → INSUFFICIENT_FUNDS, …), and
+// ABORTED for a call whose AbortSignal fired.
 // fixtures/error-texts/ is generated from the pinned Rust source with
 // `npm run errors:generate`; it lists every public Error and binding text.
 import { describe, it } from 'node:test';
@@ -8,11 +9,11 @@ import assert from 'node:assert/strict';
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
-import { samples as captured } from '../fixtures/rgb-lib-wasm-1.0.0-beta.4/errors.mjs';
+import { samples as captured } from '../fixtures/rgb-lib-wasm-1.0.0-beta.5/errors.mjs';
 import {
   meta,
   texts,
-} from '../fixtures/error-texts/rgb-lib-wasm-1.0.0-beta.4.mjs';
+} from '../fixtures/error-texts/rgb-lib-wasm-1.0.0-beta.5.mjs';
 
 async function codeFor(message) {
   const runtime = createFakeRuntime({
@@ -64,11 +65,11 @@ const CASES = [
   ['Internal error: Invalid backup path', 'NATIVE_ERROR'],
 ];
 
-describe('rgb-lib-wasm beta.4 error texts', () => {
+describe('rgb-lib-wasm beta.5 error texts', () => {
   it('lists the pinned source', () => {
-    assert.equal(meta.version, '1.0.0-beta.4');
-    assert.equal(meta.rustCommit, 'f0e266f039744896baa39e3a35766ef01c0f369a');
-    assert.equal(texts.filter((t) => t.source === 'error').length, 136);
+    assert.equal(meta.version, '1.0.0-beta.5');
+    assert.equal(meta.rustCommit, 'e53d095e8789d2e26c8af7506d59574eca753c2f');
+    assert.equal(texts.filter((t) => t.source === 'error').length, 153);
   });
 
   for (const t of texts) {
@@ -85,15 +86,17 @@ describe('rgb-lib-wasm beta.4 error texts', () => {
       const code =
         v === 'AssetNotFound'
           ? 'ASSET_NOT_FOUND'
-          : v === 'WatchOnly'
-            ? 'UNSUPPORTED_CAPABILITY'
-            : v === 'Offline'
-              ? 'WALLET_OFFLINE'
-              : v.startsWith('Invalid')
-                ? 'INVALID_PARAMS'
-                : v.startsWith('Insufficient')
-                  ? 'INSUFFICIENT_FUNDS'
-                  : 'NATIVE_ERROR';
+          : v === 'Aborted'
+            ? 'ABORTED'
+            : v === 'WatchOnly'
+              ? 'UNSUPPORTED_CAPABILITY'
+              : v === 'Offline'
+                ? 'WALLET_OFFLINE'
+                : v.startsWith('Invalid')
+                  ? 'INVALID_PARAMS'
+                  : v.startsWith('Insufficient')
+                    ? 'INSUFFICIENT_FUNDS'
+                    : 'NATIVE_ERROR';
       assert.equal(t.code, code, v);
     }
   });

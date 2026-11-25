@@ -2,7 +2,7 @@
  * The public operations (ADR-0002 step 4), each in two parts:
  *
  * - `prepare`: pure. Validates the owned params, applies the input rules and
- *   builds the WASM arguments in the wire form beta.4 takes (BigInt for u64
+ *   builds the WASM arguments in the wire form beta.5 takes (BigInt for u64
  *   amounts and fee rates; decimal strings for `WitnessData`). It runs before
  *   admission: no network, no WASM call, no queue.
  * - `execute`: one queued task. Calls the WASM wallet through the session,
@@ -23,6 +23,7 @@ import {
   ValidationError,
   deriveVssSigningKeyFromMnemonic,
   validateBurnParams,
+  validateConsignmentLookup,
   getBackupStoreId,
 } from '@utexo/rgb-sdk-core';
 import type {
@@ -32,6 +33,7 @@ import type {
   CreateUtxosEndRequestModel,
   EstimateFeeResult,
   FailTransfersRequest,
+  IndexerUrlInfo,
   InflateAssetIfaRequestModel,
   InflateEndRequestModel,
   IssueAssetIfaRequestModel,
@@ -240,20 +242,23 @@ export const getAddress = {
     s.persisted(codec.str(s.wallet.getAddress(), 'address')),
 };
 
+/** The runtime syncs first unless `skipSync`, as on React Native. */
 export const getBtcBalance = {
   async execute(s: WasmSession, skipSync: boolean) {
-    await s.syncFirst(skipSync);
     return codec.publicBtcBalance(
-      codec.decodeBtcBalance(s.wallet.getBtcBalance())
+      codec.decodeBtcBalance(
+        await s.wallet.getBtcBalance(s.readHandle(skipSync), skipSync)
+      )
     );
   },
 };
 
 export const listUnspents = {
   async execute(s: WasmSession, skipSync: boolean) {
-    await s.syncFirst(skipSync);
     return codec
-      .decodeUnspents(s.wallet.listUnspents(false))
+      .decodeUnspents(
+        await s.wallet.listUnspents(s.readHandle(skipSync), false, skipSync)
+      )
       .map(codec.publicUnspent);
   },
 };
@@ -274,25 +279,38 @@ export const createUtxos = operation({
     feeRate: wireFeeRate(p.feeRate),
     skipSync: skipSyncOf(p.skipSync),
   }),
-  /** Begin, sign with the wallet keys, end. */
+  /**
+   * Begin, sign with the wallet keys, end. The signal can stop the begin;
+   * once the PSBT is signed the end runs to its result.
+   */
   async execute(s: WasmSession, v) {
     const online = s.connected();
-    const psbt = await s.wallet.createUtxosBegin(
-      online,
-      v.upTo,
-      v.num,
-      v.size,
-      v.feeRate,
-      v.skipSync
-    );
-    const signed = s.sign(psbt);
+    const signed = s.sign(await beginCreateUtxos(s, v));
     return codec.int(
-      await s.wallet.createUtxosEnd(online, signed, v.skipSync),
+      await s.wallet.createUtxosEnd(online, signed),
       'created UTXOs',
       'u8'
     );
   },
 });
+
+function beginCreateUtxos(
+  s: WasmSession,
+  v: ReturnType<typeof createUtxos.prepare>
+): Promise<string> {
+  return s.wallet.createUtxosBegin(
+    s.connected(),
+    v.upTo,
+    // Not exact: up to `num` UTXOs as funds allow, as on React Native.
+    false,
+    v.num,
+    v.size,
+    v.feeRate,
+    v.skipSync,
+    false,
+    s.signal
+  );
+}
 
 export const sendBtc = operation({
   prepare: (p: SendBtcBeginRequestModel) => ({
@@ -303,20 +321,25 @@ export const sendBtc = operation({
   }),
   async execute(s: WasmSession, v) {
     const online = s.connected();
-    const psbt = await s.wallet.sendBtcBegin(
-      online,
-      v.address,
-      v.amount,
-      v.feeRate,
-      v.skipSync
-    );
-    const signed = s.sign(psbt);
-    return codec.str(
-      await s.wallet.sendBtcEnd(online, signed, v.skipSync),
-      'txid'
-    );
+    const signed = s.sign(await beginSendBtc(s, v));
+    return codec.str(await s.wallet.sendBtcEnd(online, signed), 'txid');
   },
 });
+
+function beginSendBtc(
+  s: WasmSession,
+  v: ReturnType<typeof sendBtc.prepare>
+): Promise<string> {
+  return s.wallet.sendBtcBegin(
+    s.connected(),
+    v.address,
+    v.amount,
+    v.feeRate,
+    v.skipSync,
+    false,
+    s.signal
+  );
+}
 
 export const estimateFeeRate = {
   prepare: (blocks: number) => integer(blocks, 'blocks', 1, 0xffff),
@@ -337,6 +360,20 @@ export const listAssets = {
     const schemas = validateAssetSchemas(options?.filterAssetSchemas);
     return codec.publicAssets(codec.decodeAssets(s.wallet.listAssets(schemas)));
   },
+};
+
+/** `AssetMetadataApi.getAssetMetadata`; an unknown asset is ASSET_NOT_FOUND. */
+export const getAssetMetadata = {
+  prepare(assetId: unknown): string {
+    if (typeof assetId !== 'string' || assetId.length === 0)
+      throw new ValidationError(
+        'assetId must be a non-empty string',
+        'assetId'
+      );
+    return assetId;
+  },
+  execute: (s: WasmSession, assetId: string) =>
+    codec.decodeAssetMetadata(s.wallet.getAssetMetadata(assetId)),
 };
 
 export const getAssetBalance = {
@@ -385,7 +422,8 @@ export const issueAssetIfa = operation({
           v.rejectListUrl,
           // As on React Native: no link right, not linked from a contract.
           false,
-          null
+          null,
+          false
         )
       )
     );
@@ -402,22 +440,35 @@ export const inflate = operation({
   }),
   async execute(s: WasmSession, v) {
     const online = s.connected();
-    const psbt = await s.wallet.inflateBegin(
-      online,
-      v.assetId,
-      v.amounts,
-      v.feeRate,
-      v.minConfirmations
-    );
-    const signed = s.sign(psbt);
+    const signed = s.sign(await beginInflate(s, v));
     return codec.publicOperation(
       codec.decodeOperation(await s.wallet.inflateEnd(online, signed))
     );
   },
 });
 
+/** `inflateBegin` returns an `InflateBeginResult`; the PSBT is what is signed. */
+async function beginInflate(
+  s: WasmSession,
+  v: ReturnType<typeof inflate.prepare>
+): Promise<string> {
+  const begun = codec.record(
+    await s.wallet.inflateBegin(
+      s.connected(),
+      v.assetId,
+      v.amounts,
+      v.feeRate,
+      v.minConfirmations,
+      false,
+      s.signal
+    ),
+    'inflate begin result'
+  );
+  return codec.str(begun.psbt, 'PSBT');
+}
+
 /**
- * Burns `amount` of an asset (beta.4 `burnBegin`, sign, `burnEnd`). The params
+ * Burns `amount` of an asset (`burnBegin`, sign, `burnEnd`). The params
  * are checked by core's `validateBurnParams`, as on React Native;
  * `burnRecipient` is the runtime's `burnReason`, 32 bytes as hex.
  */
@@ -442,7 +493,8 @@ export const burn = operation({
         v.burnReason,
         v.feeRate,
         v.minConfirmations,
-        false
+        false,
+        s.signal
       ),
       'burn begin result'
     );
@@ -615,7 +667,8 @@ async function beginSend(
       expiry,
       online.proxyEndpoint,
       null,
-      false
+      false,
+      s.signal
     ),
     'send begin result'
   );
@@ -627,9 +680,7 @@ export const onchainSend = operation({
   async execute(s: WasmSession, v, online: OnlineContext) {
     const signed = s.sign(await beginSend(s, v, online));
     return codec.publicOperation(
-      codec.decodeOperation(
-        await s.wallet.sendEnd(s.connected(), signed, false)
-      )
+      codec.decodeOperation(await s.wallet.sendEnd(s.connected(), signed))
     );
   },
 });
@@ -678,7 +729,7 @@ async function endOnce(
     if (!isCannotEndTransfer(error)) throw error;
     const { txid } = summarizePsbt(signedPsbt);
     const submitted = codec
-      .decodeTransfers(s.wallet.listTransfers('any', txid))
+      .decodeTransfers(s.wallet.listTransfers('AnyOrNone', { Txid: txid }))
       .find(
         (t) => t.txid === txid && t.kind === kind && SUBMITTED.has(t.status)
       );
@@ -691,17 +742,13 @@ export const createUtxosBegin = operation({
   prepare: createUtxos.prepare as (
     p: CreateUtxosBeginRequestModel
   ) => ReturnType<typeof createUtxos.prepare>,
-  execute: (s: WasmSession, v) =>
-    s.wallet.createUtxosBegin(
-      s.connected(),
-      v.upTo,
-      v.num,
-      v.size,
-      v.feeRate,
-      v.skipSync
-    ),
+  execute: beginCreateUtxos,
 });
 
+/**
+ * The ends take no `skipSync` in beta.5: the flag of the core model is still
+ * checked, and has no effect, as on React Native.
+ */
 export const createUtxosEnd = operation({
   prepare: (p: CreateUtxosEndRequestModel) => ({
     signedPsbt: signedPsbtOf(p),
@@ -709,7 +756,7 @@ export const createUtxosEnd = operation({
   }),
   async execute(s: WasmSession, v) {
     return codec.int(
-      await s.wallet.createUtxosEnd(s.connected(), v.signedPsbt, v.skipSync),
+      await s.wallet.createUtxosEnd(s.connected(), v.signedPsbt),
       'created UTXOs',
       'u8'
     );
@@ -718,14 +765,7 @@ export const createUtxosEnd = operation({
 
 export const sendBtcBegin = operation({
   prepare: sendBtc.prepare,
-  execute: (s: WasmSession, v) =>
-    s.wallet.sendBtcBegin(
-      s.connected(),
-      v.address,
-      v.amount,
-      v.feeRate,
-      v.skipSync
-    ),
+  execute: beginSendBtc,
 });
 
 export const sendBtcEnd = operation({
@@ -735,7 +775,7 @@ export const sendBtcEnd = operation({
   }),
   async execute(s: WasmSession, v) {
     return codec.str(
-      await s.wallet.sendBtcEnd(s.connected(), v.signedPsbt, v.skipSync),
+      await s.wallet.sendBtcEnd(s.connected(), v.signedPsbt),
       'txid'
     );
   },
@@ -753,20 +793,13 @@ export const onchainSendEnd = operation({
   }),
   execute: (s: WasmSession, v) =>
     endOnce(s, v.signedPsbt, 'Send', () =>
-      s.wallet.sendEnd(s.connected(), v.signedPsbt, v.skipSync)
+      s.wallet.sendEnd(s.connected(), v.signedPsbt)
     ),
 });
 
 export const inflateBegin = operation({
   prepare: inflate.prepare,
-  execute: (s: WasmSession, v) =>
-    s.wallet.inflateBegin(
-      s.connected(),
-      v.assetId,
-      v.amounts,
-      v.feeRate,
-      v.minConfirmations
-    ),
+  execute: beginInflate,
 });
 
 export const inflateEnd = operation({
@@ -788,7 +821,8 @@ export const burnBegin = operation({
         v.burnReason,
         v.feeRate,
         v.minConfirmations,
-        false
+        false,
+        s.signal
       ),
       'burn begin result'
     );
@@ -812,6 +846,47 @@ export const burnEnd = operation({
       s.wallet.burnEnd(s.connected(), signedPsbt)
     ),
 });
+
+/**
+ * `ConsignmentApi.getConsignment`: the consignment of an ended burn, which
+ * proves it with its history, as base64 (as on React Native). This runtime
+ * exports burn consignments only: another transfer is `UnknownTransfer`.
+ */
+export const getConsignment = {
+  prepare(assetId: unknown, txid: unknown) {
+    validateConsignmentLookup(assetId as string, txid as string);
+    return { assetId: assetId as string, txid: (txid as string).toLowerCase() };
+  },
+  execute(s: WasmSession, v: { assetId: string; txid: string }): string {
+    return codec.encodeBase64(
+      codec.decodeConsignmentBytes(
+        s.wallet.getBurnConsignment(v.assetId, v.txid)
+      )
+    );
+  },
+};
+
+/** `IndexerCheckApi.checkIndexerUrl`: Esplora only in the browser. */
+export const checkIndexerUrl = {
+  prepare(url: unknown): string {
+    if (typeof url !== 'string' || url.length === 0)
+      throw new ValidationError('url must be a non-empty string', 'url');
+    if (/^(ssl|tcp):\/\//.test(url))
+      throw new RgbLibWebError(
+        'UNSUPPORTED_CAPABILITY',
+        'checkIndexerUrl: the electrum indexer is not available in the browser; use an Esplora URL',
+        'checkIndexerUrl'
+      );
+    return url;
+  },
+  async execute(s: WasmSession, url: string): Promise<IndexerUrlInfo> {
+    return {
+      indexerProtocol: codec.decodeIndexerProtocol(
+        await s.checkIndexerUrl(url)
+      ),
+    };
+  },
+};
 
 export const signPsbt = {
   prepare(psbt: unknown, mnemonic?: unknown): string {
@@ -859,20 +934,21 @@ export const listTransfers = {
   prepare(assetId: string | undefined) {
     if (assetId !== undefined && typeof assetId !== 'string')
       throw new ValidationError('assetId must be a string', 'assetId');
-    // AssetFilter is camelCase in this build: "any" or { id }.
-    return assetId === undefined ? 'any' : { id: assetId };
+    // AssetFilter: "AnyOrNone" (also transfers with no asset yet) or { Id }.
+    return assetId === undefined ? 'AnyOrNone' : { Id: assetId };
   },
   execute: (s: WasmSession, filter: unknown) =>
     codec
-      .decodeTransfers(s.wallet.listTransfers(filter, null))
+      .decodeTransfers(s.wallet.listTransfers(filter, 'All'))
       .map(codec.publicTransfer),
 };
 
 export const listTransactions = {
   async execute(s: WasmSession, skipSync: boolean) {
-    await s.syncFirst(skipSync);
     return codec
-      .decodeTransactions(s.wallet.listTransactions())
+      .decodeTransactions(
+        await s.wallet.listTransactions(s.readHandle(skipSync), skipSync)
+      )
       .map(codec.publicTransaction);
   },
 };
@@ -901,13 +977,19 @@ export const getReceivedMint = {
   async execute(s: WasmSession, recipientId: string, refreshIncoming: boolean) {
     if (refreshIncoming) {
       const refreshed = codec.decodeRefresh(
-        await s.wallet.refresh(s.connected(), null, INCOMING_REFRESH, false)
+        await s.wallet.refresh(
+          s.connected(),
+          null,
+          INCOMING_REFRESH,
+          false,
+          s.signal
+        )
       );
       // Refresh reports a per-transfer failure in its result, not as an error:
       // a failed check of this receive must reject, not read as a pending mint.
       const batches = new Set(
         codec
-          .decodeTransfers(s.wallet.listTransfers('any', null))
+          .decodeTransfers(s.wallet.listTransfers('AnyOrNone', 'All'))
           .filter((t) => t.recipientId === recipientId)
           .map((t) => t.batchTransferIdx)
       );
@@ -929,7 +1011,7 @@ export const refresh = {
   async execute(s: WasmSession, skipSync: boolean) {
     return codec.publicRefresh(
       codec.decodeRefresh(
-        await s.wallet.refresh(s.connected(), null, [], skipSync)
+        await s.wallet.refresh(s.connected(), null, [], skipSync, s.signal)
       )
     );
   },
@@ -998,7 +1080,7 @@ export const restoreFromVss = {
    * before it resolves.
    */
   async execute(s: WasmSession, prepared: { overwrite: boolean }) {
-    refuseLocalData(s, prepared.overwrite, 'restoreFromVss');
+    await refuseLocalData(s, prepared.overwrite, 'restoreFromVss');
     await s.wallet.vssRestoreBackup();
   },
 };
@@ -1007,13 +1089,21 @@ export const restoreFromVss = {
  * True when the local wallet has anything a restore would replace: assets,
  * transfers, UTXOs or transactions. Reads local state only, no sync.
  */
-export function hasLocalData(s: WasmSession): boolean {
+export async function hasLocalData(s: WasmSession): Promise<boolean> {
   const assets = codec.decodeAssets(s.wallet.listAssets([]));
-  return (
+  if (
     assets.nia.length + assets.ifa.length + assets.bfa.length > 0 ||
-    codec.decodeTransfers(s.wallet.listTransfers('any', null)).length > 0 ||
-    codec.decodeUnspents(s.wallet.listUnspents(false)).length > 0 ||
-    codec.decodeTransactions(s.wallet.listTransactions()).length > 0
+    codec.decodeTransfers(s.wallet.listTransfers('AnyOrNone', 'All')).length > 0
+  )
+    return true;
+  // Offline reads: no online handle, no sync.
+  if (
+    codec.decodeUnspents(await s.wallet.listUnspents(null, false, true)).length
+  )
+    return true;
+  return (
+    codec.decodeTransactions(await s.wallet.listTransactions(null, true))
+      .length > 0
   );
 }
 
@@ -1090,19 +1180,19 @@ export const restoreBackup = {
     s: WasmSession,
     prepared: { bytes: Uint8Array; password: string; overwrite: boolean }
   ) {
-    refuseLocalData(s, prepared.overwrite, 'restoreBackup');
+    await refuseLocalData(s, prepared.overwrite, 'restoreBackup');
     s.wallet.restoreBackup(prepared.bytes, prepared.password);
     // The runtime only queues the save of the restored state.
     await s.persisted(undefined);
   },
 };
 
-function refuseLocalData(
+async function refuseLocalData(
   s: WasmSession,
   overwrite: boolean,
   operation: string
 ) {
-  if (!overwrite && hasLocalData(s))
+  if (!overwrite && (await hasLocalData(s)))
     throw new RgbLibWebError(
       'WALLET_INVALID_STATE',
       'This wallet already has local data; pass { overwrite: true } to replace it with the backup',

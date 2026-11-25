@@ -10,7 +10,7 @@ export const STAND = Object.freeze({
   helperUrl: env.RGB_E2E_HELPER ?? 'http://127.0.0.1:8080',
 });
 
-/** rgb-lib-wasm 1.0.0-beta.4 speaks proxy protocol 1.0 (proxy 0.4.0+). */
+/** rgb-lib-wasm 1.0.0-beta.5 speaks proxy protocol 1.0 (proxy 0.4.0+). */
 export const PROXY_PROTOCOL = '1.0';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

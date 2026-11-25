@@ -1,7 +1,78 @@
 # Changelog
 
+## 1.0.0-beta.15 (unreleased)
 
-## 1.0.0-beta.14 (unreleased)
+Needs `@utexo/rgb-sdk-core` 1.0.0-beta.11.
+Runs on `@utexo/rgb-lib-wasm` **1.0.0-beta.5** (was 1.0.0-beta.4).
+
+### Breaking
+
+- **Wallet state from beta.4 does not open.** The beta.5 snapshot has
+  required fields beta.4 never wrote, so `init()` rejects (`NATIVE_ERROR`,
+  "Deserialize error: missing field …") on a profile that holds beta.4 state
+  for that wallet, and a byte or VSS backup made with beta.4 does not restore.
+  Before upgrading a wallet that holds RGB assets, send them to a wallet
+  created with beta.5: a mnemonic alone recovers only bitcoin.
+- Opening a wallet that is already open in another tab or instance of the same
+  browser profile now rejects with `WALLET_STORAGE_IN_USE` (see Added).
+
+### Fixed
+
+- **Mainnet wallets open again.** rgb-lib refuses a mainnet wallet that
+  supports IFA or BFA unless `allowRecklessSchemas` is set, and the wallet
+  always asked for every schema with the flag off, so `init()` failed with
+  `Cannot use Ifa schema on mainnet`. A mainnet wallet now opens with NIA only
+  unless `allowRecklessSchemas` is `true` (see Added).
+
+### Added
+
+- **`allowRecklessSchemas`** option, default `false`, as in rgb-lib and on
+  React Native. With `true`, a mainnet wallet opens with every schema. Without
+  it, on mainnet, `issueAssetIfa`, `inflate`, `burn`, the inflate and burn
+  begin/end steps, `getConsignment` and `getReceivedMint` reject with
+  `UNSUPPORTED_CAPABILITY` before any runtime call, and `getBfaCapabilities()`
+  is all `false`. Other networks are unchanged.
+- **`getAssetMetadata(assetId)`** (core's `AssetMetadataApi`) returns the
+  contract metadata: schema, name, ticker, precision, details, timestamp and
+  the initial, maximum and known circulating supply as exact decimal strings,
+  plus `rejectListUrl` and the linked contracts when set. It is offline; an unknown asset is `ASSET_NOT_FOUND`. WebRGB's
+  `getAssetMetadata` uses it.
+- **One open wallet per browser profile** — `init()` takes a Web Lock on the
+  wallet's IndexedDB state until `destroy()`. A second open of the same wallet
+  (keys, network, `dataDir`) rejects at once with `WALLET_STORAGE_IN_USE`, the
+  React Native code, instead of two tabs overwriting each other's state.
+  Without the Web Locks API the wallet opens without the lock.
+- **`signal` (web only)** — `createUtxos`, `sendBtc`, `onchainSend`,
+  `inflate`, `burn`, the `beginEnd` begin steps, `refresh`, `refreshWallet`,
+  `syncWallet`, `getReceivedMint` and `unlock(params, { signal })` take an
+  optional `AbortSignal`. When it fires, the call rejects with the new code
+  `ABORTED` and the wallet is left as before the call; an end step that
+  broadcast is never reported as aborted. `RgbLibWebCallOptions` is exported.
+- **`getConsignment(assetId, txid)`** (core's `ConsignmentApi`) returns the
+  consignment of an ended burn as base64, as on React Native: WebRGB's burn
+  proof. Burns only; another txid is `NATIVE_ERROR`.
+  `getBfaCapabilities().consignment` is now `true` while the wallet is open.
+- **`checkIndexerUrl(url)`** (core's `IndexerCheckApi`) resolves with
+  `{ indexerProtocol: 'esplora' }`; an Electrum URL is
+  `UNSUPPORTED_CAPABILITY`.
+- **`witnessVersion`** option: `'taproot'` (default) or `'segwit-v0'`, as on
+  React Native. It is part of the wallet ID (the same ID as React Native for
+  the same keys).
+
+### Changed
+
+- `syncWallet()` syncs the colored keychain, then the vanilla one with a
+  lookback of 20, as React Native does; reads that sync (`getBtcBalance`,
+  `listUnspents`, `listTransactions` without `skipSync`) sync inside the
+  runtime. The connection sets React Native's `vanillaSyncLookback` (20) and
+  `failedWitnessReceiveGraceSecs` (one day).
+- BFA assets: `knownCirculatingSupply` replaces `initialSupply` (the runtime
+  dropped it). An asset whose reject list is an EVM contract has no
+  `rejectListUrl`.
+- A transfer's change is `changeUtxos` (a list) in the runtime; the public
+  transfer is unchanged.
+
+## 1.0.0-beta.14
 
 Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 
@@ -20,7 +91,7 @@ Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 ### Added
 
 - **Burn** — `RgbLibWeb` implements `BurnApi`: `burn({ assetId, amount,
-  burnRecipient?, feeRate, minConfirmations })` (begin, sign, end over
+burnRecipient?, feeRate, minConfirmations })` (begin, sign, end over
   `@utexo/rgb-lib-wasm`) and `getBfaCapabilities()`. Params are checked by
   core's `validateBurnParams`; a watch-only wallet rejects with
   `UNSUPPORTED_CAPABILITY`. `consignment` is `false`: beta.4 has no
@@ -49,7 +120,7 @@ ports across web ↔ RN unchanged.
 
 - **`openChannel` now opens _and funds_ the channel** — `openChannel(params, opts?)`
   returns `Promise<WebOpenChannelResult>` (`{ temporaryChannelId, fundingTxid?,
-  fundingTxHex? }`) instead of `Promise<string>` (bare temporary channel id).
+fundingTxHex? }`) instead of `Promise<string>` (bare temporary channel id).
   It polls for the funding request, builds and signs the funding tx (BDK) and
   submits it, resolving once the funding tx is submitted (poll `listChannels()`
   for readiness). Previously it only opened the channel and left it unfunded.
@@ -63,7 +134,7 @@ ports across web ↔ RN unchanged.
 - **`closeChannel(...)` is now `async` (`Promise<void>`)** — was synchronous (`void`)
 - **`invoiceStatus()` / `getLightningReceiveStatus()` return `RlnInvoiceStatus`**
   (`'Pending' | 'Claimable' | 'Claiming' | 'Succeeded' | 'Cancelled' | 'Failed' |
-  'Expired'`) instead of the legacy `InvoiceStatus` (`'Paid'`). Send-side
+'Expired'`) instead of the legacy `InvoiceStatus` (`'Paid'`). Send-side
   `getLightningSendStatus()` likewise returns `RlnPaymentStatus | null`
 
 ### Changed
@@ -101,7 +172,7 @@ addition to RGB on-chain. No external RGB Node server is required. The previous
   NIA/CFA issuance
 - `RlnNodeBinding` — `IRlnNodeBinding` impl wrapping `RlnWasmNode`
 - `RlnWalletManager` (`src/wallet/rln-wallet-manager.ts`) — extends `BaseWalletManager`
-  + `RlnSigner`
+  - `RlnSigner`
 - `RlnSigner` (`src/signer/RlnSigner.ts`) — `ISigner`; delegates PSBT signing to the
   BDK path (`@bitcoindevkit/bdk-wallet-web`)
 - `initRlnWasm()` (`src/wasm/initRln.ts`) — singleton WASM initializer, called

@@ -1,5 +1,5 @@
 /**
- * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.4) this engine calls,
+ * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.5) this engine calls,
  * described by shape. `init()` loads the real module (`load.ts`); tests and
  * custom builds can pass their own as the `runtime` constructor argument.
  *
@@ -7,14 +7,28 @@
  * `tests/types/` checks that the real module matches.
  * Values typed `unknown` are JS objects built by serde-wasm-bindgen; u64
  * values in them arrive as `bigint`.
+ *
+ * `signal` is the optional `AbortSignal` of the long calls: when it fires,
+ * the call stops its requests and rejects with `Aborted`, after the wallet
+ * is restored as on any failure.
  */
 export interface RgbLibWasmRuntime {
   readonly WasmWallet: {
-    /** Opens the wallet and restores its IndexedDB snapshot, if any. */
-    create(walletDataJson: string): Promise<RgbLibWasmWallet>;
+    /**
+     * Opens the wallet and restores its IndexedDB snapshot, if any.
+     * `walletDataJson` is a `WalletData`, `keysJson` a `SinglesigKeys`.
+     */
+    create(walletDataJson: string, keysJson: string): Promise<RgbLibWasmWallet>;
   };
   readonly WasmInvoice: new (invoice: string) => RgbLibWasmInvoice;
-  restoreKeys(network: string, mnemonic: string): unknown;
+  /** `witnessVersion` is `Taproot` or `SegWitV0`. */
+  restoreKeys(
+    network: string,
+    mnemonic: string,
+    witnessVersion: string
+  ): unknown;
+  /** The indexer protocol behind `indexerUrl` (`"Esplora"`), checked for `network`. */
+  checkIndexerUrl(indexerUrl: string, network: string): Promise<unknown>;
 }
 
 export interface RgbLibWasmInvoice {
@@ -22,12 +36,15 @@ export interface RgbLibWasmInvoice {
   free(): void;
 }
 
-/** `WasmWallet` methods used by the 29 shared methods. */
+type Signal = AbortSignal | null | undefined;
+
+/** `WasmWallet` methods used by the engine. */
 export interface RgbLibWasmWallet {
   free(): void;
   flush(): Promise<void>;
-  goOnline(onlineOptions: unknown): Promise<unknown>;
-  sync(online: unknown): Promise<void>;
+  goOnline(onlineOptions: unknown, signal?: Signal): Promise<unknown>;
+  /** One keychain: `{ keychain: "Colored" | { Vanilla: { lookback } }, strategy }`. */
+  sync(online: unknown, options: unknown, signal?: Signal): Promise<void>;
   getAddress(): string;
   /** VSS (ADR-0003). The key is a 64-hex secret key; checked by the binding. */
   configureVssBackup(
@@ -48,13 +65,26 @@ export interface RgbLibWasmWallet {
   vssRestoreBackup(): Promise<void>;
   /** `{ backup_exists, server_version, backup_required, last_backup_error }`. */
   vssBackupInfo(): Promise<unknown>;
-  getBtcBalance(): unknown;
+  /** Syncs first unless `skipSync`; `online` may be null when it skips. */
+  getBtcBalance(online: unknown, skipSync: boolean): Promise<unknown>;
   getAssetBalance(assetId: string): unknown;
+  /** The contract's `Metadata`; `AssetNotFound` for an unknown asset. */
+  getAssetMetadata(assetId: string): unknown;
   listAssets(filterAssetSchemas: unknown): unknown;
-  listUnspents(settledOnly: boolean): unknown;
-  listTransactions(): unknown;
-  listTransfers(filter: unknown, txid?: string | null): unknown;
+  listUnspents(
+    online: unknown,
+    settledOnly: boolean,
+    skipSync: boolean
+  ): Promise<unknown>;
+  listTransactions(online: unknown, skipSync: boolean): Promise<unknown>;
+  /**
+   * `assetFilter`: `"AnyOrNone"`, `"None"` or `{ Id }`; `scope`: `"All"`,
+   * `{ Txid }` or `{ BatchTransfer }`.
+   */
+  listTransfers(assetFilter: unknown, scope: unknown): unknown;
   getReceivedMint(recipientId: string): unknown;
+  /** The consignment of an ended burn, which proves it with its history. */
+  getBurnConsignment(assetId: string, txid: string): Uint8Array;
   issueAssetNia(
     ticker: string,
     name: string,
@@ -69,7 +99,8 @@ export interface RgbLibWasmWallet {
     inflationAmounts: unknown,
     rejectListUrl: string | null | undefined,
     linkRight: boolean,
-    linkedFromContract?: string | null
+    linkedFromContract: string | null | undefined,
+    skipContractChecks: boolean
   ): unknown;
   blindReceive(
     online: unknown,
@@ -92,28 +123,25 @@ export interface RgbLibWasmWallet {
   createUtxosBegin(
     online: unknown,
     upTo: boolean,
+    exact: boolean,
     num: number | null | undefined,
     size: number | null | undefined,
     feeRate: bigint,
-    skipSync: boolean
+    skipSync: boolean,
+    dryRun: boolean,
+    signal?: Signal
   ): Promise<string>;
-  createUtxosEnd(
-    online: unknown,
-    signedPsbt: string,
-    skipSync: boolean
-  ): Promise<number>;
+  createUtxosEnd(online: unknown, signedPsbt: string): Promise<number>;
   sendBtcBegin(
     online: unknown,
     address: string,
     amount: bigint,
     feeRate: bigint,
-    skipSync: boolean
+    skipSync: boolean,
+    dryRun: boolean,
+    signal?: Signal
   ): Promise<string>;
-  sendBtcEnd(
-    online: unknown,
-    signedPsbt: string,
-    skipSync: boolean
-  ): Promise<string>;
+  sendBtcEnd(online: unknown, signedPsbt: string): Promise<string>;
   sendBegin(
     online: unknown,
     recipientMap: unknown,
@@ -123,20 +151,20 @@ export interface RgbLibWasmWallet {
     expirationTimestamp: unknown,
     senderTransportEndpoint: string | null | undefined,
     lockTime: number | null | undefined,
-    dryRun: boolean
+    dryRun: boolean,
+    signal?: Signal
   ): Promise<unknown>;
-  sendEnd(
-    online: unknown,
-    signedPsbt: string,
-    skipSync: boolean
-  ): Promise<unknown>;
+  sendEnd(online: unknown, signedPsbt: string): Promise<unknown>;
+  /** An `InflateBeginResult`: `{ psbt, batchTransferIdx, details }`. */
   inflateBegin(
     online: unknown,
     assetId: string,
     inflationAmounts: unknown,
     feeRate: bigint,
-    minConfirmations: number
-  ): Promise<string>;
+    minConfirmations: number,
+    dryRun: boolean,
+    signal?: Signal
+  ): Promise<unknown>;
   inflateEnd(online: unknown, signedPsbt: string): Promise<unknown>;
   burnBegin(
     online: unknown,
@@ -145,15 +173,17 @@ export interface RgbLibWasmWallet {
     burnReason: string | null,
     feeRate: bigint,
     minConfirmations: number,
-    dryRun: boolean
+    dryRun: boolean,
+    signal?: Signal
   ): Promise<unknown>;
   burnEnd(online: unknown, signedPsbt: string): Promise<unknown>;
-  signPsbt(unsignedPsbt: string): string;
+  signPsbt(unsignedPsbt: string, signOptions?: null): string;
   refresh(
     online: unknown,
     assetId: string | null | undefined,
     filter: unknown,
-    skipSync: boolean
+    skipSync: boolean,
+    signal?: Signal
   ): Promise<unknown>;
   failTransfers(
     online: unknown,

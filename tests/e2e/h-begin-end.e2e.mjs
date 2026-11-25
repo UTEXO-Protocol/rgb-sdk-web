@@ -2,7 +2,8 @@
  * Scenario H — prepare, approve and submit as separate steps, on the `beginEnd`
  * and `psbt` carriers over the real runtime: a declined burn gives its inputs
  * back, an approved burn reports the exact fee of the transaction on chain, and
- * repeating an end step with the same signed PSBT returns the same result.
+ * repeating an end step with the same signed PSBT returns the same result,
+ * and its consignment can be exported (`getConsignment`).
  */
 import { test, expect } from '@playwright/test';
 import { report, HEX_32 } from '@utexo/rgb-sdk-core/conformance';
@@ -118,6 +119,26 @@ test('H: a burn is prepared, declined or approved, and submitted once', async ({
     (t) => t.txid === begun.txid
   );
   expect(transfer).toMatchObject({ kind: 'Burn', status: 'Settled' });
+
+  // The burn's consignment proves it (WebRGB's burn proof), as base64.
+  const consignment = await wcall(page, 'getConsignment', assetId, begun.txid);
+  report('getConsignment', { base64Length: consignment.length });
+  expect(consignment).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+  expect(consignment.length).toBeGreaterThan(100);
+  expect((await wcall(page, 'getBfaCapabilities')).consignment).toBe(true);
+  // Only burns have one in this runtime.
+  const notBurn = (await wcall(page, 'listTransfers', assetId)).find(
+    (t) => t.kind === 'Issuance'
+  );
+  if (notBurn?.txid) {
+    const refused = await wcallError(
+      page,
+      'getConsignment',
+      assetId,
+      notBurn.txid
+    );
+    expect(refused.operation).toBe('getConsignment');
+  }
 });
 
 test('H: inflate, send and sendBtc run as separate steps', async ({

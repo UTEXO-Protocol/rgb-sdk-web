@@ -12,10 +12,15 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import type { Network } from '@utexo/rgb-sdk-core';
-import type { ResolvedRgbLibWebConfig } from '../config.js';
+import type {
+  ResolvedRgbLibWebConfig,
+  RgbLibWebWitnessVersion,
+} from '../config.js';
 import { record, str } from './codec.js';
 import { RgbLibWebError } from '../errors.js';
 import type { RgbLibWebPublicKeys } from '../keys.js';
+import { acquireWalletLock, walletLockName } from './lock.js';
+import type { WalletLease } from './lock.js';
 import type { RgbLibWasmRuntime, RgbLibWasmWallet } from './types.js';
 
 /** rgb-lib-wasm's `BitcoinNetwork` serde names. `utexo` is a signet. */
@@ -38,17 +43,57 @@ const BRIDGE_NETWORKS: Readonly<Record<Network, string>> = {
   regtest: 'regtest',
 };
 
+/** rgb-lib's `WitnessVersion` serde names, by the React Native option values. */
+const WITNESS_VERSIONS: Readonly<Record<RgbLibWebWitnessVersion, string>> = {
+  'taproot': 'Taproot',
+  'segwit-v0': 'SegWitV0',
+};
+
+/**
+ * What `goOnline` passes besides the connection, as on React Native: the
+ * vanilla addresses a FastSync checks before the last used one, and how long
+ * the script of a failed witness receive stays watched (one day).
+ */
+const VANILLA_SYNC_LOOKBACK = 20;
+const FAILED_WITNESS_RECEIVE_GRACE_SECS = 86400;
+
+/** Every schema this rgb-lib has; it rejects an empty list. */
+const ALL_SCHEMAS = ['Nia', 'Ifa', 'Bfa'] as const;
+/** The schemas rgb-lib allows on mainnet without `allowRecklessSchemas`. */
+const MAINNET_SCHEMAS = ['Nia'] as const;
+
+/**
+ * The schemas a wallet opens with: rgb-lib refuses a mainnet wallet that
+ * supports IFA or BFA unless `allowRecklessSchemas` is set, so without it a
+ * mainnet wallet gets the mainnet schemas only.
+ */
+export function supportedSchemas(
+  network: Network,
+  allowRecklessSchemas: boolean
+): readonly string[] {
+  return network === 'mainnet' && !allowRecklessSchemas
+    ? MAINNET_SCHEMAS
+    : ALL_SCHEMAS;
+}
+
 export interface SessionOptions {
   network: Network;
   dataDir: string;
+  witnessVersion: RgbLibWebWitnessVersion;
   maxAllocationsPerUtxo: number;
   reuseAddresses: boolean;
+  allowRecklessSchemas: boolean;
 }
 
 // ── session ─────────────────────────────────────────────────────────────────
 
 export class WasmSession {
   private online?: unknown;
+  /**
+   * The `AbortSignal` of the call running now, set by the backend around
+   * each queued task (tasks never overlap). The long runtime calls take it.
+   */
+  signal: AbortSignal | undefined;
 
   private constructor(
     private readonly runtime: RgbLibWasmRuntime,
@@ -58,13 +103,16 @@ export class WasmSession {
     readonly wasmNetwork: string,
     readonly identity: { id: string; network: string },
     /** Names the VSS store (`wallet_<masterFingerprint>`). */
-    readonly masterFingerprint: string
+    readonly masterFingerprint: string,
+    /** The Web Lock on this wallet's snapshot; released on close. */
+    private readonly release: WalletLease
   ) {}
 
   /**
    * Derives the public keys from the mnemonic (checking given ones against
    * them) or opens watch-only from public keys, then opens the wallet and
-   * restores its IndexedDB state.
+   * restores its IndexedDB state. The wallet's Web Lock is taken first:
+   * `WALLET_STORAGE_IN_USE` when it is already open elsewhere.
    */
   static async open(
     runtime: RgbLibWasmRuntime,
@@ -74,10 +122,11 @@ export class WasmSession {
   ): Promise<WasmSession> {
     const bridgeNetwork = BRIDGE_NETWORKS[options.network];
     const wasmNetwork = WASM_NETWORKS[options.network];
+    const witnessVersion = WITNESS_VERSIONS[options.witnessVersion];
     let keys: RgbLibWebPublicKeys | undefined;
     if (mnemonic !== null) {
       const derived = record(
-        runtime.restoreKeys(bridgeNetwork, mnemonic),
+        runtime.restoreKeys(bridgeNetwork, mnemonic, witnessVersion),
         'keys'
       );
       keys = {
@@ -108,40 +157,60 @@ export class WasmSession {
     const id = bytesToHex(
       sha256(
         utf8ToBytes(
-          `${bridgeNetwork}:taproot:${keys.accountXpubVanilla}:${keys.accountXpubColored}`
+          `${bridgeNetwork}:${options.witnessVersion}:${keys.accountXpubVanilla}:${keys.accountXpubColored}`
         )
       )
     );
-    const wallet = await runtime.WasmWallet.create(
-      JSON.stringify({
-        dataDir: options.dataDir,
-        bitcoinNetwork: wasmNetwork,
-        databaseType: 'Sqlite',
-        maxAllocationsPerUtxo: options.maxAllocationsPerUtxo,
-        accountXpubVanilla: keys.accountXpubVanilla,
-        accountXpubColored: keys.accountXpubColored,
-        mnemonic,
-        masterFingerprint: keys.masterFingerprint,
-        vanillaKeychain: null,
-        // Every schema this rgb-lib has; it rejects an empty list.
-        supportedSchemas: ['Nia', 'Ifa', 'Bfa'],
-        reuseAddresses: options.reuseAddresses,
-      })
+    const release = await acquireWalletLock(
+      walletLockName(options.dataDir, keys.masterFingerprint, bridgeNetwork)
     );
+    let wallet: RgbLibWasmWallet;
+    try {
+      wallet = await runtime.WasmWallet.create(
+        JSON.stringify({
+          dataDir: options.dataDir,
+          bitcoinNetwork: wasmNetwork,
+          databaseType: 'Sqlite',
+          maxAllocationsPerUtxo: options.maxAllocationsPerUtxo,
+          supportedSchemas: supportedSchemas(
+            options.network,
+            options.allowRecklessSchemas
+          ),
+          reuseAddresses: options.reuseAddresses,
+          allowRecklessSchemas: options.allowRecklessSchemas,
+        }),
+        JSON.stringify({
+          accountXpubVanilla: keys.accountXpubVanilla,
+          accountXpubColored: keys.accountXpubColored,
+          masterFingerprint: keys.masterFingerprint,
+          vanillaKeychain: null,
+          witnessVersion,
+          mnemonic,
+        })
+      );
+    } catch (error) {
+      release();
+      throw error;
+    }
     return new WasmSession(
       runtime,
       wallet,
       wasmNetwork,
       { id, network: bridgeNetwork },
-      keys.masterFingerprint
+      keys.masterFingerprint,
+      release
     );
   }
 
-  /** Writes pending state to IndexedDB, then releases the WASM wallet. */
+  /**
+   * Writes pending state to IndexedDB, then releases the WASM wallet and its
+   * lock. A failed flush keeps both, so a retry can flush again.
+   */
   async close(): Promise<void> {
     await this.wallet.flush();
     this.online = undefined;
     this.wallet.free();
+    this.release();
   }
 
   /** The online handle; WALLET_OFFLINE before goOnline. */
@@ -154,28 +223,39 @@ export class WasmSession {
     return this.online;
   }
 
-  /** Reads that sync first: the WASM reads themselves never sync. */
-  async syncFirst(skipSync: boolean): Promise<void> {
-    if (!skipSync) await this.wallet.sync(this.connected());
+  /**
+   * The online handle for a read that syncs first unless `skipSync`; a read
+   * that skips works offline (null).
+   */
+  readHandle(skipSync: boolean): unknown {
+    return skipSync ? (this.online ?? null) : this.connected();
   }
 
-  async goOnline(config: ResolvedRgbLibWebConfig): Promise<void> {
+  async goOnline(
+    config: ResolvedRgbLibWebConfig,
+    signal?: AbortSignal
+  ): Promise<void> {
     const ids = Object.keys(config.evmRpcUrls);
-    this.online = await this.wallet.goOnline({
-      indexerConfig: { Esplora: { url: config.indexer.url } },
-      skipConsistencyCheck: false,
-      proxyAuthKeys: { ...config.proxyAuthKeys },
-      evmChains: Object.fromEntries(
-        ids.map((id) => [
-          id,
-          {
-            rpcUrl: config.evmRpcUrls[id]!,
-            minMintLockBlocks: BigInt(config.evmMintLockBlocks[id]!.min),
-            maxMintLockBlocks: BigInt(config.evmMintLockBlocks[id]!.max),
-          },
-        ])
-      ),
-    });
+    this.online = await this.wallet.goOnline(
+      {
+        indexerConfig: { Esplora: { url: config.indexer.url } },
+        skipConsistencyCheck: false,
+        failedWitnessReceiveGraceSecs: FAILED_WITNESS_RECEIVE_GRACE_SECS,
+        vanillaSyncLookback: VANILLA_SYNC_LOOKBACK,
+        proxyAuthKeys: { ...config.proxyAuthKeys },
+        evmChains: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            {
+              rpcUrl: config.evmRpcUrls[id]!,
+              minMintLockBlocks: BigInt(config.evmMintLockBlocks[id]!.min),
+              maxMintLockBlocks: BigInt(config.evmMintLockBlocks[id]!.max),
+            },
+          ])
+        ),
+      },
+      signal
+    );
   }
 
   /**
@@ -187,13 +267,35 @@ export class WasmSession {
     return value;
   }
 
-  async sync(): Promise<void> {
-    await this.wallet.sync(this.connected());
+  /**
+   * Syncs both keychains with every revealed script, as `syncWallet()` does on
+   * React Native: the colored one, then the vanilla one.
+   */
+  async sync(signal?: AbortSignal): Promise<void> {
+    const online = this.connected();
+    await this.wallet.sync(
+      online,
+      { keychain: 'Colored', strategy: 'FullSync' },
+      signal
+    );
+    await this.wallet.sync(
+      online,
+      {
+        keychain: { Vanilla: { lookback: VANILLA_SYNC_LOOKBACK } },
+        strategy: 'FullSync',
+      },
+      signal
+    );
   }
 
-  /** Signs a PSBT with the wallet keys (synchronous in the runtime). */
+  /** Signs a PSBT with the wallet keys and the default options (synchronous). */
   sign(psbt: string): string {
-    return this.wallet.signPsbt(psbt);
+    return this.wallet.signPsbt(psbt, null);
+  }
+
+  /** The raw `checkIndexerUrl()` result (`"Esplora"`) for this wallet's network. */
+  checkIndexerUrl(url: string): Promise<unknown> {
+    return this.runtime.checkIndexerUrl(url, this.identity.network);
   }
 
   /** The raw `invoiceData()` of an invoice string; the handle is freed. */

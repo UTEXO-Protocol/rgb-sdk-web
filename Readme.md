@@ -23,7 +23,7 @@ This package has no Lightning.
 ## Installation
 
 ```bash
-npm install @utexo/rgb-sdk-web @utexo/rgb-sdk-core@1.0.0-beta.10
+npm install @utexo/rgb-sdk-web @utexo/rgb-sdk-core@1.0.0-beta.11
 ```
 
 ## Bundler setup
@@ -171,10 +171,17 @@ const { txid } = await wallet.burn({
 });
 ```
 
-- `getBfaCapabilities()` says what works now: `burn` is `false` on a
-  watch-only or destroyed wallet.
-- `consignment` is always `false`: `@utexo/rgb-lib-wasm` 1.0.0-beta.4 has no
-  way to export a consignment, so there is no `getConsignment()` here.
+- `getBfaCapabilities()` says what works now: everything is `false` on a
+  destroyed wallet and on a mainnet wallet without `allowRecklessSchemas`, and
+  `burn` is `false` on a watch-only wallet.
+- `getConsignment(assetId, txid)` returns the consignment of an ended burn as
+  base64: it proves the burn with its history. `@utexo/rgb-lib-wasm` exports
+  burn consignments only, so another transfer's txid is rejected
+  (`NATIVE_ERROR`). `consignment` is `true` while the wallet is open.
+
+```ts
+const proof = await wallet.getConsignment(asset.assetId, txid);
+```
 
 ### Approve a burn before it is sent
 
@@ -218,6 +225,9 @@ const mint = await wallet.getReceivedMint(recipientId, {
   `blindReceive()`.
 - Integer fields are decimal strings; parse them with `BigInt`.
 - `refreshIncoming` refreshes pending incoming transfers only, not sends.
+- The result has no `assetId`: the runtime does not export the received
+  consignment it would be read from. Over WebRGB a mint for an invoice without
+  an asset therefore rejects; request the invoice with the asset.
 
 ## Read balances and history
 
@@ -283,21 +293,23 @@ are in [docs/backup.md](docs/backup.md).
 
 One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 
-| Field                                              | Meaning                                                                                                                                                          |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `network`                                          | `mainnet`, `testnet`, `testnet4`, `signet`, `regtest` or `utexo`                                                                                                 |
-| `mnemonic`                                         | the wallet mnemonic; or use `keys`                                                                                                                               |
-| `keys`                                             | a function or `{ getMnemonic }` that returns the mnemonic on `init()`, optionally with public keys that must match; or public keys alone for a watch-only wallet |
-| `dataDir`                                          | IndexedDB key prefix. Default `':memory:'`, which is a prefix too: the state is still saved to IndexedDB and restored with the same keys                         |
-| `reuseAddresses`                                   | one pinned address instead of a new one per call                                                                                                                 |
-| `maxAllocationsPerUtxo`                            | default 5                                                                                                                                                        |
-| `indexerUrl` / `indexer`                           | Esplora server; default per network                                                                                                                              |
-| `proxyEndpoint`                                    | RGB proxy; default per network                                                                                                                                   |
-| `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys` | BFA mint locks and proxy auth                                                                                                                                    |
-| `wasmUrl`                                          | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS                                                                              |
-| `runtime`                                          | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl`                                                                                |
-| `vssUrl`                                           | VSS backup server; default the UTEXO server (on regtest: off), `null` turns VSS off                                                                              |
-| `vss`                                              | an explicit VSS identity `{ serverUrl, storeId, signingKey }` instead of the derived one; not with `vssUrl`                                                      |
+| Field                                              | Meaning                                                                                                                                                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `network`                                          | `mainnet`, `testnet`, `testnet4`, `signet`, `regtest` or `utexo`                                                                                                                                                                     |
+| `mnemonic`                                         | the wallet mnemonic; or use `keys`                                                                                                                                                                                                   |
+| `keys`                                             | a function or `{ getMnemonic }` that returns the mnemonic on `init()`, optionally with public keys that must match; or public keys alone for a watch-only wallet                                                                     |
+| `witnessVersion`                                   | `'taproot'` (default) or `'segwit-v0'`: the script type of the wallet's keys, as on React Native. It changes the keys and the wallet ID                                                                                              |
+| `dataDir`                                          | IndexedDB key prefix. Default `':memory:'`, which is a prefix too: the state is still saved to IndexedDB and restored with the same keys                                                                                             |
+| `reuseAddresses`                                   | one pinned address instead of a new one per call                                                                                                                                                                                     |
+| `allowRecklessSchemas`                             | rgb-lib's flag, default `false`. On mainnet rgb-lib opens IFA and BFA only with it; without it a mainnet wallet has NIA only and the IFA and BFA calls reject with `UNSUPPORTED_CAPABILITY`. Other networks always have every schema |
+| `maxAllocationsPerUtxo`                            | default 5                                                                                                                                                                                                                            |
+| `indexerUrl` / `indexer`                           | Esplora server; default per network                                                                                                                                                                                                  |
+| `proxyEndpoint`                                    | RGB proxy; default per network                                                                                                                                                                                                       |
+| `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys` | BFA mint locks and proxy auth                                                                                                                                                                                                        |
+| `wasmUrl`                                          | where to load `rgb_lib_wasm_bindings_bg.wasm` from; default next to the module's JS                                                                                                                                                  |
+| `runtime`                                          | an initialized `@utexo/rgb-lib-wasm` module, or a test double; not with `wasmUrl`                                                                                                                                                    |
+| `vssUrl`                                           | VSS backup server; default the UTEXO server (on regtest: off), `null` turns VSS off                                                                                                                                                  |
+| `vss`                                              | an explicit VSS identity `{ serverUrl, storeId, signingKey }` instead of the derived one; not with `vssUrl`                                                                                                                          |
 
 Pass exactly one of `mnemonic` and `keys`, and at most one of `runtime` and
 `wasmUrl`.
@@ -311,20 +323,49 @@ Network defaults:
 | `regtest`                      | No: set `indexerUrl` and `proxyEndpoint` to your local stand                  |
 
 `unlock(params)` connects with other settings than the config's.
+`checkIndexerUrl(url)` checks an indexer before you use it: it resolves with
+`{ indexerProtocol: 'esplora' }`, and an Electrum URL (`ssl://`, `tcp://`) is
+`UNSUPPORTED_CAPABILITY` in the browser.
+
+### One open wallet per browser profile
+
+`init()` takes a [Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API)
+on the wallet's IndexedDB state and keeps it until `destroy()`. Opening the
+same wallet (same keys, network and `dataDir`) again, in another tab or in the
+same page, rejects at once with `WALLET_STORAGE_IN_USE`, the code React Native
+gives for a wallet that is already open. Destroy it there first, or use another
+`dataDir`. Where the Web Locks API is missing, the wallet opens without the
+lock.
+
+### Cancel a long call
+
+The calls that go to the network take an optional `signal` (an
+`AbortSignal`): `createUtxos`, `sendBtc`, `onchainSend`, `inflate`, `burn`, the
+`beginEnd` begin steps, `refresh`, `refreshWallet`, `syncWallet`,
+`getReceivedMint` and `unlock(params, { signal })`. When it fires, the call
+rejects with `ABORTED` and the wallet stays as before the call. A call that
+already broadcast is not aborted: it resolves with its result. This option is
+web only; `destroy()` still waits for the running call.
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 30_000);
+await wallet.syncWallet({ signal: controller.signal });
+```
 
 ## API
 
-| Group     | Methods                                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------------------- |
-| Lifecycle | `RgbLibWeb.create()`, `init()`, `unlock()` / `goOnline()`, `destroy()`, `isDisposed()`                     |
-| Network   | `getNetwork()`, `getNetworkInfo()`, `getWalletIdentity()`, `estimateFeeRate()`                             |
-| Bitcoin   | `getAddress()`, `getBtcBalance()`, `listUnspents()`, `createUtxos()`, `sendBtc()`                          |
-| Assets    | `listAssets()`, `getAssetBalance()`, `issueAssetNia()`, `issueAssetIfa()`, `inflate()`                     |
-| BFA       | `burn()`, `getBfaCapabilities()`, `getReceivedMint()`                                                      |
-| Approval  | `beginEnd` (begin/end flows, `burnBegin()`, `burnEnd()`), `psbt` (`signPsbt()`, `estimateFee()`)           |
-| Invoices  | `onchainReceive()`, `witnessReceive()`, `blindReceive()`, `decodeRGBInvoice()`, `onchainSend()`            |
-| Transfers | `listTransfers()`, `listTransactions()`, `refresh()`, `refreshWallet()`, `syncWallet()`, `failTransfers()` |
-| Backup    | `exportBackup()`, `restoreBackup()`, `backupToVss()`, `restoreFromVss()`, `getVssBackupInfo()`             |
+| Group     | Methods                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------ |
+| Lifecycle | `RgbLibWeb.create()`, `init()`, `unlock()` / `goOnline()`, `destroy()`, `isDisposed()`                       |
+| Network   | `getNetwork()`, `getNetworkInfo()`, `getWalletIdentity()`, `estimateFeeRate()`, `checkIndexerUrl()`          |
+| Bitcoin   | `getAddress()`, `getBtcBalance()`, `listUnspents()`, `createUtxos()`, `sendBtc()`                            |
+| Assets    | `listAssets()`, `getAssetBalance()`, `getAssetMetadata()`, `issueAssetNia()`, `issueAssetIfa()`, `inflate()` |
+| BFA       | `burn()`, `getBfaCapabilities()`, `getConsignment()`, `getReceivedMint()`                                    |
+| Approval  | `beginEnd` (begin/end flows, `burnBegin()`, `burnEnd()`), `psbt` (`signPsbt()`, `estimateFee()`)             |
+| Invoices  | `onchainReceive()`, `witnessReceive()`, `blindReceive()`, `decodeRGBInvoice()`, `onchainSend()`              |
+| Transfers | `listTransfers()`, `listTransactions()`, `refresh()`, `refreshWallet()`, `syncWallet()`, `failTransfers()`   |
+| Backup    | `exportBackup()`, `restoreBackup()`, `backupToVss()`, `restoreFromVss()`, `getVssBackupInfo()`               |
 
 ## Error handling
 
@@ -350,7 +391,9 @@ try {
 
 Common codes: `INVALID_CONFIG`, `INVALID_PARAMS`, `INSUFFICIENT_FUNDS`,
 `KEYS_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY` (for example sending from a
-watch-only wallet), `WALLET_INVALID_STATE`, `NATIVE_ERROR`.
+watch-only wallet), `WALLET_INVALID_STATE`, `WALLET_STORAGE_IN_USE` (the
+wallet is open elsewhere), `ABORTED` (the call's `signal` fired),
+`NATIVE_ERROR`.
 
 ## With the facade
 

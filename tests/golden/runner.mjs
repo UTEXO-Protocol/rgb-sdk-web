@@ -16,7 +16,7 @@ import { copy } from '../fixtures/lib.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const FIXTURES = path.resolve(
   here,
-  '../fixtures/rgb-lib-wasm-1.0.0-beta.4'
+  '../fixtures/rgb-lib-wasm-1.0.0-beta.5'
 );
 
 const ONLINE = {
@@ -57,6 +57,7 @@ function plan(mods) {
     getReceivedMint: { call: (e) => e.getReceivedMint('bcrt:utxob:golden') },
     listAssets: { call: (e) => e.listAssets() },
     getAssetBalance: { call: (e) => e.getAssetBalance(ASSET) },
+    getAssetMetadata: { call: (e) => e.getAssetMetadata(ASSET) },
     issueAssetNia: {
       call: (e) =>
         e.issueAssetNia({
@@ -89,6 +90,9 @@ function plan(mods) {
     },
     refresh: { call: (e) => e.refresh() },
     getFeeEstimation: { call: (e) => e.estimateFeeRate(1) },
+    checkIndexerUrl: {
+      call: (e) => e.checkIndexerUrl('http://127.0.0.1:3002'),
+    },
     failTransfers: { call: (e) => e.failTransfers({ batchTransferIdx: 1 }) },
     createUtxosEnd: {
       with: { createUtxosBegin: first(mods, 'createUtxosBegin') },

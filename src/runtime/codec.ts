@@ -1,5 +1,5 @@
 /**
- * Decoding of rgb-lib-wasm 1.0.0-beta.4 results (ADR-0002, "Rules for
+ * Decoding of rgb-lib-wasm 1.0.0-beta.5 results (ADR-0002, "Rules for
  * codec.ts"). Pure functions, in two stages:
  *
  * - `decode*`: raw `unknown` → an internal value with exact numbers (u64 and
@@ -24,6 +24,7 @@ import { AssetSchema } from '@utexo/rgb-sdk-core';
 import type {
   AssetBfa,
   AssetIfa,
+  AssetMetadata,
   AssetNIA,
   BitcoinNetwork,
   ReceivedMint,
@@ -62,6 +63,8 @@ export interface StructTable {
 }
 
 const NOT_IN_CORE = 'core has no field for it';
+/** `rejectList`: its `Url` variant becomes `rejectListUrl`; an EVM reject list has no core field. */
+const REJECT_LIST = 'mapped';
 
 export const FIELDS = {
   Balance: {
@@ -84,6 +87,7 @@ export const FIELDS = {
       btcAmount: 'mapped',
       colorable: 'mapped',
       exists: 'mapped',
+      derivationIndex: NOT_IN_CORE,
     },
     nested: { outpoint: 'Outpoint' },
   },
@@ -152,7 +156,7 @@ export const FIELDS = {
       addedAt: 'mapped',
       balance: 'mapped',
       media: 'mapped',
-      rejectListUrl: 'mapped',
+      rejectList: REJECT_LIST,
     },
     nested: { balance: 'Balance', media: 'Media' },
   },
@@ -164,14 +168,33 @@ export const FIELDS = {
       name: 'mapped',
       details: 'mapped',
       precision: 'mapped',
-      initialSupply: 'mapped',
+      knownCirculatingSupply: 'mapped',
       timestamp: 'mapped',
       addedAt: 'mapped',
       balance: 'mapped',
       media: 'mapped',
-      rejectListUrl: 'mapped',
+      bridgeLocation: NOT_IN_CORE,
+      rejectList: REJECT_LIST,
     },
     nested: { balance: 'Balance', media: 'Media' },
+  },
+  Metadata: {
+    rust: 'src/wallet/offline.rs Metadata',
+    fields: {
+      assetSchema: 'mapped',
+      initialSupply: 'mapped',
+      maxSupply: 'mapped',
+      knownCirculatingSupply: 'mapped',
+      timestamp: 'mapped',
+      name: 'mapped',
+      precision: 'mapped',
+      ticker: 'mapped',
+      details: 'mapped',
+      bridgeLocation: NOT_IN_CORE,
+      rejectList: REJECT_LIST,
+      linkedFromContract: 'mapped',
+      linkedToContract: 'mapped',
+    },
   },
   Assets: {
     rust: 'src/wallet/offline.rs Assets',
@@ -196,17 +219,18 @@ export const FIELDS = {
       txid: 'mapped',
       recipientId: 'mapped',
       receiveUtxo: 'mapped',
-      changeUtxo: 'mapped',
+      changeUtxos: 'mapped',
       expirationTimestamp: 'mapped',
       transportEndpoints: 'mapped',
       senderTransportEndpoint: NOT_IN_CORE,
       invoiceString: 'mapped',
       consignmentPath: 'mapped',
+      psbt: NOT_IN_CORE,
       burnReason: NOT_IN_CORE,
     },
     nested: {
       receiveUtxo: 'Outpoint',
-      changeUtxo: 'Outpoint',
+      changeUtxos: 'Outpoint',
       transportEndpoints: 'TransferTransportEndpoint',
     },
   },
@@ -256,8 +280,16 @@ export const FIELDS = {
     rust: 'src/wallet/online.rs BurnBeginResult',
     fields: {
       psbt: 'internal',
-      batchTransferIdx: 'burnEnd returns it',
+      batchTransferIdx: 'internal',
       details: 'burnEnd returns what the adapter needs',
+    },
+  },
+  InflateBeginResult: {
+    rust: 'src/wallet/online.rs InflateBeginResult',
+    fields: {
+      psbt: 'internal',
+      batchTransferIdx: 'inflateEnd returns it',
+      details: 'inflateEnd returns what the adapter needs',
     },
   },
   RefreshedTransfer: {
@@ -313,13 +345,16 @@ export const RESULTS: Readonly<Record<string, StructName | null>> = {
   sendBtcEnd: null,
   sendBegin: 'SendBeginResult',
   sendEnd: 'OperationResult',
-  inflateBegin: null,
+  inflateBegin: 'InflateBeginResult',
   inflateEnd: 'OperationResult',
   burnBegin: 'BurnBeginResult',
   burnEnd: 'OperationResult',
   failTransfers: null,
   refresh: 'RefreshedTransfer',
   getReceivedMint: 'ReceivedMint',
+  getBurnConsignment: null,
+  getAssetMetadata: 'Metadata',
+  checkIndexerUrl: null,
 };
 
 /**
@@ -436,6 +471,7 @@ export function bool(value: unknown, field: string): boolean {
 
 const INT_RANGES = {
   u8: [0, 0xff],
+  u16: [0, 0xffff],
   u32: [0, 0xffff_ffff],
   i32: [-0x8000_0000, 0x7fff_ffff],
 } as const;
@@ -749,8 +785,9 @@ export interface AssetIfaExact extends AssetBase {
   knownCirculatingSupply: bigint;
   rejectListUrl: string | null;
 }
+/** A BFA is issued with no units: its supply is what was minted. */
 export interface AssetBfaExact extends AssetBase {
-  initialSupply: bigint;
+  knownCirculatingSupply: bigint;
   rejectListUrl: string | null;
 }
 export interface Assets {
@@ -780,6 +817,23 @@ function decodeBase(v: Record<string, unknown>) {
     media: decodeMedia(v.media),
   };
 }
+/**
+ * `Option<RgbRejectListInfo>`, externally tagged: `{ Url: "…" }` or
+ * `{ Evm: { chainId, address } }`. Core has only a URL field.
+ */
+function rejectListUrl(value: unknown): string | null {
+  if (absent(value)) return null;
+  const entries = Object.entries(record(value, 'reject list'));
+  if (entries.length !== 1) invalid('reject list');
+  const [variant, inner] = entries[0]!;
+  if (variant === 'Url') return str(inner, 'reject list URL');
+  if (variant === 'Evm') {
+    record(inner, 'reject list contract');
+    return null;
+  }
+  return rejected('Unknown rgb-lib-wasm reject list');
+}
+
 /** A supply that is a `u64` in Rust; the old readers took it as optional. */
 function supply(value: unknown, field: string, name: string): bigint {
   if (absent(value)) rejected(`Missing ${name}`);
@@ -798,7 +852,6 @@ export function decodeNia(value: unknown): AssetNia {
 export function decodeIfa(value: unknown): AssetIfaExact {
   const v = record(value, 'asset');
   const base = decodeBase(v);
-  const rejectListUrl = optStr(v.rejectListUrl, 'reject list URL');
   return {
     ...base,
     ticker: needStr(v.ticker, 'ticker', 'ticker'),
@@ -809,18 +862,55 @@ export function decodeIfa(value: unknown): AssetIfaExact {
       'circulating supply',
       'knownCirculatingSupply'
     ),
-    rejectListUrl,
+    rejectListUrl: rejectListUrl(v.rejectList),
   };
 }
 export function decodeBfa(value: unknown): AssetBfaExact {
   const v = record(value, 'asset');
   const base = decodeBase(v);
-  const rejectListUrl = optStr(v.rejectListUrl, 'reject list URL');
   return {
     ...base,
     ticker: needStr(v.ticker, 'ticker', 'ticker'),
-    initialSupply: supply(v.initialSupply, 'initial supply', 'initialSupply'),
-    rejectListUrl,
+    knownCirculatingSupply: supply(
+      v.knownCirculatingSupply,
+      'circulating supply',
+      'knownCirculatingSupply'
+    ),
+    rejectListUrl: rejectListUrl(v.rejectList),
+  };
+}
+
+/**
+ * `getAssetMetadata`: the contract's genesis data, as on React Native. Supplies
+ * stay exact u64 decimal strings; an absent optional field is left out.
+ */
+export function decodeAssetMetadata(value: unknown): AssetMetadata {
+  const v = record(value, 'asset metadata');
+  const ticker = optStr(v.ticker, 'ticker');
+  const details = optStr(v.details, 'details');
+  const url = rejectListUrl(v.rejectList);
+  const from = optStr(v.linkedFromContract, 'linked from contract');
+  const to = optStr(v.linkedToContract, 'linked to contract');
+  return {
+    assetSchema: known(
+      str(v.assetSchema, 'asset schema'),
+      ['Nia', 'Ifa', 'Bfa'] as const,
+      'asset schema'
+    ),
+    name: str(v.name, 'asset name'),
+    precision: int(v.precision, 'precision', 'u8'),
+    ...(ticker !== null ? { ticker } : {}),
+    ...(details !== null ? { details } : {}),
+    timestamp: toNumber(big(v.timestamp, 'timestamp', true), 'timestamp'),
+    initialSupply: big(v.initialSupply, 'initial supply').toString(),
+    maxSupply: big(v.maxSupply, 'max supply').toString(),
+    knownCirculatingSupply: big(
+      v.knownCirculatingSupply,
+      'circulating supply'
+    ).toString(),
+    ...(url !== null ? { rejectListUrl: url } : {}),
+    ...(from !== null ? { linkedFromContract: from } : {}),
+    ...(to !== null ? { linkedToContract: to } : {}),
   };
 }
 
@@ -872,7 +962,10 @@ export function publicBfa(value: AssetBfaExact): AssetBfa {
   return {
     ...publicBase(value),
     ticker: value.ticker,
-    initialSupply: toNumber(value.initialSupply, 'initialSupply'),
+    knownCirculatingSupply: toNumber(
+      value.knownCirculatingSupply,
+      'knownCirculatingSupply'
+    ),
     rejectListUrl: value.rejectListUrl ?? undefined,
   };
 }
@@ -921,8 +1014,8 @@ export interface Transfer {
   txid: string | null;
   recipientId: string | null;
   receiveUtxo: Outpoint | null;
-  /** This rgb-lib reports at most one change UTXO. */
-  changeUtxo: Outpoint | null;
+  /** RGB change can be spread over several UTXOs. */
+  changeUtxos: Outpoint[];
   expiration: bigint | null;
   transportEndpoints: {
     endpoint: string;
@@ -952,7 +1045,7 @@ export function decodeTransfers(value: unknown): Transfer[] {
       txid: optStr(v.txid, 'txid'),
       recipientId: optStr(v.recipientId, 'recipient ID'),
       receiveUtxo: optOutpoint(v.receiveUtxo),
-      changeUtxo: optOutpoint(v.changeUtxo),
+      changeUtxos: list(v.changeUtxos, 'change UTXOs').map(decodeOutpoint),
       expiration: optBig(v.expirationTimestamp, 'expiration'),
       transportEndpoints: list(v.transportEndpoints, 'transport endpoints').map(
         (x) => {
@@ -988,7 +1081,7 @@ export function publicTransfer(value: Transfer): WalletTransfer {
     : value.requestedAssignment?.type === 'Fungible'
       ? value.requestedAssignment.amount!
       : undefined;
-  const changeUtxos = value.changeUtxo ? [value.changeUtxo] : [];
+  const changeUtxos = value.changeUtxos.map((o) => ({ ...o }));
   return {
     idx: value.idx,
     batchTransferIdx: value.batchTransferIdx,
@@ -1053,9 +1146,9 @@ const INVOICE_NETWORKS: Readonly<Record<string, BitcoinNetwork>> = {
   Signet: 'signet',
   Regtest: 'regtest',
 };
-/** beta.4 `TransportType` (`src/database/enums.rs`): its only variant. */
+/** beta.5 `TransportType` (`src/database/enums.rs`): its only variant. */
 const TRANSPORT_TYPES = ['JsonRpc'] as const;
-/** beta.4 `AssetSchema` (`src/database/enums.rs`): its only variants. */
+/** beta.5 `AssetSchema` (`src/database/enums.rs`): its only variants. */
 const ASSET_SCHEMAS = [AssetSchema.Nia, AssetSchema.Ifa, 'Bfa'] as const;
 const ENCRYPTIONS = ['Required', 'Unsupported', 'Optional'] as const;
 
@@ -1223,6 +1316,30 @@ export function decodeVssBackupInfo(value: unknown): VssBackupInfo {
   };
 }
 
+/** `getBurnConsignment`: the consignment bytes, copied so the caller owns them. */
+export function decodeConsignmentBytes(value: unknown): Uint8Array {
+  if (!(value instanceof Uint8Array) || value.length === 0)
+    rejected('Invalid consignment bytes');
+  return value.slice();
+}
+
+/** Standard base64 with padding, as the React Native bridge returns bytes. */
+export function encodeBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** `checkIndexerUrl`: an `IndexerProtocol` name, lowercased (`esplora`). */
+export function decodeIndexerProtocol(value: unknown): string {
+  return known(
+    str(value, 'indexer protocol'),
+    ['Esplora'],
+    'indexer protocol'
+  ).toLowerCase();
+}
+
 /** `getFeeEstimation`: an f64 in sat/vB. */
 export function decodeFeeEstimate(value: unknown): number {
   if (
@@ -1252,15 +1369,32 @@ export interface Refreshed {
   failure: RefreshFailure | null;
 }
 
-/** The Rust field types of the beta.4 `Error` variants, as text. */
+/** `BitcoinNetwork` serde names (a unit-variant enum). */
+const BITCOIN_NETWORKS = [
+  'Mainnet',
+  'Testnet',
+  'Testnet4',
+  'Signet',
+  'SignetCustom',
+  'Regtest',
+] as const;
+
+/** The Rust field types of the beta.5 `Error` variants, as text. */
 const ERROR_FIELD = {
-  String: (v: unknown, f: string) => str(v, f),
+  'String': (v: unknown, f: string) => str(v, f),
+  'Vec<String>': (v: unknown, f: string) =>
+    `[${list(v, f)
+      .map((item) => str(item, f))
+      .join(', ')}]`,
+  'BitcoinNetwork': (v: unknown, _f: string) =>
+    known(str(v, 'refresh failure details'), BITCOIN_NETWORKS, 'network'),
   // An enum with unit variants only, serialized as its name.
-  AssetSchema: (v: unknown, _f: string) =>
+  'AssetSchema': (v: unknown, _f: string) =>
     known(str(v, 'refresh failure details'), ASSET_SCHEMAS, 'asset schema'),
-  u64: (v: unknown, f: string) => big(v, f).toString(),
-  i32: (v: unknown, f: string) => String(int(v, f, 'i32')),
-  AssignmentsCollection: (v: unknown, f: string) => {
+  'u64': (v: unknown, f: string) => big(v, f).toString(),
+  'i32': (v: unknown, f: string) => String(int(v, f, 'i32')),
+  'u16': (v: unknown, f: string) => String(int(v, f, 'u16')),
+  'AssignmentsCollection': (v: unknown, f: string) => {
     const a = record(v, f);
     return `{fungible: ${big(a.fungible, f)}, non_fungible: ${bool(a.non_fungible, f)}, inflation: ${big(a.inflation, f)}, link: ${bool(a.link, f)}, mint: ${big(a.mint, f)}}`;
   },
@@ -1272,7 +1406,7 @@ export const ERROR_FIELD_TYPES: readonly string[] = Object.keys(ERROR_FIELD);
 /**
  * A failure: an `Error`, externally tagged — `"Variant"` for a unit variant,
  * `{ Variant: { field: … } }` for a struct variant. The variant must be one of
- * beta.4; a struct variant's message lists its fields in Rust order, exact.
+ * beta.5; a struct variant's message lists its fields in Rust order, exact.
  * Fields the variant does not have are ignored.
  */
 function decodeFailure(value: unknown): RefreshFailure {

@@ -15,6 +15,12 @@ import { RgbLibWebError, unsupported } from './errors.js';
 import type { RgbLibWebKeys } from './keys.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 
+/**
+ * The wallet's script type: `taproot` (BIP86, P2TR) or `segwit-v0` (BIP84,
+ * P2WPKH). The same values as on React Native.
+ */
+export type RgbLibWebWitnessVersion = 'taproot' | 'segwit-v0';
+
 /** Settings fixed for the wallet's lifetime. */
 export interface RgbLibWebOptions {
   network: Network;
@@ -25,9 +31,23 @@ export interface RgbLibWebOptions {
    * on the next `init()` with the same keys.
    */
   dataDir?: string;
+  /**
+   * Default `taproot`. Part of the wallet ID; the wallet stores it, so opening
+   * a stored wallet with another one is refused (`WalletSettingMismatch`).
+   */
+  witnessVersion?: RgbLibWebWitnessVersion;
   maxAllocationsPerUtxo?: number;
   /** Return one pinned address instead of a new one on each call. */
   reuseAddresses?: boolean;
+  /**
+   * rgb-lib's `allowRecklessSchemas`, default `false`. rgb-lib refuses to
+   * open a mainnet wallet that supports IFA or BFA unless it is `true`. With
+   * `false`, a mainnet wallet opens with NIA only, and the IFA and BFA
+   * operations reject with `UNSUPPORTED_CAPABILITY`. With `true`, it opens
+   * with every schema and rgb-lib logs a warning. Other networks always have
+   * every schema.
+   */
+  allowRecklessSchemas?: boolean;
   /**
    * Where `init()` loads `rgb_lib_wasm_bindings_bg.wasm` from when no runtime
    * is passed. Default: next to the `@utexo/rgb-lib-wasm` JS file, as the
@@ -237,6 +257,12 @@ export function validateWalletParams(params: RgbLibWebParams) {
   ) {
     invalidConfig('dataDir must be a non-empty string');
   }
+  if (
+    params.witnessVersion !== undefined &&
+    !['taproot', 'segwit-v0'].includes(params.witnessVersion)
+  ) {
+    invalidConfig('Unsupported witnessVersion');
+  }
   integer(
     params.maxAllocationsPerUtxo ?? 5,
     'maxAllocationsPerUtxo',
@@ -248,6 +274,12 @@ export function validateWalletParams(params: RgbLibWebParams) {
     typeof params.reuseAddresses !== 'boolean'
   ) {
     invalidConfig('reuseAddresses must be a boolean');
+  }
+  if (
+    params.allowRecklessSchemas !== undefined &&
+    typeof params.allowRecklessSchemas !== 'boolean'
+  ) {
+    invalidConfig('allowRecklessSchemas must be a boolean');
   }
   if (
     params.wasmUrl !== undefined &&

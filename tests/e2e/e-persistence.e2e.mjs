@@ -164,3 +164,35 @@ test('E: a byte backup restores the wallet into an empty profile', async ({
     await fresh.close();
   }
 });
+
+test('E: a wallet open in one tab is WALLET_STORAGE_IN_USE in another until destroyed', async ({
+  browser,
+}) => {
+  // One context is one browser profile: its tabs share IndexedDB and Web Locks.
+  const context = await browser.newContext();
+  try {
+    const [one, two] = [await context.newPage(), await context.newPage()];
+    wirePageLogging(one);
+    wirePageLogging(two);
+    const opened = await bootWallet(one, { unlock: false });
+    const refused = await bootWallet(two, { ...opened, unlock: false }).then(
+      () => undefined,
+      (error) => error
+    );
+    report('second tab', refused?.detail);
+    expect(refused?.code).toBe('WALLET_STORAGE_IN_USE');
+    // Another data directory is another wallet.
+    await bootWallet(two, {
+      mnemonic: opened.mnemonic,
+      dataDir: `${opened.dataDir}-other`,
+      unlock: false,
+    });
+    await wcall(two, 'destroy');
+    await wcall(one, 'destroy');
+    await bootWallet(two, { ...opened, unlock: false });
+    expect(await wcall(two, 'isDisposed')).toBe(false);
+    await wcall(two, 'destroy');
+  } finally {
+    await context.close();
+  }
+});

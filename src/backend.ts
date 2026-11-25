@@ -11,6 +11,13 @@
  *    connect queues its own call); the wallet must already be open (`init()`);
  * 4. `execute` as one task in the serial queue, so WASM calls never overlap.
  *
+ * A call with an `AbortSignal` (`signal`, ADR-0002 addendum) that fires while
+ * it waits for its turn rejects at once with `ABORTED` and never runs. Once it
+ * runs, the signal goes to the runtime calls that can stop (goOnline, sync,
+ * refresh and the begins): they stop and reject with `ABORTED` after the
+ * wallet is restored. What runs after the begin (signing, the end, a
+ * broadcast) is not stopped.
+ *
  * Not every method has every stage: reads without params have no `prepare`;
  * `listAssets` checks its schema filter inside the queued task, as on React
  * Native, so that error keeps its place after the admission checks; the
@@ -79,6 +86,48 @@ import { skipSyncOf, syncs } from './operations.js';
 import { loadRgbLibWasm, normalizeWasmUrl } from './runtime/load.js';
 import type { RgbLibWasmRuntime } from './runtime/types.js';
 import { WasmSession } from './runtime/session.js';
+
+/**
+ * Options of the calls the runtime can stop. Only this engine has them: on
+ * React Native the same calls take no signal.
+ */
+export interface RgbLibWebCallOptions {
+  /** Stops the call: it rejects with `ABORTED` and leaves the wallet as before. */
+  signal?: AbortSignal;
+}
+
+/** The `signal` option, checked; any other value is INVALID_PARAMS. */
+function signalOf(value: unknown): AbortSignal | undefined {
+  if (value === undefined || value === null) return undefined;
+  const v = value as { aborted?: unknown; addEventListener?: unknown };
+  // By shape: a signal from another realm (an iframe) is not instanceof here.
+  if (
+    typeof v === 'object' &&
+    typeof v.aborted === 'boolean' &&
+    typeof v.addEventListener === 'function'
+  )
+    return value as AbortSignal;
+  throw new ValidationError('signal must be an AbortSignal', 'signal');
+}
+
+/**
+ * Splits `signal` off a params or options object before it is owned:
+ * `snapshot()` would turn the signal into a plain object.
+ */
+function splitSignal<T>(value: T): { rest: T; signal?: AbortSignal } {
+  if (value === null || typeof value !== 'object' || !('signal' in value))
+    return { rest: value };
+  const { signal, ...rest } = value as T & { signal?: unknown };
+  return { rest: rest as T, signal: signalOf(signal) };
+}
+
+function abortedError(operation: string): RgbLibWebError {
+  return new RgbLibWebError(
+    'ABORTED',
+    `${operation} was aborted by its signal`,
+    operation
+  );
+}
 
 /** A failed command must not poison the queue. */
 class SerialExecutor {
@@ -228,6 +277,34 @@ export class RgbLibWebBackend {
     return !this.watchOnly;
   }
 
+  /** IFA and BFA are off: mainnet without `allowRecklessSchemas`. */
+  private get recklessRefused(): boolean {
+    return (
+      this.params.network === 'mainnet' &&
+      !(this.params.allowRecklessSchemas ?? false)
+    );
+  }
+
+  /** Rejects an IFA or BFA operation the wallet was opened without. */
+  private refuseReckless(operation: string): void {
+    if (this.recklessRefused)
+      throw new RgbLibWebError(
+        'UNSUPPORTED_CAPABILITY',
+        `${operation} needs IFA or BFA, which rgb-lib refuses on mainnet unless allowRecklessSchemas is true`,
+        operation
+      );
+  }
+
+  /** `run`, after the IFA/BFA rule: the rejection is the public error. */
+  private reckless<T>(operation: string, start: () => Promise<T>): Promise<T> {
+    try {
+      this.refuseReckless(operation);
+    } catch (error) {
+      return Promise.reject(toPublicError(error, operation));
+    }
+    return start();
+  }
+
   get isDisposed(): boolean {
     return this.disposed;
   }
@@ -269,14 +346,19 @@ export class RgbLibWebBackend {
     });
   }
 
-  /** Public entry: admission check, then the tracked operation. */
+  /**
+   * Public entry: admission check, then the tracked operation. With a
+   * signal, a call that has not started when it fires rejects at once.
+   */
   private run<T>(
     operation: string,
     requiresOnline: boolean,
-    action: (session: WasmSession) => Promise<T>
+    action: (session: WasmSession) => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
     try {
       this.assertAccepting();
+      if (signal?.aborted) throw abortedError(operation);
     } catch (error) {
       return Promise.reject(toPublicError(error, operation));
     }
@@ -290,10 +372,37 @@ export class RgbLibWebBackend {
           return result;
         }
       : action;
-    return this.publicly(
+    let started = false;
+    const result = this.publicly(
       operation,
-      this.track(this.execute(operation, requiresOnline, task))
+      this.track(
+        this.execute(operation, requiresOnline, task, signal, () => {
+          started = true;
+        })
+      )
     );
+    return signal
+      ? this.abortable(operation, result, signal, () => started)
+      : result;
+  }
+
+  /** `result`, or ABORTED as soon as `signal` fires before the task started. */
+  private abortable<T>(
+    operation: string,
+    result: Promise<T>,
+    signal: AbortSignal,
+    started: () => boolean
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        // The task sees the fired signal when its turn comes and skips.
+        if (!started()) reject(abortedError(operation));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      result.then(resolve, reject).finally(() => {
+        signal.removeEventListener('abort', onAbort);
+      });
+    });
   }
 
   /**
@@ -324,7 +433,9 @@ export class RgbLibWebBackend {
   private execute<T>(
     operation: string,
     requiresOnline: boolean,
-    action: (session: WasmSession) => Promise<T>
+    action: (session: WasmSession) => Promise<T>,
+    signal?: AbortSignal,
+    onStart?: () => void
   ): Promise<T> {
     // Connect before entering the queue: the connect step queues its own call.
     const ready = requiresOnline
@@ -346,11 +457,17 @@ export class RgbLibWebBackend {
             operation
           );
         }
+        if (signal?.aborted) throw abortedError(operation);
+        onStart?.();
+        const session = this.session;
+        session.signal = signal;
         try {
-          return await action(this.session);
+          return await action(session);
         } catch (error) {
           // toPublicError keeps core ValidationErrors as INVALID_PARAMS.
           throw toPublicError(error, operation);
+        } finally {
+          session.signal = undefined;
         }
       })
     );
@@ -396,19 +513,29 @@ export class RgbLibWebBackend {
     operation: string,
     requiresOnline: boolean | ((owned: O | undefined) => boolean),
     options: O | undefined,
-    action: (session: WasmSession, owned: O | undefined) => Promise<T>
+    action: (session: WasmSession, owned: O | undefined) => Promise<T>,
+    /** Whether the options take a `signal`. */
+    abortable = false
   ): Promise<T> {
     if (options != null && typeof options !== 'object')
       throw new ValidationError(
         `${operation} options must be an object`,
         'options'
       );
-    const owned = snapshot(options);
+    const { rest, signal } = abortable
+      ? splitSignal(options)
+      : { rest: options, signal: undefined };
+    const owned = snapshot(rest);
     const online =
       typeof requiresOnline === 'function'
         ? requiresOnline(owned)
         : requiresOnline;
-    return this.run(operation, online, (session) => action(session, owned));
+    return this.run(
+      operation,
+      online,
+      (session) => action(session, owned),
+      signal
+    );
   }
 
   /**
@@ -421,13 +548,23 @@ export class RgbLibWebBackend {
     requiresOnline: boolean,
     params: P,
     // Required: `action` gets what `prepare` returned, never a missing value.
-    rules: { signs?: boolean; prepare: (owned: P) => R },
+    rules: {
+      signs?: boolean;
+      abortable?: boolean;
+      /** An IFA or BFA operation (see `refuseReckless`). */
+      reckless?: boolean;
+      prepare: (owned: P) => R;
+    },
     action: (session: WasmSession, owned: P, prepared: R) => Promise<T>
   ): Promise<T> {
     if (typeof params !== 'object' || params === null)
       throw new ValidationError(`${operation} needs a params object`, 'params');
-    const owned = snapshot(params);
+    const { rest, signal } = rules.abortable
+      ? splitSignal(params)
+      : { rest: params, signal: undefined };
+    const owned = snapshot(rest);
     skipSyncOf((owned as { skipSync?: unknown }).skipSync);
+    if (rules.reckless) this.refuseReckless(operation);
     if (rules.signs && this.watchOnly)
       throw new RgbLibWebError(
         'UNSUPPORTED_CAPABILITY',
@@ -435,8 +572,11 @@ export class RgbLibWebBackend {
         operation
       );
     const prepared = rules.prepare(owned);
-    return this.run(operation, requiresOnline, (session) =>
-      action(session, owned, prepared)
+    return this.run(
+      operation,
+      requiresOnline,
+      (session) => action(session, owned, prepared),
+      signal
     );
   }
 
@@ -468,8 +608,10 @@ export class RgbLibWebBackend {
           {
             network: this.params.network,
             dataDir: this.params.dataDir ?? ':memory:',
+            witnessVersion: this.params.witnessVersion ?? 'taproot',
             maxAllocationsPerUtxo: this.params.maxAllocationsPerUtxo ?? 5,
             reuseAddresses: this.params.reuseAddresses ?? false,
+            allowRecklessSchemas: this.params.allowRecklessSchemas ?? false,
           },
           mnemonic,
           this.keys.publicKeys
@@ -502,19 +644,31 @@ export class RgbLibWebBackend {
     return opening;
   }
 
-  /** rgb-lib's goOnline; the contract's unlock() is the same call. */
+  /**
+   * rgb-lib's goOnline; the contract's unlock() is the same call. A signal
+   * stops the connection attempt, for every caller waiting on it.
+   */
   unlock(
     params: RgbLibWebUnlockParams | undefined,
-    operation: 'unlock' | 'goOnline'
+    operation: 'unlock' | 'goOnline',
+    options?: RgbLibWebCallOptions
   ): Promise<void> {
     let config: ResolvedRgbLibWebConfig;
+    let signal: AbortSignal | undefined;
     try {
       config = this.readConfig(params, operation);
+      if (options != null && typeof options !== 'object')
+        throw new ValidationError(
+          `${operation} options must be an object`,
+          'options'
+        );
+      signal = signalOf(options?.signal);
       this.assertAccepting();
+      if (signal?.aborted) throw abortedError(operation);
     } catch (error) {
       return Promise.reject(toPublicError(error, operation));
     }
-    return this.publicly(operation, this.track(this.connect(config)));
+    return this.publicly(operation, this.track(this.connect(config, signal)));
   }
 
   private readConfig(
@@ -544,7 +698,10 @@ export class RgbLibWebBackend {
     return { ...base, ...explicit } as RgbLibWebUnlockParams;
   }
 
-  private connect(config: ResolvedRgbLibWebConfig): Promise<void> {
+  private connect(
+    config: ResolvedRgbLibWebConfig,
+    signal?: AbortSignal
+  ): Promise<void> {
     if (this.connecting) {
       return configEquals(this.connecting.config, config)
         ? this.connecting.promise
@@ -565,15 +722,21 @@ export class RgbLibWebBackend {
             )
           );
     }
-    const connecting = this.execute('unlock', false, async (session) => {
-      // Read before goOnline(): its full scan brings in the chain UTXOs and
-      // transactions of this mnemonic, so a new device no longer looks empty.
-      const empty = this.cloudCheckDue() && !ops.hasLocalData(session);
-      await session.goOnline(config);
-      this.online = config;
-      // Queued here, so it runs before any work that waited for the connect.
-      if (empty) this.checkCloudBackup();
-    });
+    const connecting = this.execute(
+      'unlock',
+      false,
+      async (session) => {
+        // Read before goOnline(): its full scan brings in the chain UTXOs and
+        // transactions of this mnemonic, so a new device no longer looks empty.
+        const empty =
+          this.cloudCheckDue() && !(await ops.hasLocalData(session));
+        await session.goOnline(config, session.signal);
+        this.online = config;
+        // Queued here, so it runs before any work that waited for the connect.
+        if (empty) this.checkCloudBackup();
+      },
+      signal
+    );
     this.connecting = { config, promise: connecting };
     const clear = () => {
       if (this.connecting?.promise === connecting) this.connecting = undefined;
@@ -645,13 +808,14 @@ export class RgbLibWebBackend {
       num?: number;
       size?: number;
       feeRate?: number;
-    } & ReadOptions
+    } & ReadOptions &
+      RgbLibWebCallOptions
   ): Promise<number> {
     return this.checked(
       'createUtxos',
       true,
       params,
-      { signs: true, prepare: ops.createUtxos.prepare },
+      { signs: true, abortable: true, prepare: ops.createUtxos.prepare },
       (s, _p, v) => ops.createUtxos.execute(s, v)
     );
   }
@@ -661,7 +825,7 @@ export class RgbLibWebBackend {
       'sendBtc',
       true,
       params,
-      { signs: true, prepare: ops.sendBtc.prepare },
+      { signs: true, abortable: true, prepare: ops.sendBtc.prepare },
       (s, _p, v) => ops.sendBtc.execute(s, v)
     );
   }
@@ -687,6 +851,13 @@ export class RgbLibWebBackend {
     );
   }
 
+  getAssetMetadata(assetId: string) {
+    const id = ops.getAssetMetadata.prepare(assetId);
+    return this.run('getAssetMetadata', false, async (s) =>
+      ops.getAssetMetadata.execute(s, id)
+    );
+  }
+
   issueAssetNia(params: IssueAssetNiaRequestModel) {
     return this.checked(
       'issueAssetNia',
@@ -702,7 +873,7 @@ export class RgbLibWebBackend {
       'issueAssetIfa',
       false,
       params,
-      { prepare: ops.issueAssetIfa.prepare },
+      { reckless: true, prepare: ops.issueAssetIfa.prepare },
       (s, _p, v) => ops.issueAssetIfa.execute(s, v)
     );
   }
@@ -712,7 +883,12 @@ export class RgbLibWebBackend {
       'inflate',
       true,
       params,
-      { signs: true, prepare: ops.inflate.prepare },
+      {
+        signs: true,
+        abortable: true,
+        reckless: true,
+        prepare: ops.inflate.prepare,
+      },
       (s, _p, v) => ops.inflate.execute(s, v)
     );
   }
@@ -722,7 +898,12 @@ export class RgbLibWebBackend {
       'burn',
       true,
       params,
-      { signs: true, prepare: ops.burn.prepare },
+      {
+        signs: true,
+        abortable: true,
+        reckless: true,
+        prepare: ops.burn.prepare,
+      },
       (s, _p, v) => ops.burn.execute(s, v)
     );
   }
@@ -736,7 +917,7 @@ export class RgbLibWebBackend {
       'createUtxosBegin',
       true,
       params,
-      { prepare: ops.createUtxosBegin.prepare },
+      { abortable: true, prepare: ops.createUtxosBegin.prepare },
       (s, _p, v) => ops.createUtxosBegin.execute(s, v)
     );
   }
@@ -756,7 +937,7 @@ export class RgbLibWebBackend {
       'sendBtcBegin',
       true,
       params,
-      { prepare: ops.sendBtcBegin.prepare },
+      { abortable: true, prepare: ops.sendBtcBegin.prepare },
       (s, _p, v) => ops.sendBtcBegin.execute(s, v)
     );
   }
@@ -776,7 +957,7 @@ export class RgbLibWebBackend {
       'onchainSendBegin',
       true,
       params,
-      { prepare: ops.onchainSendBegin.prepare },
+      { abortable: true, prepare: ops.onchainSendBegin.prepare },
       (s, _p, v) => ops.onchainSendBegin.execute(s, v, this.onlineContext())
     );
   }
@@ -796,7 +977,7 @@ export class RgbLibWebBackend {
       'inflateBegin',
       true,
       params,
-      { prepare: ops.inflateBegin.prepare },
+      { abortable: true, reckless: true, prepare: ops.inflateBegin.prepare },
       (s, _p, v) => ops.inflateBegin.execute(s, v)
     );
   }
@@ -806,7 +987,7 @@ export class RgbLibWebBackend {
       'inflateEnd',
       true,
       params,
-      { prepare: ops.inflateEnd.prepare },
+      { reckless: true, prepare: ops.inflateEnd.prepare },
       (s, _p, v) => ops.inflateEnd.execute(s, v)
     );
   }
@@ -816,7 +997,7 @@ export class RgbLibWebBackend {
       'burnBegin',
       true,
       params,
-      { prepare: ops.burnBegin.prepare },
+      { abortable: true, reckless: true, prepare: ops.burnBegin.prepare },
       (s, _p, v) => ops.burnBegin.execute(s, v)
     );
   }
@@ -826,7 +1007,7 @@ export class RgbLibWebBackend {
       'burnEnd',
       true,
       params,
-      { prepare: ops.burnEnd.prepare },
+      { reckless: true, prepare: ops.burnEnd.prepare },
       (s, _p, v) => ops.burnEnd.execute(s, v)
     );
   }
@@ -845,11 +1026,30 @@ export class RgbLibWebBackend {
 
   /**
    * What this wallet can do now. Burning signs, so a watch-only wallet cannot;
-   * beta.4 has no consignment export, so `consignment` is always false.
+   * the consignment of an ended burn is exported on any open wallet.
    */
   getBfaCapabilities(): BfaCapabilities {
-    const open = !this.disposed && !this.disposeRequested;
-    return { burn: open && !this.watchOnly, consignment: false, bfa: open };
+    const open =
+      !this.disposed && !this.disposeRequested && !this.recklessRefused;
+    return { burn: open && !this.watchOnly, consignment: open, bfa: open };
+  }
+
+  /** `ConsignmentApi`: the consignment of an ended burn, as base64. Offline. */
+  getConsignment(assetId: string, txid: string): Promise<string> {
+    return this.reckless('getConsignment', () => {
+      const prepared = ops.getConsignment.prepare(assetId, txid);
+      return this.run('getConsignment', false, async (s) =>
+        ops.getConsignment.execute(s, prepared)
+      );
+    });
+  }
+
+  /** `IndexerCheckApi`: the protocol of an indexer URL. Needs `init()`. */
+  checkIndexerUrl(url: string) {
+    const prepared = ops.checkIndexerUrl.prepare(url);
+    return this.run('checkIndexerUrl', false, (s) =>
+      ops.checkIndexerUrl.execute(s, prepared)
+    );
   }
 
   receive(
@@ -882,7 +1082,7 @@ export class RgbLibWebBackend {
       'onchainSend',
       true,
       params,
-      { signs: true, prepare: ops.onchainSend.prepare },
+      { signs: true, abortable: true, prepare: ops.onchainSend.prepare },
       (s, _p, v) => ops.onchainSend.execute(s, v, this.onlineContext())
     );
   }
@@ -912,24 +1112,38 @@ export class RgbLibWebBackend {
     );
   }
 
-  refresh(options?: ReadOptions): Promise<RefreshTransfersResult> {
+  refresh(
+    options?: ReadOptions & RgbLibWebCallOptions
+  ): Promise<RefreshTransfersResult> {
     return this.withOptions(
       'refresh',
       // Always online; the flag is checked here, before any connect.
       (owned) => (skipSyncOf(owned?.skipSync), true),
       options,
-      (s, owned) => ops.refresh.execute(s, skipSyncOf(owned?.skipSync))
+      (s, owned) => ops.refresh.execute(s, skipSyncOf(owned?.skipSync)),
+      true
     );
   }
 
-  refreshWallet(): Promise<void> {
-    return this.run('refreshWallet', true, (s) =>
-      ops.refresh.execute(s, false)
+  refreshWallet(options?: RgbLibWebCallOptions): Promise<void> {
+    return this.withOptions(
+      'refreshWallet',
+      true,
+      options,
+      (s) => ops.refresh.execute(s, false),
+      true
     ).then(() => undefined);
   }
 
-  syncWallet(): Promise<void> {
-    return this.run('syncWallet', true, (s) => s.sync());
+  /** Both keychains, every revealed script (FullSync), as on React Native. */
+  syncWallet(options?: RgbLibWebCallOptions): Promise<void> {
+    return this.withOptions(
+      'syncWallet',
+      true,
+      options,
+      (s) => s.sync(s.signal),
+      true
+    );
   }
 
   // ── VSS backup (ADR-0003) ────────────────────────────────────────────────
@@ -1014,14 +1228,20 @@ export class RgbLibWebBackend {
   /** The encrypted backup as bytes. Works offline, on any wallet. */
   getReceivedMint(
     recipientId: string,
-    options?: ReceivedMintOptions
+    options?: ReceivedMintOptions & RgbLibWebCallOptions
   ): Promise<ReceivedMint | undefined> {
-    const id = ops.getReceivedMint.prepare(recipientId);
-    // Offline unless it refreshes incoming transfers first.
-    const refreshIncoming = options?.refreshIncoming === true;
-    return this.run('getReceivedMint', refreshIncoming, (s) =>
-      ops.getReceivedMint.execute(s, id, refreshIncoming)
-    );
+    return this.reckless('getReceivedMint', () => {
+      const id = ops.getReceivedMint.prepare(recipientId);
+      const signal = signalOf(options?.signal);
+      // Offline unless it refreshes incoming transfers first.
+      const refreshIncoming = options?.refreshIncoming === true;
+      return this.run(
+        'getReceivedMint',
+        refreshIncoming,
+        (s) => ops.getReceivedMint.execute(s, id, refreshIncoming),
+        signal
+      );
+    });
   }
 
   exportBackup(params: { password: string }): Promise<Uint8Array> {

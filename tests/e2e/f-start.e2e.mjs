@@ -5,8 +5,9 @@
  */
 import { test, expect } from '@playwright/test';
 import { deriveVssSigningKeyFromMnemonic } from '@utexo/rgb-sdk-core';
-import { fund } from './stand.mjs';
+import { STAND, fund } from './stand.mjs';
 import {
+  bootWallet,
   startWallet,
   wcall,
   wcallError,
@@ -70,6 +71,17 @@ test('F: create() rejects an Electrum indexer before opening', async ({
   const env = JSON.parse(res);
   expect(env.ok).toBe(false);
   expect(env.error.code).toBe('UNSUPPORTED_CAPABILITY');
+});
+
+test('F: checkIndexerUrl reports Esplora for the stand', async ({ page }) => {
+  wirePageLogging(page);
+  await bootWallet(page, { unlock: false });
+  expect(await wcall(page, 'checkIndexerUrl', STAND.indexerUrl)).toEqual({
+    indexerProtocol: 'esplora',
+  });
+  const refused = await wcallError(page, 'checkIndexerUrl', 'ssl://x:50002');
+  expect(refused.code).toBe('UNSUPPORTED_CAPABILITY');
+  await wcall(page, 'destroy');
 });
 
 test('F: the real runtime takes the derived VSS identity; an unreachable server fails backupToVss only', async ({

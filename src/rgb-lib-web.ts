@@ -1,17 +1,25 @@
 // Public API: the RgbLibWeb class, the 29 SharedWalletApi methods, burn
-// (BurnApi) and the backup extensions (BackupExportApi, BackupRestoreApi, VssBackupApi,
-// VssRestoreApi, VssBackupInfoApi). Each method passes through `backend.guarded()`
+// (BurnApi), burn consignments (ConsignmentApi), contract metadata
+// (AssetMetadataApi), the indexer check
+// (IndexerCheckApi) and the backup extensions (BackupExportApi,
+// BackupRestoreApi, VssBackupApi, VssRestoreApi, VssBackupInfoApi). Each method passes through `backend.guarded()`
 // (synchronous argument errors become rejected Promises) to RgbLibWebBackend;
 // no wallet logic here.
 // Called by: apps and the UTEXOWallet facade. Depends on: `backend.ts`, `config.ts`.
 
 import type {
+  AssetMetadata,
+  AssetMetadataApi,
   BurnApi,
   BurnParams,
   BurnResult,
+  ConsignmentApi,
+  CreateUtxosBeginRequestModel,
   EngineCapabilities,
   FailTransfersRequest,
   IBeginEndFlows,
+  IndexerCheckApi,
+  IndexerUrlInfo,
   IPsbtSigning,
   InflateAssetIfaRequestModel,
   IssueAssetIfaRequestModel,
@@ -33,11 +41,16 @@ import type {
   VssRestoreApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWebBackend } from './backend.js';
+import type { RgbLibWebCallOptions } from './backend.js';
 import { splitConfig } from './config.js';
 import type { RgbLibWebConfig, RgbLibWebUnlockParams } from './config.js';
 import type { BurnBeginResult } from './operations.js';
 
 export type { BurnBeginResult } from './operations.js';
+export type { RgbLibWebCallOptions } from './backend.js';
+
+/** Params of a call the runtime can stop, with its optional `signal`. */
+type Abortable<P> = P & RgbLibWebCallOptions;
 
 /**
  * Core's begin/end flows plus burn. Show what a begin returns, get approval,
@@ -49,15 +62,23 @@ export type { BurnBeginResult } from './operations.js';
  * `failTransfers({ batchTransferIdx })`.
  */
 export interface RgbLibWebBeginEndFlows extends IBeginEndFlows {
+  // The begins take a `signal`: it stops the begin, which then reserves nothing.
+  createUtxosBegin(
+    params: Abortable<CreateUtxosBeginRequestModel>
+  ): Promise<string>;
+  onchainSendBegin(params: Abortable<OnchainSendRequestModel>): Promise<string>;
+  sendBtcBegin(params: Abortable<SendBtcBeginRequestModel>): Promise<string>;
+  inflateBegin(params: Abortable<InflateAssetIfaRequestModel>): Promise<string>;
   /** Prepares a burn and reserves its inputs; nothing is signed or sent. */
-  burnBegin(params: BurnParams): Promise<BurnBeginResult>;
+  burnBegin(params: Abortable<BurnParams>): Promise<BurnBeginResult>;
   /** Broadcasts a burn signed after `burnBegin`. */
   burnEnd(params: { signedPsbt: string }): Promise<BurnResult>;
 }
 
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
- * the 29 `SharedWalletApi` methods, `burn()` (`BurnApi`) and the backup
+ * the 29 `SharedWalletApi` methods, `burn()` (`BurnApi`), `getConsignment()`
+ * of a burn (`ConsignmentApi`), `checkIndexerUrl()` and the backup
  * extensions (ADR-0003):
  * `exportBackup()`, `restoreBackup()` (bytes) and `backupToVss()`,
  * `restoreFromVss()`, `getVssBackupInfo()` (VSS).
@@ -89,11 +110,26 @@ export interface RgbLibWebBeginEndFlows extends IBeginEndFlows {
  * defaults (regtest has none); `unlock(params)` connects explicitly.
  * Methods the runtime cannot perform reject with `UNSUPPORTED_CAPABILITY`
  * (ADR-0001).
+ *
+ * One instance per wallet: while it is open, the wallet holds a Web Lock, and
+ * opening it again (another tab, or a second instance) rejects with
+ * `WALLET_STORAGE_IN_USE` until `destroy()`.
+ *
+ * Calls the runtime can stop take an `AbortSignal` (`signal`), only in this
+ * engine: `unlock()` (second argument), `syncWallet()`, `refresh()`,
+ * `refreshWallet()`, `getReceivedMint()`, and the params of `createUtxos`,
+ * `sendBtc`, `onchainSend`, `inflate`, `burn` and every begin. A call stopped
+ * before it ran, or during its network steps, rejects with `ABORTED` and
+ * leaves the wallet as it was; signing, an end and a broadcast are not
+ * stopped.
  */
 export class RgbLibWeb
   implements
     SharedWalletApi<RgbLibWebUnlockParams | undefined>,
     BurnApi,
+    ConsignmentApi,
+    AssetMetadataApi,
+    IndexerCheckApi,
     ReceivedMintApi,
     BackupExportApi,
     BackupRestoreApi,
@@ -173,16 +209,19 @@ export class RgbLibWeb
   init() {
     return this.backend.init();
   }
-  /** Connects to the indexer and proxy. Explicit fields override the constructor's. */
-  unlock(params?: RgbLibWebUnlockParams) {
+  /**
+   * Connects to the indexer and proxy. Explicit fields override the
+   * constructor's. `options.signal` stops the connection attempt.
+   */
+  unlock(params?: RgbLibWebUnlockParams, options?: RgbLibWebCallOptions) {
     return this.backend.guarded('unlock', () =>
-      this.backend.unlock(params, 'unlock')
+      this.backend.unlock(params, 'unlock', options)
     );
   }
   /** rgb-lib's name for {@link unlock}. */
-  goOnline(params?: RgbLibWebUnlockParams) {
+  goOnline(params?: RgbLibWebUnlockParams, options?: RgbLibWebCallOptions) {
     return this.backend.guarded('goOnline', () =>
-      this.backend.unlock(params, 'goOnline')
+      this.backend.unlock(params, 'goOnline', options)
     );
   }
   destroy() {
@@ -215,7 +254,7 @@ export class RgbLibWeb
       this.backend.listUnspents(options)
     );
   }
-  sendBtc(params: SendBtcBeginRequestModel) {
+  sendBtc(params: Abortable<SendBtcBeginRequestModel>) {
     return this.backend.guarded('sendBtc', () => this.backend.sendBtc(params));
   }
   createUtxos(
@@ -224,7 +263,7 @@ export class RgbLibWeb
       num?: number;
       size?: number;
       feeRate?: number;
-    } & ReadOptions
+    } & Abortable<ReadOptions>
   ) {
     return this.backend.guarded('createUtxos', () =>
       this.backend.createUtxos(params)
@@ -246,6 +285,15 @@ export class RgbLibWeb
       this.backend.getAssetBalance(assetId)
     );
   }
+  /**
+   * `AssetMetadataApi`: the contract's genesis data (schema, name, precision,
+   * supplies as exact decimal strings, …), as on React Native. Offline.
+   */
+  getAssetMetadata(assetId: string): Promise<AssetMetadata> {
+    return this.backend.guarded('getAssetMetadata', () =>
+      this.backend.getAssetMetadata(assetId)
+    );
+  }
   issueAssetNia(params: IssueAssetNiaRequestModel) {
     return this.backend.guarded('issueAssetNia', () =>
       this.backend.issueAssetNia(params)
@@ -256,14 +304,14 @@ export class RgbLibWeb
       this.backend.issueAssetIfa(params)
     );
   }
-  inflate(params: InflateAssetIfaRequestModel) {
+  inflate(params: Abortable<InflateAssetIfaRequestModel>) {
     return this.backend.guarded('inflate', () => this.backend.inflate(params));
   }
   /**
    * Burns `amount` (exact decimal base units) of an asset. Signs, so a
    * watch-only wallet rejects with `UNSUPPORTED_CAPABILITY`.
    */
-  burn(params: BurnParams) {
+  burn(params: Abortable<BurnParams>) {
     return this.backend.guarded('burn', () => this.backend.burn(params));
   }
   /**
@@ -271,17 +319,39 @@ export class RgbLibWeb
    * `refreshIncoming` is set, which first refreshes pending incoming transfers
    * only. Receiving a mint needs the chain's `evmRpcUrls` entry.
    */
-  getReceivedMint(recipientId: string, options?: ReceivedMintOptions) {
+  getReceivedMint(
+    recipientId: string,
+    options?: Abortable<ReceivedMintOptions>
+  ) {
     return this.backend.guarded('getReceivedMint', () =>
       this.backend.getReceivedMint(recipientId, options)
     );
   }
   /**
-   * `burn` is false on a watch-only or disposed wallet. `consignment` is
-   * always false: beta.4 has no consignment export.
+   * `burn` is false on a watch-only or disposed wallet; `consignment` and
+   * `bfa` are false on a disposed one.
    */
   async getBfaCapabilities() {
     return this.backend.getBfaCapabilities();
+  }
+  /**
+   * The consignment of an ended burn of `assetId` in `txid`, as base64: the
+   * proof of the burn with its history. Works offline. This runtime exports
+   * burn consignments only; another transfer rejects (`UnknownTransfer`).
+   */
+  getConsignment(assetId: string, txid: string): Promise<string> {
+    return this.backend.guarded('getConsignment', () =>
+      this.backend.getConsignment(assetId, txid)
+    );
+  }
+  /**
+   * The protocol behind an indexer URL, checked for this wallet's network
+   * (`esplora`: the browser has no Electrum). Needs `init()`.
+   */
+  checkIndexerUrl(url: string): Promise<IndexerUrlInfo> {
+    return this.backend.guarded('checkIndexerUrl', () =>
+      this.backend.checkIndexerUrl(url)
+    );
   }
   blindReceive(params: ReceiveParams) {
     return this.backend.guarded('blindReceive', () =>
@@ -309,7 +379,7 @@ export class RgbLibWeb
       this.backend.onchainReceive(params)
     );
   }
-  onchainSend(params: OnchainSendRequestModel) {
+  onchainSend(params: Abortable<OnchainSendRequestModel>) {
     return this.backend.guarded('onchainSend', () =>
       this.backend.onchainSend(params)
     );
@@ -326,15 +396,20 @@ export class RgbLibWeb
     );
   }
   /** Refreshes pending transfers; `skipSync: true` skips the sync first. */
-  refresh(options?: ReadOptions) {
+  refresh(options?: Abortable<ReadOptions>) {
     return this.backend.guarded('refresh', () => this.backend.refresh(options));
   }
   /** `refresh()` without the result. */
-  refreshWallet() {
-    return this.backend.refreshWallet();
+  refreshWallet(options?: RgbLibWebCallOptions) {
+    return this.backend.guarded('refreshWallet', () =>
+      this.backend.refreshWallet(options)
+    );
   }
-  syncWallet() {
-    return this.backend.syncWallet();
+  /** Syncs both keychains with every revealed script. */
+  syncWallet(options?: RgbLibWebCallOptions) {
+    return this.backend.guarded('syncWallet', () =>
+      this.backend.syncWallet(options)
+    );
   }
 
   // ── VSS backup (ADR-0003) ─────────────────────────────────────────────────

@@ -55,6 +55,9 @@ runEngineConformanceChecks({
   createEngineSync: () => create().engine,
   extensions: [
     'burn',
+    'consignment',
+    'assetMetadata',
+    'indexerCheck',
     'receivedMint',
     'backupExport',
     'backupRestore',
@@ -165,13 +168,26 @@ describe('RgbLibWeb lifecycle', () => {
   it('init opens the wallet with the derived keys and the RN wallet ID', async () => {
     const { engine, runtime } = create();
     await engine.init();
-    const created = runtime.calls.find((c) => c.name === 'create').args[0];
-    assert.equal(created.bitcoinNetwork, 'Regtest');
-    assert.equal(created.dataDir, ':memory:');
-    assert.equal(created.accountXpubVanilla, KEYS.accountXpubVanilla);
-    assert.equal(created.mnemonic, KEYS.mnemonic);
-    // rgb-lib-wasm rejects an empty list ("no supported schemas").
-    assert.deepEqual(created.supportedSchemas, ['Nia', 'Ifa', 'Bfa']);
+    const [created, keys] = runtime.calls.find((c) => c.name === 'create').args;
+    assert.deepEqual(created, {
+      dataDir: ':memory:',
+      bitcoinNetwork: 'Regtest',
+      databaseType: 'Sqlite',
+      maxAllocationsPerUtxo: created.maxAllocationsPerUtxo,
+      // rgb-lib-wasm rejects an empty list ("no supported schemas").
+      supportedSchemas: ['Nia', 'Ifa', 'Bfa'],
+      reuseAddresses: created.reuseAddresses,
+      allowRecklessSchemas: false,
+    });
+    assert.equal(keys.accountXpubVanilla, KEYS.accountXpubVanilla);
+    assert.equal(keys.accountXpubColored, KEYS.accountXpubColored);
+    assert.equal(keys.mnemonic, KEYS.mnemonic);
+    assert.equal(keys.witnessVersion, 'Taproot');
+    assert.equal(keys.vanillaKeychain, null);
+    assert.deepEqual(
+      runtime.calls.find((c) => c.name === 'restoreKeys').args.slice(2),
+      ['Taproot']
+    );
     const expectedId = createHash('sha256')
       .update(
         `regtest:taproot:${KEYS.accountXpubVanilla}:${KEYS.accountXpubColored}`
@@ -224,13 +240,14 @@ describe('RgbLibWeb lifecycle', () => {
       Esplora: { url: ONLINE.indexerUrl },
     });
     assert.equal(options.skipConsistencyCheck, false);
-    // Reads that sync call sync() first: the WASM reads never sync.
-    assert.deepEqual(names().slice(-4), [
-      'sync',
-      'getBtcBalance',
-      'sync',
-      'listUnspents',
-    ]);
+    // React Native's online options.
+    assert.equal(options.vanillaSyncLookback, 20);
+    assert.equal(options.failedWitnessReceiveGraceSecs, 86400);
+    // The beta.5 reads sync themselves (skipSync: false).
+    assert.deepEqual(names().slice(-2), ['getBtcBalance', 'listUnspents']);
+    const balance = runtime.calls.find((c) => c.name === 'getBtcBalance');
+    assert.notEqual(balance.args[0], null);
+    assert.equal(balance.args[1], false);
   });
 
   it('unlock with a different config after connecting is WALLET_CONFIG_MISMATCH', async () => {
@@ -308,15 +325,15 @@ describe('RgbLibWeb mapping', () => {
   it('lists transfers of any asset and keeps the change UTXO', async () => {
     const { engine, runtime } = await ready();
     const [transfer] = await engine.listTransfers();
-    assert.equal(
-      runtime.calls.find((c) => c.name === 'listTransfers').args[0],
-      'any'
+    assert.deepEqual(
+      runtime.calls.find((c) => c.name === 'listTransfers').args,
+      ['AnyOrNone', 'All']
     );
     assert.deepEqual(transfer.changeUtxos, [{ txid: TXID, vout: 1 }]);
     assert.equal(transfer.amountBaseUnits, '10');
     assert.equal(transfer.expiration, 1700003600);
     await engine.listTransfers(ASSET_ID);
-    assert.deepEqual(runtime.calls.at(-1).args[0], { id: ASSET_ID });
+    assert.deepEqual(runtime.calls.at(-1).args, [{ Id: ASSET_ID }, 'All']);
   });
 
   it('lists assets into the contract buckets', async () => {
@@ -360,7 +377,16 @@ describe('RgbLibWeb operations', () => {
     const { engine, runtime, names } = await ready();
     assert.equal(await engine.createUtxos({ num: 2, feeRate: 3 }), 3);
     const begin = runtime.calls.find((c) => c.name === 'createUtxosBegin').args;
-    assert.equal(begin[4], 3n);
+    // online, upTo, exact, num, size, feeRate, skipSync, dryRun, signal
+    assert.deepEqual(begin.slice(1, 8), [
+      true,
+      false,
+      2,
+      null,
+      3n,
+      false,
+      false,
+    ]);
     assert.deepEqual(names().slice(-3), [
       'createUtxosBegin',
       'signPsbt',
@@ -532,7 +558,7 @@ describe('RgbLibWeb unsupported input (ADR-0001)', () => {
     assert.equal(engine.capabilities.canSignTransactions, false);
     await engine.init();
     assert.equal(
-      runtime.calls.find((c) => c.name === 'create').args[0].mnemonic,
+      runtime.calls.find((c) => c.name === 'create').args[1].mnemonic,
       null
     );
     const before = names().length;
@@ -566,6 +592,7 @@ describe('RgbLibWeb IFA', () => {
       null,
       false,
       null,
+      false,
     ]);
     assert.equal(asset.initialSupply, 100);
     assert.equal(asset.maxSupply, 175);
@@ -583,7 +610,7 @@ describe('RgbLibWeb IFA', () => {
     });
     assert.deepEqual(result, { txid: TXID, batchTransferIdx: 2 });
     const begin = runtime.calls.find((c) => c.name === 'inflateBegin').args;
-    assert.deepEqual(begin.slice(1), [ASSET_ID, [5n, 6n], 3n, 2]);
+    assert.deepEqual(begin.slice(1, 6), [ASSET_ID, [5n, 6n], 3n, 2, false]);
     assert.deepEqual(names().slice(-3), [
       'inflateBegin',
       'signPsbt',
@@ -655,12 +682,13 @@ describe('RgbLibWeb getReceivedMint', () => {
         txid: null,
         recipientId: 'bcrt:utxob:rid',
         receiveUtxo: null,
-        changeUtxo: null,
+        changeUtxos: [],
         expirationTimestamp: 1700003600n,
         transportEndpoints: [],
         senderTransportEndpoint: null,
         invoiceString: 'rgb:invoice',
         consignmentPath: null,
+        psbt: null,
         burnReason: null,
       },
     ],
@@ -713,7 +741,8 @@ describe('RgbLibWeb burn', () => {
     const result = await engine.burn(params());
     assert.deepEqual(result, { txid: TXID, batchTransferIdx: 4 });
     const begin = runtime.calls.find((c) => c.name === 'burnBegin').args;
-    assert.deepEqual(begin.slice(1), [
+    // online, assetId, amount, burnReason, feeRate, minConfirmations, dryRun, signal
+    assert.deepEqual(begin.slice(1, 7), [
       ASSET_ID,
       18446744073709551615n,
       REASON,
@@ -748,11 +777,11 @@ describe('RgbLibWeb burn', () => {
     });
   }
 
-  it('reports burn but no consignment', async () => {
+  it('reports burn and consignment while open', async () => {
     const { engine } = await ready();
     assert.deepEqual(await engine.getBfaCapabilities(), {
       burn: true,
-      consignment: false,
+      consignment: true,
       bfa: true,
     });
     await engine.destroy();

@@ -10,8 +10,8 @@ import { createRequire } from 'node:module';
 import { describeTypes, toSource } from '../fixtures/source.mjs';
 import { loadFixtures } from '../golden/runner.mjs';
 
-/** The rgb-lib-wasm commit the handmade shapes follow (tag v1.0.0-beta.4). */
-const RUST_COMMIT = 'f0e266f039744896baa39e3a35766ef01c0f369a';
+/** The rgb-lib-wasm commit the handmade shapes follow (tag v1.0.0-beta.5). */
+const RUST_COMMIT = 'e53d095e8789d2e26c8af7506d59574eca753c2f';
 
 const require = createRequire(import.meta.url);
 const pkgDir = path.dirname(
@@ -115,7 +115,7 @@ describe('rgb-lib-wasm fixtures', () => {
     assert.ok(mods.errors.samples.length > 0, 'runtime rejections');
   });
 
-  it('build AssignmentsCollection as beta.4 does', () => {
+  it('build AssignmentsCollection as beta.5 does', () => {
     // src/wallet/online.rs: no rename_all, so the fields stay snake_case.
     const found = [];
     const walk = (value) => {

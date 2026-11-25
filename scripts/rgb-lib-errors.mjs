@@ -16,8 +16,8 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '1.0.0-beta.4';
-const RUST_COMMIT = 'f0e266f039744896baa39e3a35766ef01c0f369a'; // tag v1.0.0-beta.4
+const VERSION = '1.0.0-beta.5';
+const RUST_COMMIT = 'e53d095e8789d2e26c8af7506d59574eca753c2f'; // tag v1.0.0-beta.5
 
 /**
  * Texts that several sources produce with different codes. Each needs a
@@ -32,9 +32,14 @@ const AMBIGUOUS = {
   },
 };
 
-/** The rgb-sdk-rn rule (@utexo/rgb-sdk-rn src/wallet/rgb-lib/errors.ts), plus Offline. */
+/**
+ * The rgb-sdk-rn rule (@utexo/rgb-sdk-rn src/wallet/rgb-lib/errors.ts), plus
+ * Offline and Aborted.
+ */
 function codeOf(source, variant) {
   if (source === 'binding') return 'INVALID_PARAMS';
+  // Only this engine can cancel a call (an AbortSignal); React Native cannot.
+  if (variant === 'Aborted') return 'ABORTED';
   if (variant === 'AssetNotFound') return 'ASSET_NOT_FOUND';
   if (variant === 'WatchOnly') return 'UNSUPPORTED_CAPABILITY';
   // Kept from the earlier prefix rule; rgb-sdk-rn reports NATIVE_ERROR here.
@@ -80,7 +85,22 @@ function publicErrors() {
   const out = [];
   let text;
   for (let i = start + 1; i < end; i += 1) {
-    const line = lines[i].trim();
+    let line = lines[i].trim();
+    // rustfmt splits a long text: `#[error(` / `"…"` / `)]`.
+    if (line === '#[error(') {
+      const at = i;
+      const parts = [];
+      for (i += 1; lines[i].trim() !== ')]'; i += 1) {
+        if (i >= end) fail(`${file}:${at + 1}: unterminated #[error(`);
+        parts.push(lines[i].trim());
+      }
+      if (parts.length !== 1)
+        fail(
+          `${file}:${at + 1}: unsupported #[error] form: ${parts.join(' ')}`
+        );
+      line = `#[error(${parts[0]})]`;
+      i = at + parts.length + 1;
+    }
     if (line.startsWith('#[error')) {
       const m = /^#\[error\("((?:[^"\\]|\\.)*)"\)\]$/.exec(line);
       if (!m) fail(`${file}:${i + 1}: unsupported #[error] form: ${line}`);
@@ -134,7 +154,8 @@ function bindingErrors() {
   }));
 }
 
-const PLACEHOLDER = /\{\{|\}\}|\{[A-Za-z0-9_]*\}/g;
+// `{field}`, and `{field:?}` (Debug).
+const PLACEHOLDER = /\{\{|\}\}|\{[A-Za-z0-9_]*(?::\?)?\}/g;
 
 /** The text as an anchored pattern; a `{field}` matches any text. */
 function patternOf(text) {

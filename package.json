@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc -w",
     "build": "tsup",
-    "test:unit": "npm run build && node --test --experimental-test-module-mocks tests/unit/*.test.mjs",
+    "test:unit": "npm run build && node --test --experimental-test-module-mocks --import ./tests/support/no-web-locks.mjs tests/unit/*.test.mjs",
     "test": "npm run typecheck && npm run lint && npm run test:unit && npm run typecheck:examples",
     "test:e2e": "npm run build && playwright test -c tests/e2e/playwright.config.mjs",
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
@@ -50,7 +50,7 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "@noble/hashes": "^2.0.1",
-    "@utexo/rgb-lib-wasm": "1.0.0-beta.4"
+    "@utexo/rgb-lib-wasm": "1.0.0-beta.5"
   },
   "peerDependencies": {
     "@utexo/rgb-sdk-core": "^1.0.0-beta.11"

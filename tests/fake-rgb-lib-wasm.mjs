@@ -1,4 +1,5 @@
-// A fake @utexo/rgb-lib-wasm module for RgbLibWeb tests. No WASM, no network.
+// A fake @utexo/rgb-lib-wasm (1.0.0-beta.5) module for RgbLibWeb tests. No
+// WASM, no network.
 // Values come back the way serde-wasm-bindgen builds them: u64 as BigInt,
 // enums externally tagged, the refresh result as a Map.
 
@@ -15,10 +16,11 @@ export const TXID = 'ab'.repeat(32);
 const balance = (n = 10n) => ({ settled: n, future: n, spendable: n });
 
 /**
- * `overrides` replaces wallet methods by name; `invoice` sets what
- * `WasmInvoice#invoiceData()` returns.
+ * `overrides` replaces wallet methods by name, and the module's
+ * `checkIndexerUrl`; `invoice` sets what `WasmInvoice#invoiceData()` returns.
  */
-export function createFakeRuntime({ overrides = {}, invoice } = {}) {
+export function createFakeRuntime({ overrides: all = {}, invoice } = {}) {
+  const { checkIndexerUrl = async () => 'Esplora', ...overrides } = all;
   const calls = [];
   let busy = false;
   const record = (name, args) => calls.push({ name, args });
@@ -29,7 +31,10 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
     goOnline: async () => ({ id: 1n, indexerUrl: 'http://esplora' }),
     sync: async () => undefined,
     getAddress: () => 'bcrt1qfake',
-    getBtcBalance: () => ({ vanilla: balance(5n), colored: balance(7n) }),
+    getBtcBalance: async () => ({
+      vanilla: balance(5n),
+      colored: balance(7n),
+    }),
     getAssetBalance: () => balance(),
     listAssets: () => ({
       nia: [
@@ -49,13 +54,14 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
       ifa: null,
       bfa: [],
     }),
-    listUnspents: () => [
+    listUnspents: async () => [
       {
         utxo: {
           outpoint: { txid: TXID, vout: 0 },
           btcAmount: 1000n,
           colorable: true,
           exists: true,
+          derivationIndex: 0,
         },
         rgbAllocations: [
           { assetId: ASSET_ID, assignment: { Fungible: 10n }, settled: true },
@@ -63,7 +69,7 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
         pendingBlinded: 0,
       },
     ],
-    listTransactions: () => [
+    listTransactions: async () => [
       {
         transactionType: 'CreateUtxos',
         txid: TXID,
@@ -87,7 +93,7 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
         txid: TXID,
         recipientId: null,
         receiveUtxo: null,
-        changeUtxo: { txid: TXID, vout: 1 },
+        changeUtxos: [{ txid: TXID, vout: 1 }],
         expirationTimestamp: 1700003600n,
         transportEndpoints: [
           { endpoint: 'rpc://proxy', transportType: 'JsonRpc', used: true },
@@ -95,6 +101,7 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
         senderTransportEndpoint: null,
         invoiceString: null,
         consignmentPath: null,
+        psbt: null,
         burnReason: null,
       },
     ],
@@ -132,7 +139,7 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
         addedAt: 1n,
         balance: balance(initial),
         media: null,
-        rejectListUrl: rejectListUrl ?? null,
+        rejectList: rejectListUrl ? { Url: rejectListUrl } : null,
       };
     },
     blindReceive: async (...args) => ({
@@ -159,7 +166,11 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
       details: {},
     }),
     sendEnd: async () => ({ txid: TXID, batchTransferIdx: 9, entropy: 7n }),
-    inflateBegin: async () => 'psbt-inflate',
+    inflateBegin: async () => ({
+      psbt: 'psbt-inflate',
+      batchTransferIdx: 2,
+      details: { fascia: [], minConfirmations: 1, entropy: 1n },
+    }),
     inflateEnd: async () => ({ txid: TXID, batchTransferIdx: 2, entropy: 1n }),
     burnBegin: async () => ({
       psbt: 'psbt-burn',
@@ -181,6 +192,22 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
       ]),
     failTransfers: async () => true,
     getReceivedMint: () => null,
+    getBurnConsignment: () => new Uint8Array([1, 2, 3, 250]),
+    getAssetMetadata: () => ({
+      assetSchema: 'Ifa',
+      initialSupply: 100n,
+      maxSupply: 2n ** 64n - 1n,
+      knownCirculatingSupply: 100n,
+      timestamp: 1700000000n,
+      name: 'Inflatable',
+      precision: 2,
+      ticker: 'IFA',
+      details: null,
+      bridgeLocation: null,
+      rejectList: { Url: 'https://reject.example' },
+      linkedFromContract: null,
+      linkedToContract: null,
+    }),
     getFeeEstimation: async () => 1.2,
     configureVssBackup: () => undefined,
     disableVssBackup: () => undefined,
@@ -219,8 +246,18 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
     calls,
     wallet,
     WasmWallet: {
-      create: async (json) => {
-        record('create', [JSON.parse(json)]);
+      // Recorded as [WalletData, SinglesigKeys], parsed.
+      create: async (walletDataJson, keysJson) => {
+        const data = JSON.parse(walletDataJson);
+        record('create', [data, JSON.parse(keysJson)]);
+        // rgb-lib's rule (src/wallet/offline.rs Wallet::new).
+        const reckless = data.supportedSchemas.find((s) => s !== 'Nia');
+        if (
+          data.bitcoinNetwork === 'Mainnet' &&
+          reckless &&
+          !data.allowRecklessSchemas
+        )
+          throw `Cannot use ${reckless} schema on mainnet`;
         return wallet;
       },
     },
@@ -234,9 +271,13 @@ export function createFakeRuntime({ overrides = {}, invoice } = {}) {
       }
       free() {}
     },
-    restoreKeys: (network, mnemonic) => {
-      record('restoreKeys', [network, mnemonic]);
-      return { ...KEYS, mnemonic };
+    restoreKeys: (network, mnemonic, witnessVersion) => {
+      record('restoreKeys', [network, mnemonic, witnessVersion]);
+      return { ...KEYS, mnemonic, witnessVersion };
+    },
+    checkIndexerUrl: (url, network) => {
+      record('checkIndexerUrl', [url, network]);
+      return checkIndexerUrl(url, network);
     },
   };
   return runtime;

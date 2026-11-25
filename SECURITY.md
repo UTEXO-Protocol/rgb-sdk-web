@@ -9,6 +9,11 @@
 - PSBTs are constructed and validated client-side
 - RGB protocol validation is enforced locally using `rgb-lib`
 - Wallet state is persisted to **IndexedDB** — never sent to a remote server
+  (except an encrypted VSS backup, when enabled). Any script of the page's
+  origin can read IndexedDB, so treat XSS on that origin as wallet compromise
+- One open wallet per browser profile: a Web Lock refuses a second open of the
+  same wallet (`WALLET_STORAGE_IN_USE`). It prevents lost writes between tabs;
+  it is not a security boundary
 - No trusted remote server is required
 
 ---

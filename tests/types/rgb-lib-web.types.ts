@@ -73,3 +73,22 @@ const both = {
 } as const;
 // @ts-expect-error runtime with wasmUrl
 new RgbLibWeb(both);
+
+// beta.5: the witness version, an AbortSignal on the long calls, consignments
+// and the indexer check.
+new RgbLibWeb({
+  network: 'regtest',
+  mnemonic: 'm',
+  witnessVersion: 'segwit-v0',
+});
+// @ts-expect-error: only taproot and segwit-v0
+new RgbLibWeb({ network: 'regtest', mnemonic: 'm', witnessVersion: 'legacy' });
+const controller = new AbortController();
+void engine.createUtxos({ feeRate: 1, signal: controller.signal });
+void engine.syncWallet({ signal: controller.signal });
+void engine.unlock(undefined, { signal: controller.signal });
+const consignment: Promise<string> = engine.getConsignment('rgb:a', 'ab');
+void consignment;
+void engine
+  .checkIndexerUrl('https://esplora.example')
+  .then(({ indexerProtocol }) => indexerProtocol);

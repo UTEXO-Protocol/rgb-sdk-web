@@ -41,6 +41,7 @@ test('capture raw rgb-lib-wasm values', async ({ browser }) => {
     await wcall(s, 'listUnspents');
     await wcall(s, 'listTransactions');
     await wcall(s, 'listAssets');
+    await wcall(s, 'checkIndexerUrl', STAND.indexerUrl);
     await wcallError(s, 'getAssetBalance', 'rgb:unknown-asset');
     await wcallError(s, 'estimateFeeRate', 1).catch(() => undefined);
 
@@ -76,6 +77,9 @@ test('capture raw rgb-lib-wasm values', async ({ browser }) => {
     await label(s, 'with NIA and IFA');
     await wcall(s, 'listAssets');
     await wcall(s, 'getAssetBalance', nia.assetId);
+    await wcall(s, 'getAssetMetadata', nia.assetId);
+    await wcall(s, 'getAssetMetadata', ifa.assetId);
+    await wcallError(s, 'getAssetMetadata', 'rgb:unknown-asset');
     await wcall(s, 'listUnspents');
 
     await label(r, 'funded receiver');

@@ -63,6 +63,8 @@ const PROJECT = {
   inflateEnd: (c, v) => c.publicOperation(c.decodeOperation(v)),
   refresh: (c, v) => c.publicRefresh(c.decodeRefresh(v)),
   getFeeEstimation: (c, v) => c.publicFeeEstimate(c.decodeFeeEstimate(v)),
+  checkIndexerUrl: (c, v) => c.decodeIndexerProtocol(v),
+  getAssetMetadata: (c, v) => c.decodeAssetMetadata(v),
 };
 /** Scalar results the codec does not decode: a string, a count, a flag. */
 const SCALARS = new Set([
@@ -144,7 +146,7 @@ describe('codec field tables', () => {
     ]);
   });
 
-  it('accept each beta.4 AssetSchema in a failure, and only those', () => {
+  it('accept each beta.5 AssetSchema in a failure, and only those', () => {
     const failure = (schema) =>
       new Map([
         [
@@ -178,7 +180,7 @@ describe('codec field tables', () => {
       [...types].filter((t) => !codec.ERROR_FIELD_TYPES.includes(t)),
       []
     );
-    assert.equal(Object.keys(generated.RGB_LIB_ERROR_VARIANTS).length, 136);
+    assert.equal(Object.keys(generated.RGB_LIB_ERROR_VARIANTS).length, 153);
   });
 
   /**
@@ -187,6 +189,8 @@ describe('codec field tables', () => {
    */
   const NOT_SEEN = {
     SendBeginResult: 'read by the session (psbt only), no codec decoder',
+    InflateBeginResult:
+      'read by the inflate operation (psbt only), no codec decoder; its fixture is checked by the golden file',
     BurnBeginResult:
       'read by the burn operation (psbt only), no codec decoder; the stand has no burn fixture',
     AssignmentsCollection:

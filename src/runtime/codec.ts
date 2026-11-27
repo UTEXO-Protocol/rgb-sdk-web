@@ -1,5 +1,5 @@
 /**
- * Decoding of rgb-lib-wasm 1.0.0-beta.5 results (ADR-0002, "Rules for
+ * Decoding of rgb-lib-wasm 1.0.0-beta.7 results (ADR-0002, "Rules for
  * codec.ts"). Pure functions, in two stages:
  *
  * - `decode*`: raw `unknown` → an internal value with exact numbers (u64 and
@@ -352,7 +352,7 @@ export const RESULTS: Readonly<Record<string, StructName | null>> = {
   failTransfers: null,
   refresh: 'RefreshedTransfer',
   getReceivedMint: 'ReceivedMint',
-  getBurnConsignment: null,
+  getConsignment: null,
   getAssetMetadata: 'Metadata',
   checkIndexerUrl: null,
 };
@@ -1146,9 +1146,9 @@ const INVOICE_NETWORKS: Readonly<Record<string, BitcoinNetwork>> = {
   Signet: 'signet',
   Regtest: 'regtest',
 };
-/** beta.5 `TransportType` (`src/database/enums.rs`): its only variant. */
+/** beta.7 `TransportType` (`src/database/enums.rs`): its only variant. */
 const TRANSPORT_TYPES = ['JsonRpc'] as const;
-/** beta.5 `AssetSchema` (`src/database/enums.rs`): its only variants. */
+/** beta.7 `AssetSchema` (`src/database/enums.rs`): its only variants. */
 const ASSET_SCHEMAS = [AssetSchema.Nia, AssetSchema.Ifa, 'Bfa'] as const;
 const ENCRYPTIONS = ['Required', 'Unsupported', 'Optional'] as const;
 
@@ -1316,11 +1316,45 @@ export function decodeVssBackupInfo(value: unknown): VssBackupInfo {
   };
 }
 
-/** `getBurnConsignment`: the consignment bytes, copied so the caller owns them. */
-export function decodeConsignmentBytes(value: unknown): Uint8Array {
+/**
+ * `getConsignment`: the consignment bytes, copied so the caller owns them, or
+ * `undefined` when the transfer has none (`null`).
+ */
+export function decodeConsignmentBytes(value: unknown): Uint8Array | undefined {
+  if (absent(value)) return undefined;
   if (!(value instanceof Uint8Array) || value.length === 0)
     rejected('Invalid consignment bytes');
   return value.slice();
+}
+
+/**
+ * The asset of a `ConsignmentInspection` (bundle filter `Terminals`) when one
+ * of its terminal operations on that asset holds the transition `opid`, else
+ * `undefined`. Only the fields read here are checked.
+ */
+export function inspectedMintAsset(
+  value: unknown,
+  opid: string
+): string | undefined {
+  const v = record(value, 'consignment inspection');
+  const assetId = str(v.assetId, 'inspected asset id');
+  const carries = list(v.witnesses, 'inspected witnesses').some((w) =>
+    list(
+      record(w, 'inspected witness').operations,
+      'inspected operations'
+    ).some((o) => {
+      const op = record(o, 'inspected operation');
+      return (
+        str(op.assetId, 'inspected operation asset id') === assetId &&
+        list(op.transitions, 'inspected transitions').some(
+          (t) =>
+            str(record(t, 'inspected transition').opid, 'inspected opid') ===
+            opid
+        )
+      );
+    })
+  );
+  return carries ? assetId : undefined;
 }
 
 /** Standard base64 with padding, as the React Native bridge returns bytes. */
@@ -1379,7 +1413,7 @@ const BITCOIN_NETWORKS = [
   'Regtest',
 ] as const;
 
-/** The Rust field types of the beta.5 `Error` variants, as text. */
+/** The Rust field types of the beta.7 `Error` variants, as text. */
 const ERROR_FIELD = {
   'String': (v: unknown, f: string) => str(v, f),
   'Vec<String>': (v: unknown, f: string) =>
@@ -1406,7 +1440,7 @@ export const ERROR_FIELD_TYPES: readonly string[] = Object.keys(ERROR_FIELD);
 /**
  * A failure: an `Error`, externally tagged — `"Variant"` for a unit variant,
  * `{ Variant: { field: … } }` for a struct variant. The variant must be one of
- * beta.5; a struct variant's message lists its fields in Rust order, exact.
+ * beta.7; a struct variant's message lists its fields in Rust order, exact.
  * Fields the variant does not have are ignored.
  */
 function decodeFailure(value: unknown): RefreshFailure {

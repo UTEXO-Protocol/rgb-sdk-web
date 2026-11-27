@@ -176,7 +176,6 @@ describe('RgbLibWeb lifecycle', () => {
       maxAllocationsPerUtxo: created.maxAllocationsPerUtxo,
       // rgb-lib-wasm rejects an empty list ("no supported schemas").
       supportedSchemas: ['Nia', 'Ifa', 'Bfa'],
-      reuseAddresses: created.reuseAddresses,
       allowRecklessSchemas: false,
     });
     assert.equal(keys.accountXpubVanilla, KEYS.accountXpubVanilla);
@@ -630,20 +629,6 @@ describe('RgbLibWeb getReceivedMint', () => {
     bridgeContract: `0x${'c'.repeat(40)}`,
   };
 
-  it('is offline by default and maps u64 values to exact decimal strings', async () => {
-    const { engine, names } = await ready({
-      overrides: { getReceivedMint: () => mint },
-    });
-    assert.deepEqual(await engine.getReceivedMint('bcrt:utxob:rid'), {
-      ...mint,
-      amount: '18446744073709551615',
-      beforeBlock: '9007199254740993',
-      evmChainId: '42161',
-    });
-    assert.equal(names().includes('goOnline'), false);
-    assert.equal(names().includes('refresh'), false);
-  });
-
   it('refreshes pending incoming transfers only, then returns undefined for no mint', async () => {
     const { engine, runtime } = await ready();
     assert.equal(
@@ -692,6 +677,116 @@ describe('RgbLibWeb getReceivedMint', () => {
         burnReason: null,
       },
     ],
+  });
+
+  /** The inspection of a consignment of `assetId` whose terminal transition is `opid`. */
+  const inspection = (opid, assetId = 'rgb:minted') => ({
+    assetId,
+    witnesses: [
+      {
+        operations: [
+          { assetId, transitions: [{ opid }, { opid: 'f'.repeat(64) }] },
+        ],
+      },
+    ],
+  });
+
+  it('is offline by default, maps u64 values to exact decimal strings and adds the asset of the checked consignment', async () => {
+    const { engine, names, runtime } = await ready({
+      overrides: {
+        ...receiveOn(1),
+        getReceivedMint: () => mint,
+        inspectConsignment: () => inspection(mint.opid),
+      },
+    });
+    assert.deepEqual(await engine.getReceivedMint('bcrt:utxob:rid'), {
+      ...mint,
+      amount: '18446744073709551615',
+      beforeBlock: '9007199254740993',
+      evmChainId: '42161',
+      assetId: 'rgb:minted',
+    });
+    assert.equal(names().includes('goOnline'), false);
+    assert.equal(names().includes('refresh'), false);
+    assert.deepEqual(
+      runtime.calls.find((c) => c.name === 'getConsignment').args,
+      [7]
+    );
+    const [bytes, filter] = runtime.calls.find(
+      (c) => c.name === 'inspectConsignment'
+    ).args;
+    assert.deepEqual([...bytes], [1, 2, 3, 250]);
+    assert.equal(filter, 'Terminals');
+  });
+
+  it('is CONSIGNMENT_NOT_FOUND when the consignment does not carry the mint', async () => {
+    const { engine } = await ready({
+      overrides: {
+        ...receiveOn(1),
+        getReceivedMint: () => mint,
+        inspectConsignment: () => inspection('e'.repeat(64)),
+      },
+    });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid'),
+      'CONSIGNMENT_NOT_FOUND',
+      'getReceivedMint'
+    );
+  });
+
+  it('is CONSIGNMENT_NOT_FOUND when the mint is on an operation of another asset', async () => {
+    const { engine } = await ready({
+      overrides: {
+        ...receiveOn(1),
+        getReceivedMint: () => mint,
+        inspectConsignment: () => ({
+          ...inspection(mint.opid),
+          witnesses: [
+            {
+              operations: [
+                { assetId: 'rgb:other', transitions: [{ opid: mint.opid }] },
+              ],
+            },
+          ],
+        }),
+      },
+    });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid'),
+      'CONSIGNMENT_NOT_FOUND',
+      'getReceivedMint'
+    );
+  });
+
+  it('is CONSIGNMENT_NOT_FOUND when the receive has no consignment', async () => {
+    const { engine, names } = await ready({
+      overrides: {
+        ...receiveOn(1),
+        getReceivedMint: () => mint,
+        getConsignment: () => null,
+      },
+    });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid'),
+      'CONSIGNMENT_NOT_FOUND',
+      'getReceivedMint'
+    );
+    assert.equal(names().includes('inspectConsignment'), false);
+  });
+
+  it('rejects an invalid inspection as INVALID_NATIVE_RESPONSE', async () => {
+    const { engine } = await ready({
+      overrides: {
+        ...receiveOn(1),
+        getReceivedMint: () => mint,
+        inspectConsignment: () => ({ assetId: 'rgb:minted' }),
+      },
+    });
+    await rejects(
+      engine.getReceivedMint('bcrt:utxob:rid'),
+      'INVALID_NATIVE_RESPONSE',
+      'getReceivedMint'
+    );
   });
 
   it("rejects when the refresh reports a failure for this receive's batch", async () => {

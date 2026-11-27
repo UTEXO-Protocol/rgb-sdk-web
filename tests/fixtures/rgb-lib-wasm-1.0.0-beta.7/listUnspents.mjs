@@ -1,12 +1,12 @@
-// Captured from @utexo/rgb-lib-wasm 1.0.0-beta.5 by `npm run capture:fixtures`.
+// Captured from @utexo/rgb-lib-wasm 1.0.0-beta.7 by `npm run capture:fixtures`.
 // Do not edit by hand: rerun the capture. Values are kept as the runtime built
 // them (BigInt, Map, undefined); `types` lists the kind at every path.
 export const meta = {
   "runtime": "@utexo/rgb-lib-wasm",
-  "version": "1.0.0-beta.5",
-  "wasmSha256": "609f7814a5661c0706e2130df6d4fd5e571a40bdb8cd358e02a5ad09c72f727f",
+  "version": "1.0.0-beta.7",
+  "wasmSha256": "fe77124e9dde84f16e6db7432dc562257ed47a02ec674c1d894fe0343c463f19",
   "source": "captured",
-  "capturedAt": 1795604096054,
+  "capturedAt": 1795780647454,
   "method": "listUnspents"
 };
 
@@ -23,8 +23,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 2,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 7,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -37,8 +37,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 8,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 3,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -51,8 +51,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 1,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 5,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -65,8 +65,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 5,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 8,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -79,8 +79,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 4,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 2,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -93,7 +93,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
             vout: 0,
           },
           btcAmount: 1000n,
@@ -107,8 +107,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 3,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 4,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -121,8 +121,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 6,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 1,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -135,8 +135,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 7,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 6,
           },
           btcAmount: 99991089n,
           colorable: false,
@@ -155,8 +155,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 2,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 7,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -165,7 +165,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             assignment: {
               Fungible: 1000n,
             },
@@ -177,8 +177,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 8,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 3,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -187,7 +187,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             assignment: {
               Fungible: 500n,
             },
@@ -199,8 +199,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 1,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 5,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -209,7 +209,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             assignment: {
               Fungible: 500n,
             },
@@ -221,8 +221,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 4,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 2,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -235,7 +235,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
             vout: 0,
           },
           btcAmount: 1000n,
@@ -249,8 +249,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 3,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 4,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -263,7 +263,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+            txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
             vout: 2,
           },
           btcAmount: 489n,
@@ -273,7 +273,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             assignment: {
               InflationRight: 300n,
             },
@@ -285,7 +285,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+            txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
             vout: 1,
           },
           btcAmount: 1000n,
@@ -295,7 +295,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             assignment: {
               Fungible: 200n,
             },
@@ -307,8 +307,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 5,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 8,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -317,7 +317,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             assignment: {
               InflationRight: 500n,
             },
@@ -329,8 +329,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-            vout: 7,
+            txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+            vout: 6,
           },
           btcAmount: 99991089n,
           colorable: false,
@@ -349,8 +349,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 4,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 7,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -359,7 +359,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             assignment: {
               Fungible: 100n,
             },
@@ -371,8 +371,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 1,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 2,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -385,8 +385,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 0,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 8,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -399,8 +399,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 7,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 3,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -413,8 +413,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 3,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 1,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -427,7 +427,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
             vout: 6,
           },
           btcAmount: 1000n,
@@ -441,8 +441,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 5,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 4,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -455,8 +455,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 2,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 0,
           },
           btcAmount: 1000n,
           colorable: true,
@@ -469,7 +469,7 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+            txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
             vout: 1,
           },
           btcAmount: 1000n,
@@ -479,7 +479,7 @@ export const samples = [
         },
         rgbAllocations: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             assignment: {
               Fungible: 50n,
             },
@@ -491,8 +491,8 @@ export const samples = [
       {
         utxo: {
           outpoint: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 8,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 5,
           },
           btcAmount: 99991089n,
           colorable: false,

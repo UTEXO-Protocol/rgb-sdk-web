@@ -1,6 +1,42 @@
 # Changelog
 
-## 1.0.0-beta.15 (unreleased)
+## 1.0.0-beta.16 (unreleased)
+
+Runs on `@utexo/rgb-lib-wasm` **1.0.0-beta.7** (was 1.0.0-beta.5). Wallets and
+backups made with beta.5 open and keep working, receives pending at the
+upgrade included.
+
+### Breaking
+
+- **`reuseAddresses` is removed**, as in the runtime and rgb-lib: every
+  `getAddress` and `witnessReceive` gives a new address. Any value but `false`
+  is `INVALID_CONFIG`. A wallet created with it keeps its funds and pending
+  receives on the addresses it already gave out.
+- `getConsignment` of a transfer without a consignment is now
+  `CONSIGNMENT_NOT_FOUND` (was `NATIVE_ERROR`), as on React Native.
+- `getReceivedMint` rejects with `CONSIGNMENT_NOT_FOUND` when it cannot read
+  the asset from the checked consignment (see Added). beta.5 dropped a
+  receive's consignment once it settled, so this includes a mint that settled
+  before the upgrade; mints pending at the upgrade keep theirs.
+- `RgbLibWasmRuntime` needs `inspectConsignment`, and `RgbLibWasmWallet` has
+  `getConsignment(transferIdx)` instead of `getBurnConsignment`: a custom
+  runtime passed as `runtime` must follow.
+
+### Added
+
+- **`getReceivedMint` returns `assetId`**, as on React Native: read from the
+  consignment the runtime checked, which must hold the mint's `opid`
+  (`CONSIGNMENT_NOT_FOUND` otherwise). A mint for an invoice without an asset
+  now works over WebRGB.
+- **`getConsignment(assetId, txid)` serves any transfer**, as on React Native:
+  the sent consignment of a send, burn or mint, the received and validated one
+  of a receive. It was burns only. beta.5 did not keep the consignment of a
+  send it ended or a receive that settled, so for those made before the
+  upgrade it is `CONSIGNMENT_NOT_FOUND`. So is a `txid` whose transfers of
+  the asset carry different consignments.
+- Error code `CONSIGNMENT_NOT_FOUND`.
+
+## 1.0.0-beta.15
 
 Needs `@utexo/rgb-sdk-core` 1.0.0-beta.11.
 Runs on `@utexo/rgb-lib-wasm` **1.0.0-beta.5** (was 1.0.0-beta.4).

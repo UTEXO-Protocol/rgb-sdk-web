@@ -174,10 +174,14 @@ const { txid } = await wallet.burn({
 - `getBfaCapabilities()` says what works now: everything is `false` on a
   destroyed wallet and on a mainnet wallet without `allowRecklessSchemas`, and
   `burn` is `false` on a watch-only wallet.
-- `getConsignment(assetId, txid)` returns the consignment of an ended burn as
-  base64: it proves the burn with its history. `@utexo/rgb-lib-wasm` exports
-  burn consignments only, so another transfer's txid is rejected
-  (`NATIVE_ERROR`). `consignment` is `true` while the wallet is open.
+- `getConsignment(assetId, txid)` returns the consignment of the transfer of
+  `assetId` in `txid` as base64, as on React Native: the one sent for a send,
+  burn or mint, the received and validated one for a receive. For a burn it
+  proves the burn with its history. A transfer without one is
+  `CONSIGNMENT_NOT_FOUND`, as is a send ended or a receive settled before
+  1.0.0-beta.16 (the earlier runtime did not keep those), and so is a `txid`
+  whose transfers of `assetId` carry different consignments. `consignment` is
+  `true` while the wallet is open.
 
 ```ts
 const proof = await wallet.getConsignment(asset.assetId, txid);
@@ -218,16 +222,17 @@ const mint = await wallet.getReceivedMint(recipientId, {
   refreshIncoming: true, // refresh incoming transfers first
 });
 // undefined while no checked mint is ready; otherwise
-// { opid, lockId, amount, beforeBlock, evmChainId, bridgeContract }
+// { assetId, opid, lockId, amount, beforeBlock, evmChainId, bridgeContract }
 ```
 
 - `recipientId` is the one from the wallet's own `witnessReceive()` or
   `blindReceive()`.
 - Integer fields are decimal strings; parse them with `BigInt`.
 - `refreshIncoming` refreshes pending incoming transfers only, not sends.
-- The result has no `assetId`: the runtime does not export the received
-  consignment it would be read from. Over WebRGB a mint for an invoice without
-  an asset therefore rejects; request the invoice with the asset.
+- `assetId` is read from the consignment the runtime checked, as on React
+  Native, so an invoice without an asset works too. The mint's `opid` must be
+  in that consignment; otherwise, or when the receive has no single
+  consignment, the call rejects with `CONSIGNMENT_NOT_FOUND`.
 
 ## Read balances and history
 
@@ -300,7 +305,6 @@ One object for `RgbLibWeb.create(config)` and `new RgbLibWeb(config)`:
 | `keys`                                             | a function or `{ getMnemonic }` that returns the mnemonic on `init()`, optionally with public keys that must match; or public keys alone for a watch-only wallet                                                                     |
 | `witnessVersion`                                   | `'taproot'` (default) or `'segwit-v0'`: the script type of the wallet's keys, as on React Native. It changes the keys and the wallet ID                                                                                              |
 | `dataDir`                                          | IndexedDB key prefix. Default `':memory:'`, which is a prefix too: the state is still saved to IndexedDB and restored with the same keys                                                                                             |
-| `reuseAddresses`                                   | one pinned address instead of a new one per call                                                                                                                                                                                     |
 | `allowRecklessSchemas`                             | rgb-lib's flag, default `false`. On mainnet rgb-lib opens IFA and BFA only with it; without it a mainnet wallet has NIA only and the IFA and BFA calls reject with `UNSUPPORTED_CAPABILITY`. Other networks always have every schema |
 | `maxAllocationsPerUtxo`                            | default 5                                                                                                                                                                                                                            |
 | `indexerUrl` / `indexer`                           | Esplora server; default per network                                                                                                                                                                                                  |
@@ -390,10 +394,10 @@ try {
 ```
 
 Common codes: `INVALID_CONFIG`, `INVALID_PARAMS`, `INSUFFICIENT_FUNDS`,
-`KEYS_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY` (for example sending from a
-watch-only wallet), `WALLET_INVALID_STATE`, `WALLET_STORAGE_IN_USE` (the
-wallet is open elsewhere), `ABORTED` (the call's `signal` fired),
-`NATIVE_ERROR`.
+`KEYS_UNAVAILABLE`, `CONSIGNMENT_NOT_FOUND`, `UNSUPPORTED_CAPABILITY` (for
+example sending from a watch-only wallet), `WALLET_INVALID_STATE`,
+`WALLET_STORAGE_IN_USE` (the wallet is open elsewhere), `ABORTED` (the call's
+`signal` fired), `NATIVE_ERROR`.
 
 ## With the facade
 

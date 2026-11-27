@@ -1,5 +1,5 @@
 /**
- * Rewrites tests/golden/rgb-lib-wasm-1.0.0-beta.5.golden.mjs from the current
+ * Rewrites tests/golden/rgb-lib-wasm-1.0.0-beta.7.golden.mjs from the current
  * code: `npm run golden:update`. Run it only when a change of public results
  * is intended, and review the diff.
  */
@@ -14,7 +14,7 @@ const mods = await loadFixtures();
 const golden = {};
 for (const c of collectCases(mods)) golden[c.name] = await runCase(mods, c);
 
-const out = path.join(here, 'rgb-lib-wasm-1.0.0-beta.5.golden.mjs');
+const out = path.join(here, 'rgb-lib-wasm-1.0.0-beta.7.golden.mjs');
 fs.writeFileSync(
   out,
   `// Golden public results of RgbLibWeb for every fixture case.

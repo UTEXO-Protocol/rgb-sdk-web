@@ -16,7 +16,7 @@ import { copy } from '../fixtures/lib.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const FIXTURES = path.resolve(
   here,
-  '../fixtures/rgb-lib-wasm-1.0.0-beta.5'
+  '../fixtures/rgb-lib-wasm-1.0.0-beta.7'
 );
 
 const ONLINE = {

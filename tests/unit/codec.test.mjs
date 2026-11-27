@@ -180,7 +180,7 @@ describe('codec field tables', () => {
       [...types].filter((t) => !codec.ERROR_FIELD_TYPES.includes(t)),
       []
     );
-    assert.equal(Object.keys(generated.RGB_LIB_ERROR_VARIANTS).length, 153);
+    assert.equal(Object.keys(generated.RGB_LIB_ERROR_VARIANTS).length, 155);
   });
 
   /**

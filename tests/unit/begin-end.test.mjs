@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { ASSET_ID, KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
-import * as sendBeginFixtures from '../fixtures/rgb-lib-wasm-1.0.0-beta.5/sendBegin.mjs';
+import * as sendBeginFixtures from '../fixtures/rgb-lib-wasm-1.0.0-beta.7/sendBegin.mjs';
 
 /** The PSBTs rgb-lib-wasm built on the stand: 309 and 511 sat of fee. */
 function fixturePsbts() {

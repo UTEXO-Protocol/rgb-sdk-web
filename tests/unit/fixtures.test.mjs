@@ -10,8 +10,8 @@ import { createRequire } from 'node:module';
 import { describeTypes, toSource } from '../fixtures/source.mjs';
 import { loadFixtures } from '../golden/runner.mjs';
 
-/** The rgb-lib-wasm commit the handmade shapes follow (tag v1.0.0-beta.5). */
-const RUST_COMMIT = 'e53d095e8789d2e26c8af7506d59574eca753c2f';
+/** The rgb-lib-wasm commit the handmade shapes follow (tag v1.0.0-beta.7). */
+const RUST_COMMIT = 'dedab0f043e6c82da19eef2b8faebbdc52bac1db';
 
 const require = createRequire(import.meta.url);
 const pkgDir = path.dirname(

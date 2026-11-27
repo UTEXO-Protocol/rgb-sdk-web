@@ -11,8 +11,6 @@ export async function newWallet() {
   const wallet = await RgbLibWeb.create({
     network: 'utexo',
     mnemonic: keys.mnemonic,
-    // Optional: one address instead of a new one per call.
-    reuseAddresses: true,
   });
 
   const address = await wallet.getAddress();

@@ -610,7 +610,6 @@ export class RgbLibWebBackend {
             dataDir: this.params.dataDir ?? ':memory:',
             witnessVersion: this.params.witnessVersion ?? 'taproot',
             maxAllocationsPerUtxo: this.params.maxAllocationsPerUtxo ?? 5,
-            reuseAddresses: this.params.reuseAddresses ?? false,
             allowRecklessSchemas: this.params.allowRecklessSchemas ?? false,
           },
           mnemonic,
@@ -1034,7 +1033,7 @@ export class RgbLibWebBackend {
     return { burn: open && !this.watchOnly, consignment: open, bfa: open };
   }
 
-  /** `ConsignmentApi`: the consignment of an ended burn, as base64. Offline. */
+  /** `ConsignmentApi`: the consignment of a transfer, as base64. Offline. */
   getConsignment(assetId: string, txid: string): Promise<string> {
     return this.reckless('getConsignment', () => {
       const prepared = ops.getConsignment.prepare(assetId, txid);

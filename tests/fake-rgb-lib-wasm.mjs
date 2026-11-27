@@ -1,4 +1,4 @@
-// A fake @utexo/rgb-lib-wasm (1.0.0-beta.5) module for RgbLibWeb tests. No
+// A fake @utexo/rgb-lib-wasm (1.0.0-beta.7) module for RgbLibWeb tests. No
 // WASM, no network.
 // Values come back the way serde-wasm-bindgen builds them: u64 as BigInt,
 // enums externally tagged, the refresh result as a Map.
@@ -17,10 +17,17 @@ const balance = (n = 10n) => ({ settled: n, future: n, spendable: n });
 
 /**
  * `overrides` replaces wallet methods by name, and the module's
- * `checkIndexerUrl`; `invoice` sets what `WasmInvoice#invoiceData()` returns.
+ * `checkIndexerUrl` and `inspectConsignment`; `invoice` sets what
+ * `WasmInvoice#invoiceData()` returns.
  */
 export function createFakeRuntime({ overrides: all = {}, invoice } = {}) {
-  const { checkIndexerUrl = async () => 'Esplora', ...overrides } = all;
+  const {
+    checkIndexerUrl = async () => 'Esplora',
+    inspectConsignment = () => {
+      throw new Error('inspectConsignment is not faked');
+    },
+    ...overrides
+  } = all;
   const calls = [];
   let busy = false;
   const record = (name, args) => calls.push({ name, args });
@@ -192,7 +199,7 @@ export function createFakeRuntime({ overrides: all = {}, invoice } = {}) {
       ]),
     failTransfers: async () => true,
     getReceivedMint: () => null,
-    getBurnConsignment: () => new Uint8Array([1, 2, 3, 250]),
+    getConsignment: () => new Uint8Array([1, 2, 3, 250]),
     getAssetMetadata: () => ({
       assetSchema: 'Ifa',
       initialSupply: 100n,
@@ -278,6 +285,10 @@ export function createFakeRuntime({ overrides: all = {}, invoice } = {}) {
     checkIndexerUrl: (url, network) => {
       record('checkIndexerUrl', [url, network]);
       return checkIndexerUrl(url, network);
+    },
+    inspectConsignment: (bytes, bundleFilter) => {
+      record('inspectConsignment', [bytes, bundleFilter]);
+      return inspectConsignment(bytes, bundleFilter);
     },
   };
   return runtime;

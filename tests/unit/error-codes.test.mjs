@@ -1,5 +1,5 @@
 // rgb-lib-wasm rejects with the error's display text only. RgbLibWeb finds
-// the rgb-lib variant from the beta.5 texts and gives the rgb-sdk-rn code
+// the rgb-lib variant from the beta.7 texts and gives the rgb-sdk-rn code
 // (Invalid* → INVALID_PARAMS, Insufficient* → INSUFFICIENT_FUNDS, …), and
 // ABORTED for a call whose AbortSignal fired.
 // fixtures/error-texts/ is generated from the pinned Rust source with
@@ -9,11 +9,11 @@ import assert from 'node:assert/strict';
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { RgbLibWeb } from '../../dist/index.mjs';
 import { KEYS, createFakeRuntime } from '../fake-rgb-lib-wasm.mjs';
-import { samples as captured } from '../fixtures/rgb-lib-wasm-1.0.0-beta.5/errors.mjs';
+import { samples as captured } from '../fixtures/rgb-lib-wasm-1.0.0-beta.7/errors.mjs';
 import {
   meta,
   texts,
-} from '../fixtures/error-texts/rgb-lib-wasm-1.0.0-beta.5.mjs';
+} from '../fixtures/error-texts/rgb-lib-wasm-1.0.0-beta.7.mjs';
 
 async function codeFor(message) {
   const runtime = createFakeRuntime({
@@ -65,11 +65,11 @@ const CASES = [
   ['Internal error: Invalid backup path', 'NATIVE_ERROR'],
 ];
 
-describe('rgb-lib-wasm beta.5 error texts', () => {
+describe('rgb-lib-wasm beta.7 error texts', () => {
   it('lists the pinned source', () => {
-    assert.equal(meta.version, '1.0.0-beta.5');
-    assert.equal(meta.rustCommit, 'e53d095e8789d2e26c8af7506d59574eca753c2f');
-    assert.equal(texts.filter((t) => t.source === 'error').length, 153);
+    assert.equal(meta.version, '1.0.0-beta.7');
+    assert.equal(meta.rustCommit, 'dedab0f043e6c82da19eef2b8faebbdc52bac1db');
+    assert.equal(texts.filter((t) => t.source === 'error').length, 155);
   });
 
   for (const t of texts) {

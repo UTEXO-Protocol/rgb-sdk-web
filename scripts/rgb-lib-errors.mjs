@@ -16,8 +16,8 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '1.0.0-beta.5';
-const RUST_COMMIT = 'e53d095e8789d2e26c8af7506d59574eca753c2f'; // tag v1.0.0-beta.5
+const VERSION = '1.0.0-beta.7';
+const RUST_COMMIT = 'dedab0f043e6c82da19eef2b8faebbdc52bac1db'; // tag v1.0.0-beta.7
 
 /**
  * Texts that several sources produce with different codes. Each needs a

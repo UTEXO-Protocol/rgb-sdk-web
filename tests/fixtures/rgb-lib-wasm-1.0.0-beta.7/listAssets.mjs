@@ -1,12 +1,12 @@
-// Captured from @utexo/rgb-lib-wasm 1.0.0-beta.5 by `npm run capture:fixtures`.
+// Captured from @utexo/rgb-lib-wasm 1.0.0-beta.7 by `npm run capture:fixtures`.
 // Do not edit by hand: rerun the capture. Values are kept as the runtime built
 // them (BigInt, Map, undefined); `types` lists the kind at every path.
 export const meta = {
   "runtime": "@utexo/rgb-lib-wasm",
-  "version": "1.0.0-beta.5",
-  "wasmSha256": "609f7814a5661c0706e2130df6d4fd5e571a40bdb8cd358e02a5ad09c72f727f",
+  "version": "1.0.0-beta.7",
+  "wasmSha256": "fe77124e9dde84f16e6db7432dc562257ed47a02ec674c1d894fe0343c463f19",
   "source": "captured",
-  "capturedAt": 1795604096054,
+  "capturedAt": 1795780647454,
   "method": "listAssets"
 };
 
@@ -26,14 +26,14 @@ export const samples = [
     value: {
       nia: [
         {
-          assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+          assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
           ticker: "CAPN",
           name: "Capture NIA",
           details: undefined,
           precision: 2,
           issuedSupply: 1500n,
-          timestamp: 1795604112n,
-          addedAt: 1795604112n,
+          timestamp: 1795780650n,
+          addedAt: 1795780650n,
           balance: {
             settled: 1500n,
             future: 1500n,
@@ -44,7 +44,7 @@ export const samples = [
       ],
       ifa: [
         {
-          assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+          assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
           ticker: "CAPI",
           name: "Capture IFA",
           details: undefined,
@@ -52,8 +52,8 @@ export const samples = [
           initialSupply: 500n,
           maxSupply: 1000n,
           knownCirculatingSupply: 700n,
-          timestamp: 1795604112n,
-          addedAt: 1795604112n,
+          timestamp: 1795780650n,
+          addedAt: 1795780650n,
           balance: {
             settled: 500n,
             future: 700n,
@@ -72,14 +72,14 @@ export const samples = [
     value: {
       nia: [
         {
-          assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+          assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
           ticker: "CAPN",
           name: "Capture NIA",
           details: undefined,
           precision: 2,
           issuedSupply: 1500n,
-          timestamp: 1795604112n,
-          addedAt: 1795604125n,
+          timestamp: 1795780650n,
+          addedAt: 1795780653n,
           balance: {
             settled: 150n,
             future: 150n,

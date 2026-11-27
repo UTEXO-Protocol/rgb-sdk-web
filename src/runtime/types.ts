@@ -1,5 +1,5 @@
 /**
- * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.5) this engine calls,
+ * The part of `@utexo/rgb-lib-wasm` (1.0.0-beta.7) this engine calls,
  * described by shape. `init()` loads the real module (`load.ts`); tests and
  * custom builds can pass their own as the `runtime` constructor argument.
  *
@@ -29,6 +29,8 @@ export interface RgbLibWasmRuntime {
   ): unknown;
   /** The indexer protocol behind `indexerUrl` (`"Esplora"`), checked for `network`. */
   checkIndexerUrl(indexerUrl: string, network: string): Promise<unknown>;
+  /** A `ConsignmentInspection`; `bundleFilter` is `"All"`, `"Terminals"` or `{ Witness }`. */
+  inspectConsignment(consignment: Uint8Array, bundleFilter: unknown): unknown;
 }
 
 export interface RgbLibWasmInvoice {
@@ -83,8 +85,13 @@ export interface RgbLibWasmWallet {
    */
   listTransfers(assetFilter: unknown, scope: unknown): unknown;
   getReceivedMint(recipientId: string): unknown;
-  /** The consignment of an ended burn, which proves it with its history. */
-  getBurnConsignment(assetId: string, txid: string): Uint8Array;
+  /**
+   * The consignment of the transfer with this `idx` (`Uint8Array`), or `null`:
+   * sent for a send, burn, link or mint; received and validated for a receive
+   * (also a mint waiting for its lock); `null` for an inflation, a receive
+   * before its consignment arrives and a failed receive.
+   */
+  getConsignment(transferIdx: number): unknown;
   issueAssetNia(
     ticker: string,
     name: string,

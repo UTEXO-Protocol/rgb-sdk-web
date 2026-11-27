@@ -5,11 +5,11 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        invoice: "rgb:~/~/~/bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN?expiry=1795607724&pk=e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7&endpoints=rpc://127.0.0.1:3002/json-rpc",
-        recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
-        expirationTimestamp: 1795607724,
+        invoice: "rgb:~/~/~/bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt?expiry=1795784252&pk=50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7&endpoints=rpc://127.0.0.1:3002/json-rpc",
+        recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
+        expirationTimestamp: 1795784252,
         batchTransferIdx: 1,
-        publicKey: "e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7",
+        publicKey: "50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7",
       },
     },
     calls: [
@@ -20,11 +20,11 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        invoice: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aB/bcrt:utxob:Ichru5KG-FiLxYlG-l9jcU~T-WfIgYfZ-yq~CpP0-Bi85YcB-Zd3cF?assignment_name=assetOwner&expiry=1795690548&pk=bf0492661e9c470b20f24a538b36b96ba52b36e369338281c3e5c0774f12570a&endpoints=rpc://127.0.0.1:3002/json-rpc",
-        recipientId: "bcrt:utxob:Ichru5KG-FiLxYlG-l9jcU~T-WfIgYfZ-yq~CpP0-Bi85YcB-Zd3cF",
-        expirationTimestamp: 1795690548,
+        invoice: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aB/bcrt:utxob:aiLGs_J_-bMTNvQo-BxtB1TX-17bOFtG-tr1PkzZ-dvSCT5d-Fmpo7?assignment_name=assetOwner&expiry=1795867056&pk=8c0595c17ac6961635bdc53aee7d341581d113484326c5be55dae0aaef8fcee1&endpoints=rpc://127.0.0.1:3002/json-rpc",
+        recipientId: "bcrt:utxob:aiLGs_J_-bMTNvQo-BxtB1TX-17bOFtG-tr1PkzZ-dvSCT5d-Fmpo7",
+        expirationTimestamp: 1795867056,
         batchTransferIdx: 4,
-        publicKey: "bf0492661e9c470b20f24a538b36b96ba52b36e369338281c3e5c0774f12570a",
+        publicKey: "8c0595c17ac6961635bdc53aee7d341581d113484326c5be55dae0aaef8fcee1",
       },
     },
     calls: [
@@ -65,7 +65,7 @@ export const golden = {
   "getAddress[0] sender: empty wallet": {
     result: {
       ok: true,
-      value: "bcrt1p43jnr8w804yqzhuh0xq0h23sufc43zvja49gcx6s45tgxz0m5w0qwv5g7v",
+      value: "bcrt1prhc3ulakp8jgm2g8p27znn7cjsx7f8yza7c7yza5d3yrqjp8mzyqc53sl8",
     },
     calls: [
       "getAddress",
@@ -75,7 +75,7 @@ export const golden = {
   "getAddress[1] sender: funded, colorable UTXOs": {
     result: {
       ok: true,
-      value: "bcrt1pu48vgvuejhhgu409u9re5emr5hw5hjdx9sne3r3gfxe3j306ey9spspcaf",
+      value: "bcrt1p9zgt6428qhdk6c8hyn3xa6t48n7hyhcrdwxysr3lc0dzddpajtjqc9a3g7",
     },
     calls: [
       "getAddress",
@@ -85,7 +85,7 @@ export const golden = {
   "getAddress[2] receiver: funded receiver": {
     result: {
       ok: true,
-      value: "bcrt1pgx0ppj2g2l3933p75c6zwlkttnw4vkxs86f90m4wpr29wugay7psr8gywc",
+      value: "bcrt1pgs6k2xkyzelqenlln6ugs2am0aujrsnmm2fdt2gm9uz577ldd63s02s4u6",
     },
     calls: [
       "getAddress",
@@ -95,7 +95,7 @@ export const golden = {
   "getAddress[3] receiver: fail a pending receive": {
     result: {
       ok: true,
-      value: "bcrt1p3aud7rccla9a44wd9lelwc0w6eft2880th0x6whu60jak5wzf6xss9lxr2",
+      value: "bcrt1p46hydm4suej7w0rusuehq9ur6vlu7cza4p2mlns9wsah69npekwqvkh0t0",
     },
     calls: [
       "getAddress",
@@ -149,7 +149,7 @@ export const golden = {
         name: "Capture NIA",
         precision: 2,
         ticker: "CAPN",
-        timestamp: 1795604112,
+        timestamp: 1795780650,
         initialSupply: "1500",
         maxSupply: "1500",
         knownCirculatingSupply: "1500",
@@ -167,7 +167,7 @@ export const golden = {
         name: "Capture IFA",
         precision: 0,
         ticker: "CAPI",
-        timestamp: 1795604112,
+        timestamp: 1795780650,
         initialSupply: "500",
         maxSupply: "1000",
         knownCirculatingSupply: "700",
@@ -241,7 +241,7 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        feeRate: 3,
+        feeRate: 4,
       },
     },
     calls: [
@@ -252,7 +252,7 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+        txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
         batchTransferIdx: 3,
       },
     },
@@ -267,7 +267,7 @@ export const golden = {
       ok: true,
       value: {
         invoice: "rgb:golden-invoice",
-        recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
+        recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
         assetId: undefined,
         assetSchema: undefined,
         assignment: {
@@ -275,11 +275,11 @@ export const golden = {
         },
         assignmentName: undefined,
         network: "regtest",
-        expirationTimestamp: 1795607724,
+        expirationTimestamp: 1795784252,
         transportEndpoints: [
           "rpc://127.0.0.1:3002/json-rpc",
         ],
-        publicKey: "e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7",
+        publicKey: "50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7",
         encryption: "Required",
         unknownQueryParams: {},
       },
@@ -293,8 +293,8 @@ export const golden = {
       ok: true,
       value: {
         invoice: "rgb:golden-invoice",
-        recipientId: "bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg",
-        assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+        recipientId: "bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng",
+        assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
         assetSchema: "Nia",
         assignment: {
           type: "Fungible",
@@ -303,11 +303,11 @@ export const golden = {
         },
         assignmentName: "assetOwner",
         network: "regtest",
-        expirationTimestamp: 1795690548,
+        expirationTimestamp: 1795867056,
         transportEndpoints: [
           "rpc://127.0.0.1:3002/json-rpc",
         ],
-        publicKey: "8c2deda6348d4a2ad210ca004db0382b8eeda5c70c1008cddd5b8ad7630dde72",
+        publicKey: "f57aa96db1404aa156d684ea90a45351312ec9dfb632e5736584c48cca2945f7",
         encryption: "Required",
         unknownQueryParams: {},
       },
@@ -321,7 +321,7 @@ export const golden = {
       ok: true,
       value: {
         invoice: "rgb:golden-invoice",
-        recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
+        recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
         assetId: undefined,
         assetSchema: undefined,
         assignment: {
@@ -329,11 +329,11 @@ export const golden = {
         },
         assignmentName: undefined,
         network: "regtest",
-        expirationTimestamp: 1795607724,
+        expirationTimestamp: 1795784252,
         transportEndpoints: [
           "rpc://127.0.0.1:3002/json-rpc",
         ],
-        publicKey: "779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a",
+        publicKey: "d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418",
         encryption: "Required",
         unknownQueryParams: {},
       },
@@ -346,12 +346,12 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+        assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
         name: "Capture IFA",
         details: undefined,
         precision: 0,
-        timestamp: 1795604112,
-        addedAt: 1795604112,
+        timestamp: 1795780650,
+        addedAt: 1795780650,
         balance: {
           settled: 500,
           future: 500,
@@ -374,12 +374,12 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+        assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
         name: "Capture NIA",
         details: undefined,
         precision: 2,
-        timestamp: 1795604112,
-        addedAt: 1795604112,
+        timestamp: 1795780650,
+        addedAt: 1795780650,
         balance: {
           settled: 1500,
           future: 1500,
@@ -416,12 +416,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -434,12 +434,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -468,12 +468,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
-            timestamp: 1795604112,
-            addedAt: 1795604125,
+            timestamp: 1795780650,
+            addedAt: 1795780653,
             balance: {
               settled: 150,
               future: 150,
@@ -508,25 +508,25 @@ export const golden = {
       ok: true,
       value: [
         {
-          txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+          txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
           transactionType: "CreateUtxos",
           received: 99999089,
           sent: 100000000,
           fee: 911,
           confirmationTime: {
-            height: 3796,
-            timestamp: 1795604106,
+            height: 259,
+            timestamp: 1795780650,
           },
         },
         {
-          txid: "b104cf75db44d1e0ad387ca0a74b00441c82010fb966714131060f3f106a6320",
+          txid: "e02a21718d77c1a4daf61095881cd1b1b123b1e610dd63436181b045a56d2f75",
           transactionType: "Incoming",
           received: 100000000,
           sent: 0,
-          fee: 703,
+          fee: 900,
           confirmationTime: {
-            height: 3793,
-            timestamp: 1795604100,
+            height: 258,
+            timestamp: 1795780648,
           },
         },
       ],
@@ -540,58 +540,58 @@ export const golden = {
       ok: true,
       value: [
         {
-          txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+          txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
           transactionType: "RgbSend",
           received: 489,
           sent: 2000,
           fee: 511,
           confirmationTime: {
-            height: 3805,
-            timestamp: 1795604126,
+            height: 263,
+            timestamp: 1795780655,
           },
         },
         {
-          txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+          txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
           transactionType: "CreateUtxos",
           received: 99999089,
           sent: 100000000,
           fee: 911,
           confirmationTime: {
-            height: 3796,
-            timestamp: 1795604106,
+            height: 259,
+            timestamp: 1795780650,
           },
         },
         {
-          txid: "b104cf75db44d1e0ad387ca0a74b00441c82010fb966714131060f3f106a6320",
+          txid: "e02a21718d77c1a4daf61095881cd1b1b123b1e610dd63436181b045a56d2f75",
           transactionType: "Incoming",
           received: 100000000,
           sent: 0,
-          fee: 703,
+          fee: 900,
           confirmationTime: {
-            height: 3793,
-            timestamp: 1795604100,
+            height: 258,
+            timestamp: 1795780648,
           },
         },
         {
-          txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
+          txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
           transactionType: "RgbSend",
           received: 691,
           sent: 1000,
           fee: 309,
           confirmationTime: {
-            height: 3805,
-            timestamp: 1795604126,
+            height: 263,
+            timestamp: 1795780655,
           },
         },
         {
-          txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+          txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
           transactionType: "RgbSend",
           received: 1489,
           sent: 2000,
           fee: 511,
           confirmationTime: {
-            height: 3801,
-            timestamp: 1795604116,
+            height: 261,
+            timestamp: 1795780652,
           },
         },
       ],
@@ -605,47 +605,47 @@ export const golden = {
       ok: true,
       value: [
         {
-          txid: "b1f43469d7e5ee2b385deb57a777345001f7c9050886fcbee94abd743b263779",
+          txid: "4c262e9e5852d9b4657416690d38e94aec7978fe4eae0554abbb64dbc0f3cbfd",
           transactionType: "Incoming",
           received: 10000,
           sent: 0,
           fee: 309,
           confirmationTime: {
-            height: 3816,
-            timestamp: 1795604152,
+            height: 264,
+            timestamp: 1795780657,
           },
         },
         {
-          txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+          txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
           transactionType: "RgbSend",
           received: 1000,
           sent: 0,
           fee: 511,
           confirmationTime: {
-            height: 3805,
-            timestamp: 1795604126,
+            height: 263,
+            timestamp: 1795780655,
           },
         },
         {
-          txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
+          txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
           transactionType: "CreateUtxos",
           received: 99999089,
           sent: 100000000,
           fee: 911,
           confirmationTime: {
-            height: 3801,
-            timestamp: 1795604116,
+            height: 263,
+            timestamp: 1795780655,
           },
         },
         {
-          txid: "cc724388b040e78ca24edd564f97c98e1527a98378c078f6bdd474f97df8cc9e",
+          txid: "61eae09d01cea5cb616287de1f34d9eb41bb922ac34e41c129c2c26658969af4",
           transactionType: "Incoming",
           received: 100000000,
           sent: 0,
-          fee: 547,
+          fee: 696,
           confirmationTime: {
-            height: 3799,
-            timestamp: 1795604112,
+            height: 260,
+            timestamp: 1795780650,
           },
         },
       ],
@@ -661,8 +661,8 @@ export const golden = {
         {
           idx: 1,
           batchTransferIdx: 1,
-          createdAt: 1795604112,
-          updatedAt: 1795604112,
+          createdAt: 1795780650,
+          updatedAt: 1795780650,
           status: "Settled",
           kind: "Issuance",
           requestedAssignment: undefined,
@@ -688,13 +688,13 @@ export const golden = {
           expiration: undefined,
           transportEndpoints: [],
           invoiceString: undefined,
-          consignmentPath: "e2e-1a212582557/77d21559/assets/rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+          consignmentPath: "e2e-1a21cde1b4c/1cb3f4f3/assets/rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c.rgb",
         },
         {
           idx: 4,
           batchTransferIdx: 4,
-          createdAt: 1795604124,
-          updatedAt: 1795604124,
+          createdAt: 1795780653,
+          updatedAt: 1795780653,
           status: "WaitingCounterparty",
           kind: "Send",
           requestedAssignment: {
@@ -711,20 +711,20 @@ export const golden = {
           ],
           amountBaseUnits: "400",
           amount: 400,
-          txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
-          recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
+          txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
+          recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
           receiveUtxo: undefined,
           changeUtxos: [
             {
-              txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
+              txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
               vout: 1,
             },
           ],
           changeUtxo: {
-            txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
+            txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
             vout: 1,
           },
-          expiration: 1795607124,
+          expiration: 1795783652,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -733,13 +733,13 @@ export const golden = {
             },
           ],
           invoiceString: undefined,
-          consignmentPath: "e2e-1a212582557/77d21559/transfers/56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545/gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/consignment_out",
+          consignmentPath: "e2e-1a21cde1b4c/1cb3f4f3/transfers/7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5/cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/consignment_out.rgb",
         },
         {
           idx: 5,
           batchTransferIdx: 5,
-          createdAt: 1795604124,
-          updatedAt: 1795604125,
+          createdAt: 1795780653,
+          updatedAt: 1795780653,
           status: "WaitingCounterparty",
           kind: "Send",
           requestedAssignment: {
@@ -756,20 +756,20 @@ export const golden = {
           ],
           amountBaseUnits: "950",
           amount: 950,
-          txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
-          recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
+          txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
+          recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
           receiveUtxo: undefined,
           changeUtxos: [
             {
-              txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+              txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
               vout: 2,
             },
           ],
           changeUtxo: {
-            txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+            txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
             vout: 2,
           },
-          expiration: 1795607124,
+          expiration: 1795783652,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -778,7 +778,7 @@ export const golden = {
             },
           ],
           invoiceString: undefined,
-          consignmentPath: "e2e-1a212582557/77d21559/transfers/714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de/gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/consignment_out",
+          consignmentPath: "e2e-1a21cde1b4c/1cb3f4f3/transfers/42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4/cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/consignment_out.rgb",
         },
       ],
     },
@@ -793,8 +793,8 @@ export const golden = {
         {
           idx: 2,
           batchTransferIdx: 2,
-          createdAt: 1795604112,
-          updatedAt: 1795604112,
+          createdAt: 1795780650,
+          updatedAt: 1795780650,
           status: "Settled",
           kind: "Issuance",
           requestedAssignment: undefined,
@@ -820,13 +820,13 @@ export const golden = {
           expiration: undefined,
           transportEndpoints: [],
           invoiceString: undefined,
-          consignmentPath: "e2e-1a212582557/77d21559/assets/rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+          consignmentPath: "e2e-1a21cde1b4c/1cb3f4f3/assets/rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4.rgb",
         },
         {
           idx: 3,
           batchTransferIdx: 3,
-          createdAt: 1795604112,
-          updatedAt: 1795604136,
+          createdAt: 1795780650,
+          updatedAt: 1795780654,
           status: "Settled",
           kind: "Inflation",
           requestedAssignment: {
@@ -848,26 +848,26 @@ export const golden = {
           ],
           amountBaseUnits: "200",
           amount: 200,
-          txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
-          recipientId: "bcrt:wvout:Bf6e57NJ-bg8byrk-fVFFYL6-HH4Q7I6-H8aeYDU-NgnJDFX-mdLq6Ww",
+          txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
+          recipientId: "bcrt:wvout:Bbp9A6zL-PgzF7~A-JaxeZ52-83uKQAE-uwQMSR7-NsasLig-wy9TUcA",
           receiveUtxo: {
-            txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+            txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
             vout: 1,
           },
           changeUtxos: [
             {
-              txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+              txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
               vout: 2,
             },
           ],
           changeUtxo: {
-            txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+            txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
             vout: 2,
           },
           expiration: undefined,
           transportEndpoints: [],
           invoiceString: undefined,
-          consignmentPath: "e2e-1a212582557/77d21559/transfers/4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c/xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ/consignment_out",
+          consignmentPath: "e2e-1a21cde1b4c/1cb3f4f3/transfers/e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1/vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4/consignment_out.rgb",
         },
       ],
     },
@@ -882,8 +882,8 @@ export const golden = {
         {
           idx: 1,
           batchTransferIdx: 1,
-          createdAt: 1795604124,
-          updatedAt: 1795604124,
+          createdAt: 1795780652,
+          updatedAt: 1795780652,
           status: "WaitingCounterparty",
           kind: "ReceiveBlind",
           requestedAssignment: {
@@ -891,14 +891,14 @@ export const golden = {
           },
           assignments: [],
           txid: undefined,
-          recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
+          recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
           receiveUtxo: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 4,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 7,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -906,14 +906,14 @@ export const golden = {
               used: false,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN?expiry=1795607724&pk=e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          invoiceString: "rgb:~/~/~/bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt?expiry=1795784252&pk=50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7&endpoints=rpc://127.0.0.1:3002/json-rpc",
           consignmentPath: undefined,
         },
         {
           idx: 2,
           batchTransferIdx: 2,
-          createdAt: 1795604124,
-          updatedAt: 1795604124,
+          createdAt: 1795780652,
+          updatedAt: 1795780652,
           status: "WaitingCounterparty",
           kind: "ReceiveWitness",
           requestedAssignment: {
@@ -921,11 +921,11 @@ export const golden = {
           },
           assignments: [],
           txid: undefined,
-          recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
+          recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
           receiveUtxo: undefined,
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -933,7 +933,7 @@ export const golden = {
               used: false,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw?expiry=1795607724&pk=779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          invoiceString: "rgb:~/~/~/bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA?expiry=1795784252&pk=d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418&endpoints=rpc://127.0.0.1:3002/json-rpc",
           consignmentPath: undefined,
         },
       ],
@@ -949,8 +949,8 @@ export const golden = {
         {
           idx: 1,
           batchTransferIdx: 1,
-          createdAt: 1795604124,
-          updatedAt: 1795604136,
+          createdAt: 1795780652,
+          updatedAt: 1795780656,
           status: "Settled",
           kind: "ReceiveBlind",
           requestedAssignment: {
@@ -965,15 +965,15 @@ export const golden = {
           ],
           amountBaseUnits: "100",
           amount: 100,
-          txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
-          recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
+          txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
+          recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
           receiveUtxo: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 4,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 7,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -981,14 +981,14 @@ export const golden = {
               used: true,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN?expiry=1795607724&pk=e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7&endpoints=rpc://127.0.0.1:3002/json-rpc",
-          consignmentPath: "e2e-1a2125826a4/a4a1fda6/transfers/bcrt_utxob_Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN/rcv_compose.rgbc",
+          invoiceString: "rgb:~/~/~/bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt?expiry=1795784252&pk=50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          consignmentPath: "e2e-1a21cde1c9d/f2a5b34d/transfers/bcrt_utxob_Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt/rcv_compose.rgb",
         },
         {
           idx: 2,
           batchTransferIdx: 2,
-          createdAt: 1795604124,
-          updatedAt: 1795604136,
+          createdAt: 1795780652,
+          updatedAt: 1795780656,
           status: "Settled",
           kind: "ReceiveWitness",
           requestedAssignment: {
@@ -1003,15 +1003,15 @@ export const golden = {
           ],
           amountBaseUnits: "50",
           amount: 50,
-          txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
-          recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
+          txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
+          recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
           receiveUtxo: {
-            txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+            txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
             vout: 1,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -1019,8 +1019,8 @@ export const golden = {
               used: true,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw?expiry=1795607724&pk=779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a&endpoints=rpc://127.0.0.1:3002/json-rpc",
-          consignmentPath: "e2e-1a2125826a4/a4a1fda6/transfers/bcrt_wvout_BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw/rcv_compose.rgbc",
+          invoiceString: "rgb:~/~/~/bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA?expiry=1795784252&pk=d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          consignmentPath: "e2e-1a21cde1c9d/f2a5b34d/transfers/bcrt_wvout_BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA/rcv_compose.rgb",
         },
       ],
     },
@@ -1035,8 +1035,8 @@ export const golden = {
         {
           idx: 1,
           batchTransferIdx: 1,
-          createdAt: 1795604124,
-          updatedAt: 1795604136,
+          createdAt: 1795780652,
+          updatedAt: 1795780656,
           status: "Settled",
           kind: "ReceiveBlind",
           requestedAssignment: {
@@ -1051,15 +1051,15 @@ export const golden = {
           ],
           amountBaseUnits: "100",
           amount: 100,
-          txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
-          recipientId: "bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN",
+          txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
+          recipientId: "bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt",
           receiveUtxo: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 4,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 7,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -1067,14 +1067,14 @@ export const golden = {
               used: true,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:utxob:Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN?expiry=1795607724&pk=e936356cdb8676894c26c041bd1a899c3b8acae091fd10b015452adfb7ef05d7&endpoints=rpc://127.0.0.1:3002/json-rpc",
-          consignmentPath: "e2e-1a2125826a4/a4a1fda6/transfers/bcrt_utxob_Uh9oTkqP-XY9kcmt-VaiXBMp-M8Isi~~-84F4DIu-vGuyMRQ-pBATN/rcv_compose.rgbc",
+          invoiceString: "rgb:~/~/~/bcrt:utxob:Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt?expiry=1795784252&pk=50cdb53e4534460b4a20c0a99aa64242874a1b5f1da6d849bfceb4e1c4b006a7&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          consignmentPath: "e2e-1a21cde1c9d/f2a5b34d/transfers/bcrt_utxob_Oplk6rvF-4Z4jrMA-3n80sPj-UWl5rrq-RcIYEAw-VETkZms-I4_Pt/rcv_compose.rgb",
         },
         {
           idx: 2,
           batchTransferIdx: 2,
-          createdAt: 1795604124,
-          updatedAt: 1795604136,
+          createdAt: 1795780652,
+          updatedAt: 1795780656,
           status: "Settled",
           kind: "ReceiveWitness",
           requestedAssignment: {
@@ -1089,15 +1089,15 @@ export const golden = {
           ],
           amountBaseUnits: "50",
           amount: 50,
-          txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
-          recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
+          txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
+          recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
           receiveUtxo: {
-            txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+            txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
             vout: 1,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795607724,
+          expiration: 1795784252,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -1105,14 +1105,14 @@ export const golden = {
               used: true,
             },
           ],
-          invoiceString: "rgb:~/~/~/bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw?expiry=1795607724&pk=779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a&endpoints=rpc://127.0.0.1:3002/json-rpc",
-          consignmentPath: "e2e-1a2125826a4/a4a1fda6/transfers/bcrt_wvout_BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw/rcv_compose.rgbc",
+          invoiceString: "rgb:~/~/~/bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA?expiry=1795784252&pk=d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          consignmentPath: "e2e-1a21cde1c9d/f2a5b34d/transfers/bcrt_wvout_BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA/rcv_compose.rgb",
         },
         {
           idx: 3,
           batchTransferIdx: 3,
-          createdAt: 1795604148,
-          updatedAt: 1795604148,
+          createdAt: 1795780656,
+          updatedAt: 1795780656,
           status: "WaitingCounterparty",
           kind: "ReceiveWitness",
           requestedAssignment: {
@@ -1124,11 +1124,11 @@ export const golden = {
           amountBaseUnits: "7",
           amount: 7,
           txid: undefined,
-          recipientId: "bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg",
+          recipientId: "bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng",
           receiveUtxo: undefined,
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795690548,
+          expiration: 1795867056,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -1136,14 +1136,14 @@ export const golden = {
               used: false,
             },
           ],
-          invoiceString: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aW/bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg?assignment_name=assetOwner&expiry=1795690548&pk=8c2deda6348d4a2ad210ca004db0382b8eeda5c70c1008cddd5b8ad7630dde72&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          invoiceString: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aW/bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng?assignment_name=assetOwner&expiry=1795867056&pk=f57aa96db1404aa156d684ea90a45351312ec9dfb632e5736584c48cca2945f7&endpoints=rpc://127.0.0.1:3002/json-rpc",
           consignmentPath: undefined,
         },
         {
           idx: 4,
           batchTransferIdx: 4,
-          createdAt: 1795604148,
-          updatedAt: 1795604148,
+          createdAt: 1795780656,
+          updatedAt: 1795780656,
           status: "Failed",
           kind: "ReceiveBlind",
           requestedAssignment: {
@@ -1155,14 +1155,14 @@ export const golden = {
           amountBaseUnits: "3",
           amount: 3,
           txid: undefined,
-          recipientId: "bcrt:utxob:Ichru5KG-FiLxYlG-l9jcU~T-WfIgYfZ-yq~CpP0-Bi85YcB-Zd3cF",
+          recipientId: "bcrt:utxob:aiLGs_J_-bMTNvQo-BxtB1TX-17bOFtG-tr1PkzZ-dvSCT5d-Fmpo7",
           receiveUtxo: {
-            txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-            vout: 1,
+            txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+            vout: 2,
           },
           changeUtxos: [],
           changeUtxo: undefined,
-          expiration: 1795604148,
+          expiration: 1795780656,
           transportEndpoints: [
             {
               endpoint: "http://127.0.0.1:3002/json-rpc",
@@ -1170,8 +1170,8 @@ export const golden = {
               used: false,
             },
           ],
-          invoiceString: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aB/bcrt:utxob:Ichru5KG-FiLxYlG-l9jcU~T-WfIgYfZ-yq~CpP0-Bi85YcB-Zd3cF?assignment_name=assetOwner&expiry=1795690548&pk=bf0492661e9c470b20f24a538b36b96ba52b36e369338281c3e5c0774f12570a&endpoints=rpc://127.0.0.1:3002/json-rpc",
-          consignmentPath: "e2e-1a2125826a4/a4a1fda6/transfers/bcrt_utxob_Ichru5KG-FiLxYlG-l9jcU~T-WfIgYfZ-yq~CpP0-Bi85YcB-Zd3cF/rcv_compose.rgbc",
+          invoiceString: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aB/bcrt:utxob:aiLGs_J_-bMTNvQo-BxtB1TX-17bOFtG-tr1PkzZ-dvSCT5d-Fmpo7?assignment_name=assetOwner&expiry=1795867056&pk=8c0595c17ac6961635bdc53aee7d341581d113484326c5be55dae0aaef8fcee1&endpoints=rpc://127.0.0.1:3002/json-rpc",
+          consignmentPath: "e2e-1a21cde1c9d/f2a5b34d/transfers/bcrt_utxob_aiLGs_J_-bMTNvQo-BxtB1TX-17bOFtG-tr1PkzZ-dvSCT5d-Fmpo7/rcv_compose.rgb",
         },
       ],
     },
@@ -1195,8 +1195,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 2,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 7,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1208,72 +1208,7 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 8,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 1,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 5,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 4,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 0,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
               vout: 3,
             },
             btcAmount: 1000,
@@ -1286,8 +1221,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 6,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 5,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1299,8 +1234,73 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 7,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 8,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 2,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 0,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 4,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 1,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 6,
             },
             btcAmount: 99991089,
             colorable: false,
@@ -1322,8 +1322,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 2,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 7,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1332,7 +1332,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+              assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "1000",
@@ -1345,8 +1345,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 8,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 3,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1355,7 +1355,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+              assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "500",
@@ -1368,8 +1368,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 1,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 5,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1378,7 +1378,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+              assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "500",
@@ -1391,8 +1391,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 4,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 2,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1404,7 +1404,7 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
               vout: 0,
             },
             btcAmount: 1000,
@@ -1417,8 +1417,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 3,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 4,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1430,7 +1430,7 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+              txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
               vout: 2,
             },
             btcAmount: 489,
@@ -1440,7 +1440,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+              assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
               assignment: {
                 type: "InflationRight",
                 amountBaseUnits: "300",
@@ -1453,7 +1453,7 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "4906ad6134633a1d13e29c997cee8d5771a010bdd262221d7513c25c77b3ac7c",
+              txid: "e092c2db342da26afade11621f60953d0e7d638b2505313eb66726e962accec1",
               vout: 1,
             },
             btcAmount: 1000,
@@ -1463,7 +1463,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+              assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "200",
@@ -1476,8 +1476,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 5,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 8,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1486,7 +1486,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+              assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
               assignment: {
                 type: "InflationRight",
                 amountBaseUnits: "500",
@@ -1499,8 +1499,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "b31a19aba45a1e54e6ed9a96fc0efbff3e7cb6e371115484128ac3ef19ab1ee4",
-              vout: 7,
+              txid: "a6150b0de9ff8477dce41bf7eda6a61350a73e869ccefd580db1d8f77f852882",
+              vout: 6,
             },
             btcAmount: 99991089,
             colorable: false,
@@ -1522,8 +1522,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 4,
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 7,
             },
             btcAmount: 1000,
             colorable: true,
@@ -1532,7 +1532,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+              assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "100",
@@ -1545,85 +1545,7 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 1,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 0,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 7,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 3,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 6,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 5,
-            },
-            btcAmount: 1000,
-            colorable: true,
-            exists: true,
-          },
-          pendingBlinded: 0,
-          rgbAllocations: [],
-        },
-        {
-          utxo: {
-            outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
               vout: 2,
             },
             btcAmount: 1000,
@@ -1636,7 +1558,85 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 8,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 3,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 1,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 6,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 4,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 0,
+            },
+            btcAmount: 1000,
+            colorable: true,
+            exists: true,
+          },
+          pendingBlinded: 0,
+          rgbAllocations: [],
+        },
+        {
+          utxo: {
+            outpoint: {
+              txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
               vout: 1,
             },
             btcAmount: 1000,
@@ -1646,7 +1646,7 @@ export const golden = {
           pendingBlinded: 0,
           rgbAllocations: [
             {
-              assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+              assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
               assignment: {
                 type: "Fungible",
                 amountBaseUnits: "50",
@@ -1659,8 +1659,8 @@ export const golden = {
         {
           utxo: {
             outpoint: {
-              txid: "9430f8aa2dc20b41060a05f99a3be0eda1e4d2f0eac7de4675c47033b058061a",
-              vout: 8,
+              txid: "f5aebb544bb33ed1dbdd8b0ec5e358bccd5982ac4637cc35c8a8654ec19f8172",
+              vout: 5,
             },
             btcAmount: 99991089,
             colorable: false,
@@ -1703,19 +1703,12 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        transfers: {},
-      },
-    },
-    calls: [
-      "refresh",
-    ],
-  },
-  "refresh[2] receiver: fail a pending receive": {
-    result: {
-      ok: true,
-      value: {
         transfers: {
-          "3": {
+          "1": {
+            updatedStatus: undefined,
+            failure: undefined,
+          },
+          "2": {
             updatedStatus: undefined,
             failure: undefined,
           },
@@ -1726,7 +1719,7 @@ export const golden = {
       "refresh",
     ],
   },
-  "refresh[3] sender: settling": {
+  "refresh[2] sender: settling": {
     result: {
       ok: true,
       value: {
@@ -1746,10 +1739,30 @@ export const golden = {
       "refresh",
     ],
   },
+  "refresh[3] receiver: pending receives": {
+    result: {
+      ok: true,
+      value: {
+        transfers: {
+          "1": {
+            updatedStatus: "WaitingConfirmations",
+            failure: undefined,
+          },
+          "2": {
+            updatedStatus: "WaitingConfirmations",
+            failure: undefined,
+          },
+        },
+      },
+    },
+    calls: [
+      "refresh",
+    ],
+  },
   "sendBtcEnd[0] sender: send BTC": {
     result: {
       ok: true,
-      value: "b1f43469d7e5ee2b385deb57a777345001f7c9050886fcbee94abd743b263779",
+      value: "4c262e9e5852d9b4657416690d38e94aec7978fe4eae0554abbb64dbc0f3cbfd",
     },
     calls: [
       "sendBtcBegin",
@@ -1761,7 +1774,7 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        txid: "56e2ecce36b804eab41ab01549f9a6078328c3ecd976194c5361e287aba43545",
+        txid: "7f0afc8d655119a919fe219ff873e847fbe102ad8bfda4ace3c07b998b2991e5",
         batchTransferIdx: 4,
       },
     },
@@ -1776,7 +1789,7 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        txid: "714e221ebe23a6ed62c9396e6961a6b94041e21a55f843b09b5844c29e1152de",
+        txid: "42dbf8b47ef1a13f2618d73c154e839adbb9f075f6e4256bcde00fea62f214f4",
         batchTransferIdx: 5,
       },
     },
@@ -1791,11 +1804,11 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        invoice: "rgb:~/~/~/bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw?expiry=1795607724&pk=779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a&endpoints=rpc://127.0.0.1:3002/json-rpc",
-        recipientId: "bcrt:wvout:BcVNUaX0-wMjhyoL-NMAkEh0-tJgJe4X-6p~yTXA-oq9QB_z-LwiEhbw",
-        expirationTimestamp: 1795607724,
+        invoice: "rgb:~/~/~/bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA?expiry=1795784252&pk=d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418&endpoints=rpc://127.0.0.1:3002/json-rpc",
+        recipientId: "bcrt:wvout:BdUOz_8t-vHyk7Do-Ff1GNi9-tlclLBA-QvuU3rM-4vzrGd_-WpCUlsA",
+        expirationTimestamp: 1795784252,
         batchTransferIdx: 2,
-        publicKey: "779e3d4df853f0ba626dd1d9136671b2ad2aad0b697408b3523b0c1fe3e4957a",
+        publicKey: "d39cef4f2a99b851249c0490f897898052f1dba1b75d87a1381d446af0434418",
       },
     },
     calls: [
@@ -1806,11 +1819,11 @@ export const golden = {
     result: {
       ok: true,
       value: {
-        invoice: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aW/bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg?assignment_name=assetOwner&expiry=1795690548&pk=8c2deda6348d4a2ad210ca004db0382b8eeda5c70c1008cddd5b8ad7630dde72&endpoints=rpc://127.0.0.1:3002/json-rpc",
-        recipientId: "bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg",
-        expirationTimestamp: 1795690548,
+        invoice: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c/RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU/aW/bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng?assignment_name=assetOwner&expiry=1795867056&pk=f57aa96db1404aa156d684ea90a45351312ec9dfb632e5736584c48cca2945f7&endpoints=rpc://127.0.0.1:3002/json-rpc",
+        recipientId: "bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng",
+        expirationTimestamp: 1795867056,
         batchTransferIdx: 3,
-        publicKey: "8c2deda6348d4a2ad210ca004db0382b8eeda5c70c1008cddd5b8ad7630dde72",
+        publicKey: "f57aa96db1404aa156d684ea90a45351312ec9dfb632e5736584c48cca2945f7",
       },
     },
     calls: [
@@ -1823,12 +1836,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -1845,12 +1858,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -1879,12 +1892,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -1897,12 +1910,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -1924,8 +1937,8 @@ export const golden = {
             name: "Bridged",
             details: "bridged from EVM",
             precision: 6,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -1953,12 +1966,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -1971,12 +1984,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -2049,18 +2062,14 @@ export const golden = {
   },
   "handmade: getReceivedMint — checked mint, u64 above the safe range": {
     result: {
-      ok: true,
-      value: {
-        opid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        lockId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        amount: "18446744073709551615",
-        beforeBlock: "9007199254740993",
-        evmChainId: "42161",
-        bridgeContract: "0xcccccccccccccccccccccccccccccccccccccccc",
-      },
+      ok: false,
+      code: "CONSIGNMENT_NOT_FOUND",
+      operation: "getReceivedMint",
+      message: "No consignment for this transfer",
     },
     calls: [
       "getReceivedMint",
+      "listTransfers",
     ],
   },
   "negative: listAssets — NIA without assetId": {
@@ -2263,12 +2272,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 2,
             timestamp: -1,
-            addedAt: 1795604112,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -2281,12 +2290,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -2370,12 +2379,12 @@ export const golden = {
       value: {
         nia: [
           {
-            assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+            assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
             name: "Capture NIA",
             details: undefined,
             precision: 255,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 1500,
               future: 1500,
@@ -2388,12 +2397,12 @@ export const golden = {
         ],
         ifa: [
           {
-            assetId: "rgb:xNu5Iyai-5Zxk9x3-4XNbghw-FP914rV-JC9fKHJ-3azZNGQ",
+            assetId: "rgb:vSFSawOt-09avgLm-eUp5mBd-r38gOtI-8WZtlGn-5IMHo~4",
             name: "Capture IFA",
             details: undefined,
             precision: 0,
-            timestamp: 1795604112,
-            addedAt: 1795604112,
+            timestamp: 1795780650,
+            addedAt: 1795780650,
             balance: {
               settled: 500,
               future: 700,
@@ -2558,8 +2567,8 @@ export const golden = {
       ok: true,
       value: {
         invoice: "rgb:golden-invoice",
-        recipientId: "bcrt:wvout:Bf8W4TtO-J9WogVz-6owX6mv-qM~fNLX-BCGBDEd-zrRJ3Q9-cVq2tZg",
-        assetId: "rgb:gLCaYxOO-HLmEdjX-5o_TO5Y-Nk8ouV7-z2ceASz-0I4SBP0",
+        recipientId: "bcrt:wvout:BebI4BWC-UBAA8Q0-PYEzgR5-33wfNcL-rXZkmRR-FwSdwvU-bURMTng",
+        assetId: "rgb:cbWkA8nC-~OCjkGA-qb3wll4-YTqCa_b-PmAxlEG-2qvBl7c",
         assetSchema: "Nia",
         assignment: {
           type: "Fungible",
@@ -2568,11 +2577,11 @@ export const golden = {
         },
         assignmentName: "assetOwner",
         network: "regtest",
-        expirationTimestamp: 1795690548,
+        expirationTimestamp: 1795867056,
         transportEndpoints: [
           "rpc://127.0.0.1:3002/json-rpc",
         ],
-        publicKey: "8c2deda6348d4a2ad210ca004db0382b8eeda5c70c1008cddd5b8ad7630dde72",
+        publicKey: "f57aa96db1404aa156d684ea90a45351312ec9dfb632e5736584c48cca2945f7",
         encryption: "Required",
         unknownQueryParams: {
           a: "first",

@@ -81,7 +81,6 @@ export interface SessionOptions {
   dataDir: string;
   witnessVersion: RgbLibWebWitnessVersion;
   maxAllocationsPerUtxo: number;
-  reuseAddresses: boolean;
   allowRecklessSchemas: boolean;
 }
 
@@ -176,7 +175,6 @@ export class WasmSession {
             options.network,
             options.allowRecklessSchemas
           ),
-          reuseAddresses: options.reuseAddresses,
           allowRecklessSchemas: options.allowRecklessSchemas,
         }),
         JSON.stringify({
@@ -296,6 +294,11 @@ export class WasmSession {
   /** The raw `checkIndexerUrl()` result (`"Esplora"`) for this wallet's network. */
   checkIndexerUrl(url: string): Promise<unknown> {
     return this.runtime.checkIndexerUrl(url, this.identity.network);
+  }
+
+  /** The raw `inspectConsignment()` of consignment bytes (no wallet needed). */
+  inspectConsignment(consignment: Uint8Array, bundleFilter: unknown): unknown {
+    return this.runtime.inspectConsignment(consignment, bundleFilter);
   }
 
   /** The raw `invoiceData()` of an invoice string; the handle is freed. */

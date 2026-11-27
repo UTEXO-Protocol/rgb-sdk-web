@@ -37,8 +37,6 @@ export interface RgbLibWebOptions {
    */
   witnessVersion?: RgbLibWebWitnessVersion;
   maxAllocationsPerUtxo?: number;
-  /** Return one pinned address instead of a new one on each call. */
-  reuseAddresses?: boolean;
   /**
    * rgb-lib's `allowRecklessSchemas`, default `false`. rgb-lib refuses to
    * open a mainnet wallet that supports IFA or BFA unless it is `true`. With
@@ -269,11 +267,12 @@ export function validateWalletParams(params: RgbLibWebParams) {
     1,
     0xffffffff
   );
-  if (
-    params.reuseAddresses !== undefined &&
-    typeof params.reuseAddresses !== 'boolean'
-  ) {
-    invalidConfig('reuseAddresses must be a boolean');
+  // Removed with @utexo/rgb-lib-wasm 1.0.0-beta.7, which has no address reuse.
+  const reuse = (params as { reuseAddresses?: unknown }).reuseAddresses;
+  if (reuse !== undefined && reuse !== false) {
+    invalidConfig(
+      'reuseAddresses was removed: every getAddress and witnessReceive gives a new address, as in rgb-lib'
+    );
   }
   if (
     params.allowRecklessSchemas !== undefined &&

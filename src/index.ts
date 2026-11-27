@@ -1,6 +1,6 @@
 /**
  * `@utexo/rgb-sdk-web` — the browser RGB_L1 engine over `@utexo/rgb-lib-wasm`
- * (1.0.0-beta.5).
+ * (1.0.0-beta.7).
  *
  * `RgbLibWeb.create({ network, mnemonic })` loads the WASM (once per page),
  * opens the wallet and returns it. `generateKeys` comes from

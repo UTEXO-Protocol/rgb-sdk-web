@@ -24,6 +24,7 @@ void shared.unlock({ indexerUrl: 'https://esplora.example' });
 const created: Promise<RgbLibWeb> = RgbLibWeb.create({
   network: 'testnet',
   mnemonic: 'mnemonic',
+  // @ts-expect-error removed with @utexo/rgb-lib-wasm 1.0.0-beta.7
   reuseAddresses: true,
 });
 void created;

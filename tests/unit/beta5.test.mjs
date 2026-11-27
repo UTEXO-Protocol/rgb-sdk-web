@@ -1,5 +1,5 @@
 // What rgb-lib-wasm 1.0.0-beta.5 added to RgbLibWeb: the witness version,
-// the optional AbortSignal (ABORTED), burn consignments, the indexer check,
+// the optional AbortSignal (ABORTED), the indexer check,
 // and the Web Lock on an open wallet (WALLET_STORAGE_IN_USE).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -202,42 +202,6 @@ describe('AbortSignal', () => {
       'createUtxos'
     );
     assert.equal(names().length, before);
-  });
-});
-
-describe('getConsignment', () => {
-  it('returns the burn consignment as base64', async () => {
-    const { engine, args } = await ready();
-    assert.equal(
-      await engine.getConsignment(ASSET_ID, TXID.toUpperCase()),
-      'AQID+g=='
-    );
-    assert.deepEqual(args('getBurnConsignment'), [ASSET_ID, TXID]);
-  });
-
-  it('checks the lookup before any runtime call', async () => {
-    const { engine, names } = await ready();
-    await rejects(
-      engine.getConsignment(ASSET_ID, 'not-a-txid'),
-      'INVALID_PARAMS',
-      'getConsignment'
-    );
-    assert.ok(!names().includes('getBurnConsignment'));
-  });
-
-  it('maps a txid that is not a burn to NATIVE_ERROR', async () => {
-    const { engine } = await ready({
-      overrides: {
-        getBurnConsignment: () => {
-          throw 'Unknown transfer with TXID: ' + TXID;
-        },
-      },
-    });
-    await rejects(
-      engine.getConsignment(ASSET_ID, TXID),
-      'NATIVE_ERROR',
-      'getConsignment'
-    );
   });
 });
 

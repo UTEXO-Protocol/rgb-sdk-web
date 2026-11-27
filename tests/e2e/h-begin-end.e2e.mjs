@@ -126,19 +126,15 @@ test('H: a burn is prepared, declined or approved, and submitted once', async ({
   expect(consignment).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
   expect(consignment.length).toBeGreaterThan(100);
   expect((await wcall(page, 'getBfaCapabilities')).consignment).toBe(true);
-  // Only burns have one in this runtime.
-  const notBurn = (await wcall(page, 'listTransfers', assetId)).find(
-    (t) => t.kind === 'Issuance'
+  // A txid without a transfer of the asset has no consignment.
+  const unknown = await wcallError(
+    page,
+    'getConsignment',
+    assetId,
+    'cd'.repeat(32)
   );
-  if (notBurn?.txid) {
-    const refused = await wcallError(
-      page,
-      'getConsignment',
-      assetId,
-      notBurn.txid
-    );
-    expect(refused.operation).toBe('getConsignment');
-  }
+  expect(unknown.code).toBe('CONSIGNMENT_NOT_FOUND');
+  expect(unknown.operation).toBe('getConsignment');
 });
 
 test('H: inflate, send and sendBtc run as separate steps', async ({
@@ -215,6 +211,29 @@ test('H: inflate, send and sendBtc run as separate steps', async ({
     expect(
       await wcall(sender, 'beginEnd.onchainSendEnd', { signedPsbt: signedSend })
     ).toEqual(sent);
+
+    // Both sides read the consignment of the send by its txid: the sender the
+    // one it sent, the receiver the one it received and validated.
+    const sentConsignment = await wcall(
+      sender,
+      'getConsignment',
+      assetId,
+      sent.txid
+    );
+    const receivedConsignment = await wcall(
+      receiver,
+      'getConsignment',
+      assetId,
+      sent.txid
+    );
+    report('send consignments', {
+      sent: sentConsignment.length,
+      received: receivedConsignment.length,
+    });
+    for (const c of [sentConsignment, receivedConsignment]) {
+      expect(c).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+      expect(c.length).toBeGreaterThan(100);
+    }
 
     const unsignedBtc = await wcall(sender, 'beginEnd.sendBtcBegin', {
       address: await wcall(receiver, 'getAddress'),

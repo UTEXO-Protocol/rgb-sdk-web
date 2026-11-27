@@ -26,6 +26,8 @@ export type RgbLibWebErrorCode =
   | 'INVALID_NATIVE_RESPONSE'
   | 'UNSUPPORTED_CAPABILITY'
   | 'ASSET_NOT_FOUND'
+  /** No unique consignment for the transfer or receive (as on React Native). */
+  | 'CONSIGNMENT_NOT_FOUND'
   | 'INVALID_PARAMS'
   | 'INSUFFICIENT_FUNDS'
   | 'NATIVE_ERROR';
@@ -75,7 +77,7 @@ export function asCause(value: unknown): Error | undefined {
 }
 
 /**
- * The code of a beta.5 error message: the rgb-sdk-rn variant rules, applied
+ * The code of a beta.7 error message: the rgb-sdk-rn variant rules, applied
  * by scripts/rgb-lib-errors.mjs. A text the table does not know, such as a
  * changed text in another runtime version, is NATIVE_ERROR.
  */
@@ -87,7 +89,7 @@ export function rgbLibWasmErrorCode(message: string): RgbLibWebErrorCode {
 /**
  * The runtime refused to end a transfer that is no longer waiting for it. The
  * generated table lists only variants with their own public code, so this is
- * the beta.5 text of `CannotEndTransfer` (pinned by `tests/fixtures/error-texts`).
+ * the beta.7 text of `CannotEndTransfer` (pinned by `tests/fixtures/error-texts`).
  */
 export function isCannotEndTransfer(error: unknown): boolean {
   return /^Transfer cannot be ended: /.test(messageOf(error));

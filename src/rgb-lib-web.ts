@@ -1,5 +1,5 @@
 // Public API: the RgbLibWeb class, the 29 SharedWalletApi methods, burn
-// (BurnApi), burn consignments (ConsignmentApi), contract metadata
+// (BurnApi), consignments (ConsignmentApi), contract metadata
 // (AssetMetadataApi), the indexer check
 // (IndexerCheckApi) and the backup extensions (BackupExportApi,
 // BackupRestoreApi, VssBackupApi, VssRestoreApi, VssBackupInfoApi). Each method passes through `backend.guarded()`
@@ -78,7 +78,7 @@ export interface RgbLibWebBeginEndFlows extends IBeginEndFlows {
 /**
  * The RGB_L1 engine for browsers, over `@utexo/rgb-lib-wasm`. It implements
  * the 29 `SharedWalletApi` methods, `burn()` (`BurnApi`), `getConsignment()`
- * of a burn (`ConsignmentApi`), `checkIndexerUrl()` and the backup
+ * (`ConsignmentApi`), `checkIndexerUrl()` and the backup
  * extensions (ADR-0003):
  * `exportBackup()`, `restoreBackup()` (bytes) and `backupToVss()`,
  * `restoreFromVss()`, `getVssBackupInfo()` (VSS).
@@ -315,9 +315,11 @@ export class RgbLibWeb
     return this.backend.guarded('burn', () => this.backend.burn(params));
   }
   /**
-   * The checked BFA mint paying `recipientId`, or `undefined`. Offline unless
-   * `refreshIncoming` is set, which first refreshes pending incoming transfers
-   * only. Receiving a mint needs the chain's `evmRpcUrls` entry.
+   * The checked BFA mint paying `recipientId`, or `undefined`, with the
+   * `assetId` of the consignment the runtime checked (it must hold the mint's
+   * `opid`, else `CONSIGNMENT_NOT_FOUND`). Offline unless `refreshIncoming` is
+   * set, which first refreshes pending incoming transfers only. Receiving a
+   * mint needs the chain's `evmRpcUrls` entry.
    */
   getReceivedMint(
     recipientId: string,
@@ -335,9 +337,10 @@ export class RgbLibWeb
     return this.backend.getBfaCapabilities();
   }
   /**
-   * The consignment of an ended burn of `assetId` in `txid`, as base64: the
-   * proof of the burn with its history. Works offline. This runtime exports
-   * burn consignments only; another transfer rejects (`UnknownTransfer`).
+   * The consignment of the transfer of `assetId` in `txid`, as base64: sent
+   * for a send, burn or mint (for a burn, its proof with its history),
+   * received and validated for a receive. Works offline. A transfer without
+   * one is `CONSIGNMENT_NOT_FOUND`.
    */
   getConsignment(assetId: string, txid: string): Promise<string> {
     return this.backend.guarded('getConsignment', () =>

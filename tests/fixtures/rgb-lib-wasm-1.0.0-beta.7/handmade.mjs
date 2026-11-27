@@ -1,5 +1,5 @@
 // Handmade positive samples: shapes the stand could not produce, built from
-// captured samples and the beta.5 Rust types at `meta.rustCommit`
+// captured samples and the beta.7 Rust types at `meta.rustCommit`
 // (src/wallet/offline.rs `Media`, `AssetBFA`; src/wallet/online.rs
 // `RefreshedTransfer`, `AssignmentsCollection`; src/error.rs `Error`). The
 // binding builds with `camel_case`, so structs with
@@ -12,7 +12,7 @@ export const meta = {
   runtime: '@utexo/rgb-lib-wasm',
   version: '1.0.0-beta.5',
   source: 'handmade',
-  rustCommit: 'e53d095e8789d2e26c8af7506d59574eca753c2f', // tag v1.0.0-beta.5
+  rustCommit: 'dedab0f043e6c82da19eef2b8faebbdc52bac1db', // tag v1.0.0-beta.7
 };
 
 const assets = sample(listAssets, 'sender: with NIA and IFA');

@@ -50,7 +50,7 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "@noble/hashes": "^2.0.1",
-    "@utexo/rgb-lib-wasm": "1.0.0-beta.5"
+    "@utexo/rgb-lib-wasm": "1.0.0-beta.7"
   },
   "peerDependencies": {
     "@utexo/rgb-sdk-core": "^1.0.0-beta.11"

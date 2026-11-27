@@ -2,7 +2,7 @@
  * The public operations (ADR-0002 step 4), each in two parts:
  *
  * - `prepare`: pure. Validates the owned params, applies the input rules and
- *   builds the WASM arguments in the wire form beta.5 takes (BigInt for u64
+ *   builds the WASM arguments in the wire form beta.7 takes (BigInt for u64
  *   amounts and fee rates; decimal strings for `WitnessData`). It runs before
  *   admission: no network, no WASM call, no queue.
  * - `execute`: one queued task. Calls the WASM wallet through the session,
@@ -746,7 +746,7 @@ export const createUtxosBegin = operation({
 });
 
 /**
- * The ends take no `skipSync` in beta.5: the flag of the core model is still
+ * The ends take no `skipSync` in beta.7: the flag of the core model is still
  * checked, and has no effect, as on React Native.
  */
 export const createUtxosEnd = operation({
@@ -848,9 +848,39 @@ export const burnEnd = operation({
 });
 
 /**
- * `ConsignmentApi.getConsignment`: the consignment of an ended burn, which
- * proves it with its history, as base64 (as on React Native). This runtime
- * exports burn consignments only: another transfer is `UnknownTransfer`.
+ * The one consignment of `transfers`, or `CONSIGNMENT_NOT_FOUND`: none of them
+ * has one yet, or they hold different ones. Transfers of one batch share it.
+ */
+function uniqueConsignment(
+  s: WasmSession,
+  transfers: readonly { idx: number }[],
+  operation: string
+): Uint8Array {
+  const found: Uint8Array[] = [];
+  for (const t of transfers) {
+    const bytes = codec.decodeConsignmentBytes(s.wallet.getConsignment(t.idx));
+    if (bytes && !found.some((b) => sameBytes(b, bytes))) found.push(bytes);
+  }
+  if (found.length !== 1)
+    throw new RgbLibWebError(
+      'CONSIGNMENT_NOT_FOUND',
+      found.length === 0
+        ? 'No consignment for this transfer'
+        : 'No unique consignment for this transfer',
+      operation
+    );
+  return found[0]!;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i]);
+}
+
+/**
+ * `ConsignmentApi.getConsignment`: the consignment of the transfer of
+ * `assetId` in `txid` as base64, as on React Native: the one sent for a send,
+ * burn or mint, the received and validated one for a receive. A transfer
+ * without one is `CONSIGNMENT_NOT_FOUND`.
  */
 export const getConsignment = {
   prepare(assetId: unknown, txid: unknown) {
@@ -858,10 +888,11 @@ export const getConsignment = {
     return { assetId: assetId as string, txid: (txid as string).toLowerCase() };
   },
   execute(s: WasmSession, v: { assetId: string; txid: string }): string {
+    const transfers = codec.decodeTransfers(
+      s.wallet.listTransfers({ Id: v.assetId }, { Txid: v.txid })
+    );
     return codec.encodeBase64(
-      codec.decodeConsignmentBytes(
-        s.wallet.getBurnConsignment(v.assetId, v.txid)
-      )
+      uniqueConsignment(s, transfers, 'getConsignment')
     );
   },
 };
@@ -1003,9 +1034,42 @@ export const getReceivedMint = {
           'getReceivedMint'
         );
     }
-    return codec.decodeReceivedMint(s.wallet.getReceivedMint(recipientId));
+    const mint = codec.decodeReceivedMint(
+      s.wallet.getReceivedMint(recipientId)
+    );
+    if (!mint) return undefined;
+    return { ...mint, assetId: receivedMintAssetId(s, recipientId, mint.opid) };
   },
 };
+
+/**
+ * The asset of the consignment the runtime checked for this mint, as on React
+ * Native: rgb-lib's ReceivedMint does not carry it, and an any-asset receive
+ * is linked to its asset only once the lock is found. The opid ties the
+ * consignment read here to the checked mint; inspecting it does not validate
+ * it again.
+ */
+function receivedMintAssetId(
+  s: WasmSession,
+  recipientId: string,
+  opid: string
+): string {
+  const transfers = codec
+    .decodeTransfers(s.wallet.listTransfers('AnyOrNone', 'All'))
+    .filter((t) => t.recipientId === recipientId);
+  const consignment = uniqueConsignment(s, transfers, 'getReceivedMint');
+  const assetId = codec.inspectedMintAsset(
+    s.inspectConsignment(consignment, 'Terminals'),
+    opid
+  );
+  if (assetId === undefined)
+    throw new RgbLibWebError(
+      'CONSIGNMENT_NOT_FOUND',
+      'No consignment carries this received mint',
+      'getReceivedMint'
+    );
+  return assetId;
+}
 
 export const refresh = {
   async execute(s: WasmSession, skipSync: boolean) {
